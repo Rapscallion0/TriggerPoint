@@ -12,9 +12,9 @@
 
 ## Overview
 
-**TriggerPoint** is a lightweight, zero-bloat Windows automation daemon that pairs low-latency global hotkeys with cursor-anchored launcher menus, dynamic text expansion snippets, and fine-grained process/URL contextual execution rules.
+**TriggerPoint** is a fast, lightweight Windows productivity tool that puts your most frequent actions at your fingertips. Launch apps, paste dynamic snippets, and open custom menus anywhere on your screen using simple system-wide shortcuts.
 
-Built with native Win32 input hooks and WPF, TriggerPoint uses minimal system resources while providing keyboard-first efficiency.
+Designed to stay out of your way, TriggerPoint runs quietly in your system tray with near-zero memory usage and lightning-fast response times.
 
 ---
 
