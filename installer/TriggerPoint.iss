@@ -21,6 +21,7 @@ DefaultDirName={autopf}\TriggerPoint
 DefaultGroupName=TriggerPoint
 DisableProgramGroupPage=yes
 DisableDirPage=no
+DisableWelcomePage=no
 
 ; Dual-mode installation: allows installing for all users (Program Files) or current user (LocalAppData)
 PrivilegesRequired=lowest
@@ -68,6 +69,8 @@ Root: HKA; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: s
 Filename: "{app}\TriggerPoint.exe"; Description: "{cm:LaunchProgram,TriggerPoint}"; Flags: nowait postinstall skipifsilent
 
 [Code]
+procedure ExitProcess(uExitCode: Integer); external 'ExitProcess@kernel32.dll stdcall';
+
 const
   AppGuidStr = '{C8E6814E-43B0-4A0B-9781-F0359871788E}_is1';
 
@@ -179,8 +182,7 @@ begin
       MsgBox('Setup will now exit to keep your existing installation unchanged.' + #13#10#13#10 +
              'If you wish to update or repair your existing installation, please re-run Setup and select "' + OldTypeShort + '".',
              mbInformation, MB_OK);
-      WizardForm.Close;
-      Result := False;
+      ExitProcess(0);
     end;
   end;
 end;
