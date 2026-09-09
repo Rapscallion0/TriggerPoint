@@ -1,0 +1,40 @@
+## Build and output directories
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Aa]rtifacts/
+publish/
+
+## Visual Studio & Rider / IDE files
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+## .NET Core & MSBuild
+project.lock.json
+project.fragment.lock.json
+artifacts/
+*.log
+*.binlog
+
+## Test & Coverage results
+TestResults/
+[Tt]est[Rr]esult*/
+*.trx
+*.coverage
+*.coveragexml
+
+## Windows OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+## Antigravity / AI local scratch files
+.gemini/
+scratch/

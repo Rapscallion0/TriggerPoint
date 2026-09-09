@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TriggerPoint.Core/TriggerPoint.Core.csproj" />
+    <Project Path="src/TriggerPoint.Infrastructure/TriggerPoint.Infrastructure.csproj" />
+    <Project Path="src/TriggerPoint.UI/TriggerPoint.UI.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TriggerPoint.Tests/TriggerPoint.Tests.csproj" />
+  </Folder>
+</Solution>

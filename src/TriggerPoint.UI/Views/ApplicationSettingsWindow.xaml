@@ -1,0 +1,201 @@
+<Window x:Class="TriggerPoint.UI.Views.ApplicationSettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="TriggerPoint Application Settings"
+        Icon="/Assets/TriggerPoint.ico"
+        Width="580" Height="620"
+        MinWidth="500" MinHeight="550"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="False"
+        ShowInTaskbar="False"
+        KeyDown="Window_KeyDown">
+
+    <Border Background="{DynamicResource BgSecondaryBrush}"
+            BorderBrush="{DynamicResource BorderBrush}"
+            BorderThickness="1"
+            CornerRadius="10"
+            Margin="12">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="28" ShadowDepth="6" Opacity="0.45" Direction="270"/>
+        </Border.Effect>
+
+        <Grid Margin="20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Custom Title Bar -->
+            <Grid Grid.Row="0" Margin="0,0,0,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="⚙" FontSize="18" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource AccentBrush}"/>
+                        <TextBlock Text="Application Settings" 
+                                   FontSize="17" 
+                                   FontWeight="Bold" 
+                                   Foreground="{DynamicResource TextPrimaryBrush}" 
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock Text="Configure daemon behavior, logging levels, and log retention" 
+                               FontSize="12" 
+                               Foreground="{DynamicResource TextSecondaryBrush}" 
+                               Margin="0,3,0,0"/>
+                </StackPanel>
+                <Button Grid.Column="1" 
+                        Content="✕" 
+                        Style="{StaticResource WindowControlButtonStyle}" 
+                        Width="30" Height="30" 
+                        Click="CancelBtn_Click"/>
+            </Grid>
+
+            <!-- Settings Content (Scrollable) -->
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,0,0,16" Padding="0,0,6,0">
+                <StackPanel>
+                    <!-- Serilog Logging Section -->
+                    <Border Background="{DynamicResource BgPrimaryBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="16"
+                            Margin="0,0,0,14">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Serilog Diagnostics &amp; Logging" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                    <TextBlock Text="Dynamic runtime log level and automatic daily rolling file retention" 
+                                               FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+                                </StackPanel>
+                                <Button Grid.Column="1" 
+                                        Content="📁 Open Logs Folder" 
+                                        Style="{StaticResource SecondaryButtonStyle}" 
+                                        FontSize="11.5" 
+                                        Padding="8,4"
+                                        ToolTip="Open the logs directory in Windows File Explorer"
+                                        Click="OpenLogsFolderBtn_Click"/>
+                            </Grid>
+
+                            <!-- Log Level ComboBox -->
+                            <TextBlock Text="Minimum Log Level" FontWeight="SemiBold" FontSize="12.5" Margin="0,10,0,4"/>
+                            <ComboBox x:Name="LogLevelCombo" 
+                                      Height="34" 
+                                      FontSize="13" 
+                                      ToolTip="Sets the minimum severity required to emit a log event">
+                                <ComboBoxItem Content="Verbose (Everything, detailed tracing)"/>
+                                <ComboBoxItem Content="Debug (Diagnostic &amp; internal events)"/>
+                                <ComboBoxItem Content="Information (Standard application events - Recommended)" IsSelected="True"/>
+                                <ComboBoxItem Content="Warning (Conflicts and non-fatal warnings)"/>
+                                <ComboBoxItem Content="Error (Exceptions and execution failures)"/>
+                                <ComboBoxItem Content="Fatal (Critical daemon errors only)"/>
+                            </ComboBox>
+
+                            <!-- Log Retention Days -->
+                            <Grid Margin="0,12,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Log Retention Period (Days)" FontWeight="SemiBold" FontSize="12.5" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" x:Name="RetentionDaysText" Text="7 days" FontWeight="Bold" FontSize="12.5" Foreground="{DynamicResource AccentBrush}"/>
+                            </Grid>
+                            <ComboBox x:Name="RetentionDaysCombo" 
+                                      Height="34" 
+                                      FontSize="13"
+                                      SelectionChanged="RetentionDaysCombo_SelectionChanged"
+                                      ToolTip="Daily rolling log files older than this will be automatically deleted">
+                                <ComboBoxItem Content="1 Day (Minimal disk usage)"/>
+                                <ComboBoxItem Content="3 Days"/>
+                                <ComboBoxItem Content="7 Days (Default)"/>
+                                <ComboBoxItem Content="14 Days (Two weeks)"/>
+                                <ComboBoxItem Content="30 Days (One month)"/>
+                                <ComboBoxItem Content="90 Days (Quarterly)"/>
+                            </ComboBox>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Application Appearance & Theme -->
+                    <Border Background="{DynamicResource BgPrimaryBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="16"
+                            Margin="0,0,0,14">
+                        <StackPanel>
+                            <TextBlock Text="Appearance &amp; Theme" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                            <TextBlock Text="Select your visual preference or automatically sync with Windows" 
+                                       FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,10"/>
+
+                            <ComboBox x:Name="ThemeCombo" 
+                                      Height="34" 
+                                      FontSize="13"
+                                      ToolTip="Theme selection">
+                                <ComboBoxItem Content="System Default (Auto-detect Windows theme)"/>
+                                <ComboBoxItem Content="Dark Mode (Deep charcoal slate)"/>
+                                <ComboBoxItem Content="Light Mode (Clean crisp light)"/>
+                            </ComboBox>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- System Startup & Daemon Behavior -->
+                    <Border Background="{DynamicResource BgPrimaryBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="16">
+                        <StackPanel>
+                            <TextBlock Text="System Integration" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                            <TextBlock Text="Configure Windows startup and background launch behavior" 
+                                       FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,12"/>
+
+                            <CheckBox x:Name="RunAtStartupCheck" 
+                                      Content="Start TriggerPoint when you log in to Windows" 
+                                      FontSize="13" 
+                                      Margin="0,0,0,10"
+                                      ToolTip="Adds TriggerPoint to current user's Windows Startup registry run key"/>
+
+                            <CheckBox x:Name="StartMinimizedCheck" 
+                                      Content="Start minimized to System Tray" 
+                                      FontSize="13" 
+                                      ToolTip="Prevents the settings window from opening on startup"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Bottom Action Buttons -->
+            <Grid Grid.Row="2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0" x:Name="SettingsStatusText" Text="Ready." FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                    <Button Content="Cancel" 
+                            Style="{StaticResource SecondaryButtonStyle}" 
+                            Padding="14,6" 
+                            Margin="0,0,8,0"
+                            Click="CancelBtn_Click"/>
+                    <Button x:Name="SaveSettingsBtn" 
+                            Content="Save Settings" 
+                            Style="{StaticResource AccentButtonStyle}" 
+                            Padding="16,6"
+                            Click="SaveSettingsBtn_Click"/>
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>
