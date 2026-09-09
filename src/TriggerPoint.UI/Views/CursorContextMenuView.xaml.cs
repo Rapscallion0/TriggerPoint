@@ -18,12 +18,20 @@ public class CursorMenuItemViewModel
     public bool HasDescription => !string.IsNullOrWhiteSpace(Description);
     public string? AcceleratorKey => Item.AcceleratorKey;
     public Visibility HasAccelerator => !string.IsNullOrWhiteSpace(AcceleratorKey) ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility HasNoAccelerator => !string.IsNullOrWhiteSpace(AcceleratorKey) ? Visibility.Collapsed : Visibility.Visible;
+    public bool IsFolder => Item.ActionType == ActionType.Folder;
     public string TypeBadge => Item.ActionType switch
     {
+        ActionType.Folder => "Submenu ▶",
         ActionType.Snippet => "Snippet",
         ActionType.Shell => "App",
-        ActionType.Folder => "Menu",
         _ => ""
+    };
+    public string IconSymbol => Item.ActionType switch
+    {
+        ActionType.Folder => "📁",
+        ActionType.Snippet => "📝",
+        _ => "⚡"
     };
 
     public CursorMenuItemViewModel(TriggerItem item)
@@ -34,30 +42,125 @@ public class CursorMenuItemViewModel
 
 public partial class CursorContextMenuView : Window
 {
-    private readonly List<CursorMenuItemViewModel> _items;
+    private readonly List<TriggerItem> _allItems;
     private readonly IActionExecutor _executor;
+    private readonly Stack<TriggerItem?> _navHistory = new();
+    private TriggerItem? _currentFolder;
+    private List<CursorMenuItemViewModel> _displayedItems = new();
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetCursorPos(out NativeMethods.POINT lpPoint);
 
     public CursorContextMenuView(
-        IEnumerable<TriggerItem> items, 
+        IEnumerable<TriggerItem> allItems, 
         IActionExecutor executor, 
-        string? folderTitle = null)
+        TriggerItem? initialFolder = null)
     {
         InitializeComponent();
         _executor = executor;
-        _items = items.Select(x => new CursorMenuItemViewModel(x)).ToList();
-        ItemsList.ItemsSource = _items;
+        _allItems = allItems.ToList();
+        _currentFolder = initialFolder;
 
-        if (!string.IsNullOrWhiteSpace(folderTitle))
+        RenderCurrentFolder();
+        Loaded += CursorContextMenuView_Loaded;
+    }
+
+    private void RenderCurrentFolder()
+    {
+        List<TriggerItem> children;
+        if (_currentFolder != null && _currentFolder.ActionType == ActionType.Folder)
         {
-            HeaderBorder.Visibility = Visibility.Visible;
-            HeaderTitleText.Text = folderTitle.ToUpperInvariant();
+            children = _allItems
+                .Where(x => x.ParentId == _currentFolder.Id && x.IsEnabled)
+                .OrderBy(x => x.OrderIndex)
+                .ToList();
+        }
+        else if (_currentFolder != null)
+        {
+            children = _allItems
+                .Where(x => x.ParentId == _currentFolder.ParentId && x.IsEnabled)
+                .OrderBy(x => x.OrderIndex)
+                .ToList();
+        }
+        else
+        {
+            children = _allItems
+                .Where(x => !x.ParentId.HasValue && x.IsEnabled)
+                .OrderBy(x => x.OrderIndex)
+                .ToList();
         }
 
-        Loaded += CursorContextMenuView_Loaded;
+        _displayedItems = children.Select(x => new CursorMenuItemViewModel(x)).ToList();
+        ItemsListBox.ItemsSource = _displayedItems;
+
+        if (_displayedItems.Count == 0)
+        {
+            EmptyFolderNotice.Visibility = Visibility.Visible;
+            ItemsListBox.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            EmptyFolderNotice.Visibility = Visibility.Collapsed;
+            ItemsListBox.Visibility = Visibility.Visible;
+            ItemsListBox.SelectedIndex = 0;
+        }
+
+        HeaderBorder.Visibility = Visibility.Visible;
+        BackBtn.Visibility = _navHistory.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        HeaderTitleText.Text = BuildBreadcrumb();
+    }
+
+    private string BuildBreadcrumb()
+    {
+        if (_navHistory.Count == 0)
+        {
+            return _currentFolder?.Name.ToUpperInvariant() ?? "MENU";
+        }
+
+        var pathSegments = _navHistory
+            .Reverse()
+            .Concat(new[] { _currentFolder })
+            .Where(f => f != null)
+            .Select(f => f!.Name.ToUpperInvariant());
+
+        return string.Join("  ›  ", pathSegments);
+    }
+
+    private void DrillDown(TriggerItem folderItem)
+    {
+        _navHistory.Push(_currentFolder);
+        _currentFolder = folderItem;
+        RenderCurrentFolder();
+    }
+
+    private void NavigateBack()
+    {
+        if (_navHistory.Count == 0)
+        {
+            Close();
+            return;
+        }
+
+        var previousFolder = _navHistory.Pop();
+        var exitedFolder = _currentFolder;
+        _currentFolder = previousFolder;
+        RenderCurrentFolder();
+
+        if (exitedFolder != null)
+        {
+            var prevItem = _displayedItems.FirstOrDefault(x => x.Item.Id == exitedFolder.Id);
+            if (prevItem != null)
+            {
+                ItemsListBox.SelectedItem = prevItem;
+                ItemsListBox.ScrollIntoView(prevItem);
+            }
+        }
+    }
+
+    private void BackBtn_Click(object sender, RoutedEventArgs e)
+    {
+        NavigateBack();
     }
 
     private void CursorContextMenuView_Loaded(object sender, RoutedEventArgs e)
@@ -65,6 +168,20 @@ public partial class CursorContextMenuView : Window
         PositionAtCursor();
         Activate();
         Focus();
+
+        try
+        {
+            var handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            NativeMethods.SetForegroundWindow(handle);
+        }
+        catch { }
+
+        if (ItemsListBox.Items.Count > 0)
+        {
+            ItemsListBox.SelectedIndex = 0;
+            ItemsListBox.Focus();
+            Keyboard.Focus(ItemsListBox);
+        }
     }
 
     private void PositionAtCursor()
@@ -113,41 +230,148 @@ public partial class CursorContextMenuView : Window
         Top = targetY;
     }
 
-    private void Window_KeyDown(object sender, KeyEventArgs e)
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape)
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+
+        if (key == Key.Escape)
         {
-            Close();
+            if (_navHistory.Count > 0)
+            {
+                NavigateBack();
+            }
+            else
+            {
+                Close();
+            }
+            e.Handled = true;
+            return;
+        }
+
+        if (key == Key.Left || key == Key.Back)
+        {
+            if (_navHistory.Count > 0)
+            {
+                NavigateBack();
+                e.Handled = true;
+                return;
+            }
+        }
+
+        if (key == Key.Right)
+        {
+            if (ItemsListBox.SelectedItem is CursorMenuItemViewModel { IsFolder: true } selectedFolder)
+            {
+                DrillDown(selectedFolder.Item);
+                e.Handled = true;
+                return;
+            }
+        }
+
+        if (key == Key.Down)
+        {
+            if (ItemsListBox.Items.Count > 0)
+            {
+                if (ItemsListBox.SelectedIndex < ItemsListBox.Items.Count - 1)
+                {
+                    ItemsListBox.SelectedIndex++;
+                }
+                else
+                {
+                    ItemsListBox.SelectedIndex = 0; // Wrap around to top
+                }
+                ItemsListBox.ScrollIntoView(ItemsListBox.SelectedItem);
+            }
+            e.Handled = true;
+            return;
+        }
+
+        if (key == Key.Up)
+        {
+            if (ItemsListBox.Items.Count > 0)
+            {
+                if (ItemsListBox.SelectedIndex > 0)
+                {
+                    ItemsListBox.SelectedIndex--;
+                }
+                else
+                {
+                    ItemsListBox.SelectedIndex = ItemsListBox.Items.Count - 1; // Wrap around to bottom
+                }
+                ItemsListBox.ScrollIntoView(ItemsListBox.SelectedItem);
+            }
+            e.Handled = true;
+            return;
+        }
+
+        if (key == Key.Home)
+        {
+            if (ItemsListBox.Items.Count > 0)
+            {
+                ItemsListBox.SelectedIndex = 0;
+                ItemsListBox.ScrollIntoView(ItemsListBox.SelectedItem);
+            }
+            e.Handled = true;
+            return;
+        }
+
+        if (key == Key.End)
+        {
+            if (ItemsListBox.Items.Count > 0)
+            {
+                ItemsListBox.SelectedIndex = ItemsListBox.Items.Count - 1;
+                ItemsListBox.ScrollIntoView(ItemsListBox.SelectedItem);
+            }
             e.Handled = true;
             return;
         }
 
         // Accelerator keys: 1-9, A-Z
-        var keyStr = e.Key.ToString();
-        if (e.Key >= Key.D0 && e.Key <= Key.D9)
+        var keyStr = key.ToString();
+        if (key >= Key.D0 && key <= Key.D9)
         {
-            keyStr = ((int)e.Key - (int)Key.D0).ToString();
+            keyStr = ((int)key - (int)Key.D0).ToString();
         }
-        else if (e.Key >= Key.NumPad0 && e.Key <= Key.NumPad9)
+        else if (key >= Key.NumPad0 && key <= Key.NumPad9)
         {
-            keyStr = ((int)e.Key - (int)Key.NumPad0).ToString();
+            keyStr = ((int)key - (int)Key.NumPad0).ToString();
         }
 
-        var accelMatch = _items.FirstOrDefault(x => 
+        var accelMatch = _displayedItems.FirstOrDefault(x => 
             !string.IsNullOrWhiteSpace(x.AcceleratorKey) && 
             string.Equals(x.AcceleratorKey, keyStr, StringComparison.OrdinalIgnoreCase));
 
         if (accelMatch != null)
         {
-            ExecuteItem(accelMatch.Item, DetermineOverride());
+            if (accelMatch.IsFolder)
+            {
+                DrillDown(accelMatch.Item);
+            }
+            else
+            {
+                ExecuteItem(accelMatch.Item, DetermineOverride());
+            }
             e.Handled = true;
             return;
         }
 
-        if (e.Key == Key.Enter && _items.Count > 0)
+        if (key == Key.Enter)
         {
-            ExecuteItem(_items[0].Item, DetermineOverride());
-            e.Handled = true;
+            var selectedVm = ItemsListBox.SelectedItem as CursorMenuItemViewModel 
+                ?? (_displayedItems.Count > 0 ? _displayedItems[0] : null);
+
+            if (selectedVm != null)
+            {
+                if (selectedVm.IsFolder)
+                {
+                    DrillDown(selectedVm.Item);
+                }
+                else
+                {
+                    ExecuteItem(selectedVm.Item, DetermineOverride());
+                }
+                e.Handled = true;
+            }
         }
     }
 
@@ -166,7 +390,14 @@ public partial class CursorContextMenuView : Window
     {
         if (sender is FrameworkElement { DataContext: CursorMenuItemViewModel vm })
         {
-            ExecuteItem(vm.Item, DetermineOverride());
+            if (vm.IsFolder)
+            {
+                DrillDown(vm.Item);
+            }
+            else
+            {
+                ExecuteItem(vm.Item, DetermineOverride());
+            }
         }
     }
 

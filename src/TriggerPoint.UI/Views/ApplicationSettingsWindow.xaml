@@ -1,6 +1,7 @@
 <Window x:Class="TriggerPoint.UI.Views.ApplicationSettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:TriggerPoint.UI.Controls"
         Title="TriggerPoint Application Settings"
         Icon="/Assets/TriggerPoint.ico"
         Width="580" Height="620"
@@ -37,7 +38,11 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock Text="⚙" FontSize="18" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource AccentBrush}"/>
+                        <Image Source="/Assets/TriggerPoint.ico" 
+                               Width="20" Height="20" 
+                               Margin="0,0,8,0" 
+                               VerticalAlignment="Center" 
+                               RenderOptions.BitmapScalingMode="HighQuality"/>
                         <TextBlock Text="Application Settings" 
                                    FontSize="17" 
                                    FontWeight="Bold" 
@@ -147,6 +152,49 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- Global Application Shortcuts -->
+                    <Border Background="{DynamicResource BgPrimaryBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="16"
+                            Margin="0,0,0,14">
+                        <StackPanel>
+                            <TextBlock Text="Global Application Shortcuts" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                            <TextBlock Text="System-wide hotkeys to bring up TriggerPoint or the quick Command Palette" 
+                                       FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,12"/>
+
+                            <!-- Shortcut Conflict Warning Banner -->
+                            <Border x:Name="ShortcutConflictWarningBorder"
+                                    Background="{DynamicResource WarningSubtleBrush}"
+                                    BorderBrush="{DynamicResource WarningBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="10,8"
+                                    Margin="0,0,0,12"
+                                    Visibility="Collapsed">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="⚠️" FontSize="13" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="ShortcutConflictWarningText"
+                                               Text="Shortcut conflict detected."
+                                               FontSize="12"
+                                               Foreground="{DynamicResource WarningBrush}"
+                                               FontWeight="SemiBold"
+                                               VerticalAlignment="Center"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Open TriggerPoint Window -->
+                            <TextBlock Text="Open TriggerPoint Window" FontWeight="SemiBold" FontSize="12.5" Margin="0,0,0,4"/>
+                            <controls:HotkeyRecorderControl x:Name="OpenSettingsHotkeyRecorder" Margin="0,0,0,12"/>
+
+                            <!-- Command Palette -->
+                            <TextBlock Text="Open Command Palette" FontWeight="SemiBold" FontSize="12.5" Margin="0,0,0,4"/>
+                            <controls:HotkeyRecorderControl x:Name="CommandPaletteHotkeyRecorder"/>
+                        </StackPanel>
+                    </Border>
+
                     <!-- System Startup & Daemon Behavior -->
                     <Border Background="{DynamicResource BgPrimaryBrush}"
                             BorderBrush="{DynamicResource BorderBrush}"
@@ -167,7 +215,178 @@
                             <CheckBox x:Name="StartMinimizedCheck" 
                                       Content="Start minimized to System Tray" 
                                       FontSize="13" 
+                                      Margin="0,0,0,10"
                                       ToolTip="Prevents the settings window from opening on startup"/>
+
+                            <CheckBox x:Name="HideWindowOnTargetCheck" 
+                                      Content="Hide TriggerPoint window while targeting an application or tab" 
+                                      FontSize="13" 
+                                      Margin="0,0,0,10"
+                                      ToolTip="Temporarily hides this settings window during crosshair targeting so you can easily select windows sitting directly behind it"/>
+
+                            <CheckBox x:Name="ShowSuccessToastsCheck" 
+                                      Content="Show toast notification on successful action execution" 
+                                      FontSize="13" 
+                                      Margin="0,0,0,10"
+                                      ToolTip="Displays a brief notification on the active screen confirming action execution"/>
+
+                            <CheckBox x:Name="ValidateOnStartupCheck" 
+                                      Content="Validate shortcut file paths on startup" 
+                                      FontSize="13" 
+                                      Margin="0,0,0,10"
+                                      ToolTip="Checks if shortcut target files exist on disk when TriggerPoint starts and notifies you of broken links"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Backup & Data Management -->
+                    <Border Background="{DynamicResource BgPrimaryBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="16"
+                            Margin="0,14,0,0">
+                        <StackPanel>
+                            <TextBlock Text="Backup &amp; Data Management" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                            <TextBlock Text="Export and import your TriggerPoint actions, folders, and application settings" 
+                                       FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,10"/>
+
+                            <!-- Recycle Bin Retention Settings -->
+                            <TextBlock Text="Recycle Bin &amp; Retention" FontWeight="SemiBold" FontSize="13" Margin="0,4,0,4" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                            <TextBlock Text="Deleted actions and folders are kept in the Recycle Bin before being permanently removed." 
+                                       FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,10"/>
+
+                            <CheckBox x:Name="NeverDeleteRecycleCheck" 
+                                      Content="Never automatically delete items (keep indefinitely)" 
+                                      FontSize="13" 
+                                      Margin="0,0,0,8"
+                                      Checked="NeverDeleteRecycleCheck_Changed"
+                                      Unchecked="NeverDeleteRecycleCheck_Changed"/>
+
+                            <Grid x:Name="RecycleDaysPanel" Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Permanent Deletion Period" FontWeight="SemiBold" FontSize="12.5"/>
+                                    <TextBlock Text="Items older than this number of days will be permanently purged on launch" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBox x:Name="RecycleRetentionDaysInput" 
+                                             Width="70" 
+                                             Height="32" 
+                                             FontSize="13" 
+                                             FontWeight="SemiBold"
+                                             TextAlignment="Center"
+                                             VerticalContentAlignment="Center"
+                                             PreviewTextInput="RecycleRetentionDaysInput_PreviewTextInput"/>
+                                    <TextBlock Text="days" FontSize="12.5" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- Recycle Bin Status & Empty Button -->
+                            <Border Background="{DynamicResource BgSecondaryBrush}" 
+                                    BorderBrush="{DynamicResource BorderBrush}" 
+                                    BorderThickness="1" 
+                                    CornerRadius="6" 
+                                    Padding="10,8" 
+                                    Margin="0,0,0,14">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="🗑" FontSize="13" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="RecycleBinStatusText" 
+                                                   Text="Recycle Bin: 0 items" 
+                                                   FontSize="12" 
+                                                   Foreground="{DynamicResource TextSecondaryBrush}" 
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <Button Grid.Column="1"
+                                            x:Name="EmptyRecycleBinBtn"
+                                            Content="Empty Bin"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            FontSize="11.5"
+                                            Padding="8,3"
+                                            Click="EmptyRecycleBinBtn_Click"/>
+                                </Grid>
+                            </Border>
+
+                            <Separator Margin="0,0,0,12" Background="{DynamicResource BorderBrush}"/>
+
+                            <!-- Live Telemetry Pill -->
+                            <Border Background="{DynamicResource BgSecondaryBrush}" 
+                                    BorderBrush="{DynamicResource BorderBrush}" 
+                                    BorderThickness="1" 
+                                    CornerRadius="6" 
+                                    Padding="10,8" 
+                                    Margin="0,0,0,12">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="📊" FontSize="13" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="BackupTelemetryText" 
+                                               Text="Scanning configuration..." 
+                                               FontSize="12" 
+                                               Foreground="{DynamicResource TextSecondaryBrush}" 
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Buttons Row -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Export Dropdown Button -->
+                                <Button x:Name="ExportBackupBtn" 
+                                        Grid.Column="0" 
+                                        Style="{StaticResource SecondaryButtonStyle}" 
+                                        Height="34" 
+                                        Padding="12,0" 
+                                        Click="ExportBackupBtn_Click">
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                        <TextBlock Text="📤" Margin="0,0,6,0"/>
+                                        <TextBlock Text="Export Backup ▾" FontWeight="SemiBold"/>
+                                    </StackPanel>
+                                    <Button.ContextMenu>
+                                        <ContextMenu x:Name="ExportBackupContextMenu">
+                                            <MenuItem x:Name="ExportFullBackupMenuItem" Click="ExportFullBackupMenuItem_Click">
+                                                <MenuItem.Icon>
+                                                    <TextBlock Text="📦" FontSize="13"/>
+                                                </MenuItem.Icon>
+                                            </MenuItem>
+                                            <MenuItem x:Name="ExportTreeItemsMenuItem" Click="ExportTreeItemsMenuItem_Click">
+                                                <MenuItem.Icon>
+                                                    <TextBlock Text="⚡" FontSize="13"/>
+                                                </MenuItem.Icon>
+                                            </MenuItem>
+                                            <Separator/>
+                                            <MenuItem x:Name="ExportSettingsMenuItem" Header="Application Settings Only" Click="ExportSettingsMenuItem_Click">
+                                                <MenuItem.Icon>
+                                                    <TextBlock Text="⚙" FontSize="13"/>
+                                                </MenuItem.Icon>
+                                            </MenuItem>
+                                        </ContextMenu>
+                                    </Button.ContextMenu>
+                                </Button>
+
+                                <!-- Import Button -->
+                                <Button x:Name="ImportBackupBtn" 
+                                        Grid.Column="2" 
+                                        Style="{StaticResource SecondaryButtonStyle}" 
+                                        Height="34" 
+                                        Padding="12,0" 
+                                        Click="ImportBackupBtn_Click">
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                        <TextBlock Text="📥" Margin="0,0,6,0"/>
+                                        <TextBlock Text="Import / Restore..." FontWeight="SemiBold"/>
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
                         </StackPanel>
                     </Border>
                 </StackPanel>

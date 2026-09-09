@@ -19,9 +19,22 @@ public interface IConfigRepository
     Task SaveAsync(IEnumerable<TriggerItem> items);
     Task<AppSettings> LoadSettingsAsync();
     Task SaveSettingsAsync(AppSettings settings);
+    Task ExportPackageAsync(string filePath, ConfigurationBackupPackage package);
+    Task<ConfigurationBackupPackage> ReadPackageAsync(string filePath);
+    Task<IReadOnlyList<RecycleBinItem>> LoadRecycleBinAsync();
+    Task SaveRecycleBinAsync(IEnumerable<RecycleBinItem> items);
+    Task MoveToRecycleBinAsync(IEnumerable<TriggerItem> items, IReadOnlyList<TriggerItem> allItems);
+    Task MoveToRecycleBinAsync(TriggerItem item, IReadOnlyList<TriggerItem> allItems);
+    Task<IReadOnlyList<TriggerItem>> RestoreFromRecycleBinAsync(IEnumerable<Guid> recycleBinItemIds);
+    Task<TriggerItem?> RestoreFromRecycleBinAsync(Guid recycleBinItemId);
+    Task PermanentlyDeleteFromRecycleBinAsync(IEnumerable<Guid> recycleBinItemIds);
+    Task PermanentlyDeleteFromRecycleBinAsync(Guid recycleBinItemId);
+    Task EmptyRecycleBinAsync();
+    Task PurgeRecycleBinAsync(int retentionDays);
     string ConfigFilePath { get; }
     string BackupFilePath { get; }
     string AppSettingsFilePath { get; }
+    string RecycleBinFilePath { get; }
 }
 
 public interface IShortcutListener : IDisposable
@@ -66,4 +79,11 @@ public interface ITelemetryService
 public interface IPromptDialogService
 {
     Task<Dictionary<string, string>?> ShowPromptDialogAsync(IReadOnlyList<PromptToken> promptTokens);
+}
+
+public interface IToastNotificationService
+{
+    void ShowSuccess(string title, string message);
+    void ShowError(string title, string message);
+    void ShowWarning(string title, string message);
 }

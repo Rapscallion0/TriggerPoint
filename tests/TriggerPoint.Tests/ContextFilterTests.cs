@@ -89,4 +89,31 @@ public class ContextFilterTests
         Assert.False(filter.IsActive("msedge.exe", "https://youtube.com/feed/subscriptions"));
         Assert.False(filter.IsActive("msedge.exe", "https://www.netflix.com/browse"));
     }
+
+    [Theory]
+    [InlineData("chrome", true)]
+    [InlineData("chrome.exe", true)]
+    [InlineData("CHROME.EXE", true)]
+    [InlineData("msedge", true)]
+    [InlineData("msedge.exe", true)]
+    [InlineData("firefox", true)]
+    [InlineData("firefox.exe", true)]
+    [InlineData("brave", true)]
+    [InlineData("brave.exe", true)]
+    [InlineData("opera", true)]
+    [InlineData("opera.exe", true)]
+    [InlineData("vivaldi", true)]
+    [InlineData("vivaldi.exe", true)]
+    [InlineData("arc", true)]
+    [InlineData("arc.exe", true)]
+    [InlineData("notepad.exe", false)]
+    [InlineData("devenv.exe", false)]
+    [InlineData("excel.exe", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void ContextFilter_IsKnownBrowser_IdentifiesBrowsersCorrectly(string? processName, bool expected)
+    {
+        Assert.Equal(expected, ContextFilter.IsKnownBrowser(processName));
+    }
 }
+

@@ -24,6 +24,7 @@ public class TrayIconService : IDisposable
     private readonly Action _reloadConfigAction;
     private readonly Action _exitAction;
 
+    private readonly ToolStripMenuItem _paletteMenuItem;
     private readonly ToolStripMenuItem _snoozeMenuItem;
     private Icon? _currentGeneratedIcon;
 
@@ -33,7 +34,8 @@ public class TrayIconService : IDisposable
         Action openPaletteAction,
         Action reloadConfigAction,
         Action exitAction,
-        Action? openAppSettingsAction = null)
+        Action? openAppSettingsAction = null,
+        string? commandPaletteHotkeyText = "Alt+Space")
     {
         _shortcutListener = shortcutListener;
         _openSettingsAction = openSettingsAction;
@@ -62,8 +64,8 @@ public class TrayIconService : IDisposable
             contextMenu.Items.Add(appSettingsItem);
         }
 
-        var paletteItem = new ToolStripMenuItem("Command Palette (Alt+Space)", null, (s, e) => _openPaletteAction());
-        contextMenu.Items.Add(paletteItem);
+        _paletteMenuItem = new ToolStripMenuItem(FormatPaletteMenuText(commandPaletteHotkeyText), null, (s, e) => _openPaletteAction());
+        contextMenu.Items.Add(_paletteMenuItem);
 
         contextMenu.Items.Add(new ToolStripSeparator());
 
@@ -168,6 +170,18 @@ public class TrayIconService : IDisposable
         var hIcon = bmp.GetHicon();
         var icon = Icon.FromHandle(hIcon);
         return icon;
+    }
+
+    public void UpdateCommandPaletteHotkey(string? hotkeyDisplayText)
+    {
+        _paletteMenuItem.Text = FormatPaletteMenuText(hotkeyDisplayText);
+    }
+
+    private static string FormatPaletteMenuText(string? hotkeyDisplayText)
+    {
+        return string.IsNullOrWhiteSpace(hotkeyDisplayText)
+            ? "Command Palette"
+            : $"Command Palette ({hotkeyDisplayText})";
     }
 
     public void ShowNotification(string title, string message, ToolTipIcon icon = ToolTipIcon.Info)

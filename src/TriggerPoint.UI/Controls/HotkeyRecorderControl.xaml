@@ -15,8 +15,19 @@
                 CornerRadius="6"
                 Padding="8,4"
                 MinHeight="36"
-                Cursor="Hand"
                 MouseLeftButtonDown="RecordingBorder_MouseLeftButtonDown">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Cursor" Value="Hand"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsEnabled, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="False">
+                            <Setter Property="Opacity" Value="0.55"/>
+                            <Setter Property="Cursor" Value="Arrow"/>
+                            <Setter Property="Background" Value="{DynamicResource BgSecondaryBrush}"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
             <Grid VerticalAlignment="Center">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>

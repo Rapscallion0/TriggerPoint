@@ -7,7 +7,9 @@ namespace TriggerPoint.Core.Services;
 
 public static class HotkeyRegistryValidator
 {
-    public static Dictionary<Guid, HotkeyConflictStatus> ValidateTier1Conflicts(IEnumerable<TriggerItem> allItems)
+    public static Dictionary<Guid, HotkeyConflictStatus> ValidateTier1Conflicts(
+        IEnumerable<TriggerItem> allItems, 
+        AppSettings? appSettings = null)
     {
         var conflicts = new Dictionary<Guid, HotkeyConflictStatus>();
         var itemsList = allItems.ToList();
@@ -29,6 +31,34 @@ public static class HotkeyRegistryValidator
             if (item.Hotkey == null || item.Hotkey.IsEmpty || !item.IsEnabled)
             {
                 continue;
+            }
+
+            // Check against application-level shortcuts
+            if (appSettings != null)
+            {
+                if (appSettings.OpenSettingsHotkey != null && item.Hotkey == appSettings.OpenSettingsHotkey)
+                {
+                    var conflict = HotkeyConflictStatus.CreateInternal(
+                        Guid.Empty,
+                        "Open TriggerPoint Window",
+                        "Application Settings",
+                        item.Hotkey.DisplayText);
+                    conflicts[item.Id] = conflict;
+                    item.ConflictStatus = conflict;
+                    continue;
+                }
+
+                if (appSettings.CommandPaletteHotkey != null && item.Hotkey == appSettings.CommandPaletteHotkey)
+                {
+                    var conflict = HotkeyConflictStatus.CreateInternal(
+                        Guid.Empty,
+                        "Command Palette",
+                        "Application Settings",
+                        item.Hotkey.DisplayText);
+                    conflicts[item.Id] = conflict;
+                    item.ConflictStatus = conflict;
+                    continue;
+                }
             }
 
             if (registeredMap.TryGetValue(item.Hotkey, out var existingItem))
@@ -77,9 +107,31 @@ public static class HotkeyRegistryValidator
     public static HotkeyConflictStatus? CheckPotentialConflict(
         TriggerItem candidateItem,
         ShortcutBinding? newBinding,
-        IEnumerable<TriggerItem> allItems)
+        IEnumerable<TriggerItem> allItems,
+        AppSettings? appSettings = null)
     {
         if (newBinding == null || newBinding.IsEmpty) return null;
+
+        if (appSettings != null)
+        {
+            if (appSettings.OpenSettingsHotkey != null && appSettings.OpenSettingsHotkey == newBinding)
+            {
+                return HotkeyConflictStatus.CreateInternal(
+                    Guid.Empty,
+                    "Open TriggerPoint Window",
+                    "Application Settings",
+                    newBinding.DisplayText);
+            }
+
+            if (appSettings.CommandPaletteHotkey != null && appSettings.CommandPaletteHotkey == newBinding)
+            {
+                return HotkeyConflictStatus.CreateInternal(
+                    Guid.Empty,
+                    "Command Palette",
+                    "Application Settings",
+                    newBinding.DisplayText);
+            }
+        }
 
         var itemsList = allItems.ToList();
         var folderLookup = itemsList
@@ -106,5 +158,88 @@ public static class HotkeyRegistryValidator
         }
 
         return null;
+    }
+
+    public static HotkeyConflictStatus? CheckApplicationHotkeyConflict(
+        string appActionName,
+        ShortcutBinding? binding,
+        IEnumerable<TriggerItem> allItems,
+        params (string Name, ShortcutBinding? Binding)[] otherAppBindings)
+    {
+        if (binding == null || binding.IsEmpty) return null;
+
+        // 1. Check against other app bindings
+        foreach (var (otherName, otherBinding) in otherAppBindings)
+        {
+            if (otherBinding != null && !otherBinding.IsEmpty && otherBinding == binding)
+            {
+                return HotkeyConflictStatus.CreateInternal(
+                    Guid.Empty,
+                    otherName,
+                    "Application Settings",
+                    binding.DisplayText);
+            }
+        }
+
+        // 2. Check against tree items
+        var folderLookup = allItems
+            .Where(x => x.ActionType == ActionType.Folder)
+            .ToDictionary(x => x.Id, x => x.Name);
+
+        foreach (var item in allItems)
+        {
+            if (!item.IsEnabled || item.Hotkey == null || item.Hotkey.IsEmpty) continue;
+
+            if (item.Hotkey == binding)
+            {
+                string folder = item.ParentId.HasValue && folderLookup.TryGetValue(item.ParentId.Value, out var fName)
+                    ? fName
+                    : "Root";
+
+                return HotkeyConflictStatus.CreateInternal(
+                    item.Id,
+                    item.Name,
+                    folder,
+                    binding.DisplayText);
+            }
+        }
+
+        return null;
+    }
+
+    public static (bool IsValid, string? ErrorMessage) ValidateApplicationHotkeys(
+        ShortcutBinding? openSettingsHotkey,
+        ShortcutBinding? commandPaletteHotkey,
+        IEnumerable<TriggerItem> allItems)
+    {
+        if (openSettingsHotkey != null && !openSettingsHotkey.IsEmpty)
+        {
+            var conflict = CheckApplicationHotkeyConflict(
+                "Open TriggerPoint Window", 
+                openSettingsHotkey, 
+                allItems, 
+                ("Command Palette", commandPaletteHotkey));
+
+            if (conflict != null)
+            {
+                return (false, $"The shortcut '{openSettingsHotkey.DisplayText}' for 'Open TriggerPoint Window' conflicts with '{conflict.ConflictingActionName}' ({conflict.ConflictingFolderName}).");
+            }
+        }
+
+        if (commandPaletteHotkey != null && !commandPaletteHotkey.IsEmpty)
+        {
+            var conflict = CheckApplicationHotkeyConflict(
+                "Command Palette", 
+                commandPaletteHotkey, 
+                allItems, 
+                ("Open TriggerPoint Window", openSettingsHotkey));
+
+            if (conflict != null)
+            {
+                return (false, $"The shortcut '{commandPaletteHotkey.DisplayText}' for 'Command Palette' conflicts with '{conflict.ConflictingActionName}' ({conflict.ConflictingFolderName}).");
+            }
+        }
+
+        return (true, null);
     }
 }

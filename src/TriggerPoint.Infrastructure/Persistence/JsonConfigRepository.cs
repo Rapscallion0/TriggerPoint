@@ -16,14 +16,16 @@ public class JsonConfigRepository : IConfigRepository
     private readonly string _backupFilePath;
     private readonly string _appSettingsFilePath;
     private readonly string _appSettingsBackupFilePath;
+    private readonly string _recycleBinFilePath;
     private readonly SemaphoreSlim _fileLock = new(1, 1);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        Converters = { new JsonStringEnumConverter() }
+        Converters = { new JsonStringEnumConverter(allowIntegerValues: true) }
     };
 
     public JsonConfigRepository(string? customDirectory = null)
@@ -37,11 +39,13 @@ public class JsonConfigRepository : IConfigRepository
         _backupFilePath = Path.Combine(baseDir, "triggerpoint.bak");
         _appSettingsFilePath = Path.Combine(baseDir, "appsettings.json");
         _appSettingsBackupFilePath = Path.Combine(baseDir, "appsettings.bak");
+        _recycleBinFilePath = Path.Combine(baseDir, "recyclebin.json");
     }
 
     public string ConfigFilePath => _configFilePath;
     public string BackupFilePath => _backupFilePath;
     public string AppSettingsFilePath => _appSettingsFilePath;
+    public string RecycleBinFilePath => _recycleBinFilePath;
 
     public async Task<IReadOnlyList<TriggerItem>> LoadAsync()
     {
@@ -317,4 +321,222 @@ public class JsonConfigRepository : IConfigRepository
             }
         ];
     }
+
+    public async Task ExportPackageAsync(string filePath, ConfigurationBackupPackage package)
+    {
+        if (string.IsNullOrWhiteSpace(filePath)) throw new ArgumentException("File path cannot be empty", nameof(filePath));
+
+        // Ensure folder and action counts are properly populated
+        package.FolderCount = package.Items.Count(x => x.ActionType == ActionType.Folder);
+        package.ActionCount = package.Items.Count(x => x.ActionType != ActionType.Folder);
+
+        var tempFile = filePath + ".tmp";
+        using (var stream = File.Create(tempFile))
+        {
+            await JsonSerializer.SerializeAsync(stream, package, JsonOptions).ConfigureAwait(false);
+            await stream.FlushAsync().ConfigureAwait(false);
+        }
+
+        File.Move(tempFile, filePath, overwrite: true);
+    }
+
+    public async Task<ConfigurationBackupPackage> ReadPackageAsync(string filePath)
+    {
+        if (!File.Exists(filePath)) throw new FileNotFoundException($"File not found: {filePath}", filePath);
+
+        using var stream = File.OpenRead(filePath);
+
+        // 1. Try reading as modern ConfigurationBackupPackage
+        try
+        {
+            var package = await JsonSerializer.DeserializeAsync<ConfigurationBackupPackage>(stream, JsonOptions).ConfigureAwait(false);
+            if (package != null && (package.Items.Count > 0 || package.Settings != null))
+            {
+                if (package.FolderCount == 0 && package.ActionCount == 0 && package.Items.Count > 0)
+                {
+                    package.FolderCount = package.Items.Count(x => x.ActionType == ActionType.Folder);
+                    package.ActionCount = package.Items.Count(x => x.ActionType != ActionType.Folder);
+                }
+                return package;
+            }
+        }
+        catch
+        {
+            // Reset stream and attempt legacy parse below
+        }
+
+        // 2. Try backwards-compatible fallback for flat List<TriggerItem>
+        stream.Position = 0;
+        try
+        {
+            var legacyItems = await JsonSerializer.DeserializeAsync<List<TriggerItem>>(stream, JsonOptions).ConfigureAwait(false);
+            if (legacyItems != null && legacyItems.Count > 0)
+            {
+                return new ConfigurationBackupPackage
+                {
+                    SchemaVersion = 1,
+                    AppVersion = "1.0.0",
+                    ContentType = BackupContentType.TreeItems,
+                    ExportedAt = File.GetLastWriteTimeUtc(filePath),
+                    FolderCount = legacyItems.Count(x => x.ActionType == ActionType.Folder),
+                    ActionCount = legacyItems.Count(x => x.ActionType != ActionType.Folder),
+                    Items = legacyItems
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Invalid or unsupported TriggerPoint backup file format: {ex.Message}", ex);
+        }
+
+        throw new InvalidOperationException("The backup file does not contain valid TriggerPoint configuration data.");
+    }
+
+    #region Recycle Bin Operations
+
+    public async Task<IReadOnlyList<RecycleBinItem>> LoadRecycleBinAsync()
+    {
+        await _fileLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (File.Exists(_recycleBinFilePath))
+            {
+                try
+                {
+                    using var stream = File.OpenRead(_recycleBinFilePath);
+                    var items = await JsonSerializer.DeserializeAsync<List<RecycleBinItem>>(stream, JsonOptions).ConfigureAwait(false);
+                    return items ?? [];
+                }
+                catch
+                {
+                    return [];
+                }
+            }
+            return [];
+        }
+        finally
+        {
+            _fileLock.Release();
+        }
+    }
+
+    public async Task SaveRecycleBinAsync(IEnumerable<RecycleBinItem> items)
+    {
+        await _fileLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            var list = items.ToList();
+            var tempFile = _recycleBinFilePath + ".tmp";
+            using (var stream = File.Create(tempFile))
+            {
+                await JsonSerializer.SerializeAsync(stream, list, JsonOptions).ConfigureAwait(false);
+            }
+            File.Move(tempFile, _recycleBinFilePath, overwrite: true);
+        }
+        finally
+        {
+            _fileLock.Release();
+        }
+    }
+
+    public async Task MoveToRecycleBinAsync(IEnumerable<TriggerItem> items, IReadOnlyList<TriggerItem> allItems)
+    {
+        var currentRecycleBin = (await LoadRecycleBinAsync().ConfigureAwait(false)).ToList();
+        var folderLookup = allItems.ToDictionary(x => x.Id, x => x);
+
+        foreach (var item in items)
+        {
+            // Build original folder path for user context
+            var pathParts = new List<string>();
+            var curParentId = item.ParentId;
+            while (curParentId.HasValue && folderLookup.TryGetValue(curParentId.Value, out var parentFolder))
+            {
+                pathParts.Insert(0, parentFolder.Name);
+                curParentId = parentFolder.ParentId;
+            }
+            string originalPath = pathParts.Count > 0 ? string.Join(" / ", pathParts) : "Root";
+
+            // Remove any existing entry with same id
+            currentRecycleBin.RemoveAll(x => x.Item.Id == item.Id);
+
+            currentRecycleBin.Add(new RecycleBinItem
+            {
+                Id = item.Id,
+                DeletedAtUtc = DateTime.UtcNow,
+                OriginalParentId = item.ParentId,
+                OriginalPath = originalPath,
+                Item = item
+            });
+        }
+
+        await SaveRecycleBinAsync(currentRecycleBin).ConfigureAwait(false);
+    }
+
+    public Task MoveToRecycleBinAsync(TriggerItem item, IReadOnlyList<TriggerItem> allItems)
+    {
+        return MoveToRecycleBinAsync([item], allItems);
+    }
+
+    public async Task<IReadOnlyList<TriggerItem>> RestoreFromRecycleBinAsync(IEnumerable<Guid> recycleBinItemIds)
+    {
+        var currentRecycleBin = (await LoadRecycleBinAsync().ConfigureAwait(false)).ToList();
+        var idSet = new HashSet<Guid>(recycleBinItemIds);
+        var restored = new List<TriggerItem>();
+
+        currentRecycleBin.RemoveAll(rbItem =>
+        {
+            if (idSet.Contains(rbItem.Id) || idSet.Contains(rbItem.Item.Id))
+            {
+                restored.Add(rbItem.Item);
+                return true;
+            }
+            return false;
+        });
+
+        await SaveRecycleBinAsync(currentRecycleBin).ConfigureAwait(false);
+        return restored;
+    }
+
+    public async Task<TriggerItem?> RestoreFromRecycleBinAsync(Guid recycleBinItemId)
+    {
+        var restored = await RestoreFromRecycleBinAsync([recycleBinItemId]).ConfigureAwait(false);
+        return restored.FirstOrDefault();
+    }
+
+    public async Task PermanentlyDeleteFromRecycleBinAsync(IEnumerable<Guid> recycleBinItemIds)
+    {
+        var currentRecycleBin = (await LoadRecycleBinAsync().ConfigureAwait(false)).ToList();
+        var idSet = new HashSet<Guid>(recycleBinItemIds);
+
+        currentRecycleBin.RemoveAll(rbItem => idSet.Contains(rbItem.Id) || idSet.Contains(rbItem.Item.Id));
+        await SaveRecycleBinAsync(currentRecycleBin).ConfigureAwait(false);
+    }
+
+    public Task PermanentlyDeleteFromRecycleBinAsync(Guid recycleBinItemId)
+    {
+        return PermanentlyDeleteFromRecycleBinAsync([recycleBinItemId]);
+    }
+
+    public async Task EmptyRecycleBinAsync()
+    {
+        await SaveRecycleBinAsync([]).ConfigureAwait(false);
+    }
+
+    public async Task PurgeRecycleBinAsync(int retentionDays)
+    {
+        if (retentionDays <= 0) return; // 0 = Never delete
+
+        var currentRecycleBin = (await LoadRecycleBinAsync().ConfigureAwait(false)).ToList();
+        var cutoff = DateTime.UtcNow.AddDays(-retentionDays);
+
+        int initialCount = currentRecycleBin.Count;
+        currentRecycleBin.RemoveAll(x => x.DeletedAtUtc < cutoff);
+
+        if (currentRecycleBin.Count != initialCount)
+        {
+            await SaveRecycleBinAsync(currentRecycleBin).ConfigureAwait(false);
+        }
+    }
+
+    #endregion
 }

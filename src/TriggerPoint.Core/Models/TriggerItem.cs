@@ -20,6 +20,7 @@ public sealed class TriggerItem
     public UsageStats UsageStats { get; set; } = new();
     public int OrderIndex { get; set; } = 0;
     public bool IsEnabled { get; set; } = true;
+    public bool IsExpanded { get; set; } = true;
 
     [JsonIgnore]
     public HotkeyConflictStatus ConflictStatus { get; set; } = HotkeyConflictStatus.None;
@@ -40,6 +41,7 @@ public sealed class TriggerItem
             Hotkey = Hotkey != null ? new ShortcutBinding(Hotkey.Modifiers, Hotkey.VirtualKey, Hotkey.KeyName) : null,
             PresentationMode = PresentationMode,
             ActionType = ActionType,
+            IsExpanded = IsExpanded,
             Payload = new ActionPayload
             {
                 Command = Payload.Command,

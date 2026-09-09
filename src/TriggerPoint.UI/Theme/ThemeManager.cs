@@ -98,6 +98,30 @@ public static class ThemeManager
             res["WarningSubtleBrush"] = new SolidColorBrush(Color.FromArgb(45, 245, 158, 11));
             res["ErrorBrush"] = new SolidColorBrush(Color.FromRgb(239, 68, 68));          // Red
             res["SuccessBrush"] = new SolidColorBrush(Color.FromRgb(16, 185, 129));       // Emerald
+
+            // Semantic Action Types
+            res["FolderBrush"] = new SolidColorBrush(Color.FromRgb(245, 158, 11));       // #F59E0B Amber
+            res["FolderSubtleBrush"] = new SolidColorBrush(Color.FromArgb(35, 245, 158, 11));
+            res["ShellBrush"] = new SolidColorBrush(Color.FromRgb(56, 189, 248));        // #38BDF8 Sky Blue
+            res["ShellSubtleBrush"] = new SolidColorBrush(Color.FromArgb(35, 56, 189, 248));
+            res["SnippetBrush"] = new SolidColorBrush(Color.FromRgb(52, 211, 153));      // #34D399 Mint Emerald
+            res["SnippetSubtleBrush"] = new SolidColorBrush(Color.FromArgb(35, 52, 211, 153));
+
+            // Snippet Token Categories
+            res["TokenDateBrush"] = new SolidColorBrush(Color.FromRgb(56, 189, 248));
+            res["TokenDateBgBrush"] = new SolidColorBrush(Color.FromArgb(28, 56, 189, 248));
+            res["TokenClipBrush"] = new SolidColorBrush(Color.FromRgb(167, 139, 250));    // #A78BFA Violet
+            res["TokenClipBgBrush"] = new SolidColorBrush(Color.FromArgb(28, 167, 139, 250));
+            res["TokenPromptBrush"] = new SolidColorBrush(Color.FromRgb(52, 211, 153));
+            res["TokenPromptBgBrush"] = new SolidColorBrush(Color.FromArgb(28, 52, 211, 153));
+
+            // Context Rules Tags
+            res["TagAllowedBgBrush"] = new SolidColorBrush(Color.FromArgb(40, 16, 185, 129));
+            res["TagAllowedBorderBrush"] = new SolidColorBrush(Color.FromRgb(16, 185, 129));
+            res["TagAllowedTextBrush"] = new SolidColorBrush(Color.FromRgb(167, 243, 208));  // #A7F3D0
+            res["TagExcludedBgBrush"] = new SolidColorBrush(Color.FromArgb(40, 239, 68, 68));
+            res["TagExcludedBorderBrush"] = new SolidColorBrush(Color.FromRgb(239, 68, 68));
+            res["TagExcludedTextBrush"] = new SolidColorBrush(Color.FromRgb(254, 202, 202)); // #FECACA
         }
         else
         {
@@ -119,6 +143,30 @@ public static class ThemeManager
             res["WarningSubtleBrush"] = new SolidColorBrush(Color.FromArgb(35, 217, 119, 6));
             res["ErrorBrush"] = new SolidColorBrush(Color.FromRgb(220, 38, 38));          // Red
             res["SuccessBrush"] = new SolidColorBrush(Color.FromRgb(5, 150, 105));        // Emerald
+
+            // Semantic Action Types
+            res["FolderBrush"] = new SolidColorBrush(Color.FromRgb(217, 119, 6));        // #D97706 Amber Dark
+            res["FolderSubtleBrush"] = new SolidColorBrush(Color.FromArgb(30, 217, 119, 6));
+            res["ShellBrush"] = new SolidColorBrush(Color.FromRgb(2, 132, 199));         // #0284C7 Sky Blue Dark
+            res["ShellSubtleBrush"] = new SolidColorBrush(Color.FromArgb(30, 2, 132, 199));
+            res["SnippetBrush"] = new SolidColorBrush(Color.FromRgb(5, 150, 105));       // #059669 Emerald Dark
+            res["SnippetSubtleBrush"] = new SolidColorBrush(Color.FromArgb(30, 5, 150, 105));
+
+            // Snippet Token Categories
+            res["TokenDateBrush"] = new SolidColorBrush(Color.FromRgb(2, 132, 199));
+            res["TokenDateBgBrush"] = new SolidColorBrush(Color.FromArgb(20, 2, 132, 199));
+            res["TokenClipBrush"] = new SolidColorBrush(Color.FromRgb(124, 58, 237));    // #7C3AED Violet Dark
+            res["TokenClipBgBrush"] = new SolidColorBrush(Color.FromArgb(20, 124, 58, 237));
+            res["TokenPromptBrush"] = new SolidColorBrush(Color.FromRgb(5, 150, 105));
+            res["TokenPromptBgBrush"] = new SolidColorBrush(Color.FromArgb(20, 5, 150, 105));
+
+            // Context Rules Tags
+            res["TagAllowedBgBrush"] = new SolidColorBrush(Color.FromArgb(28, 5, 150, 105));
+            res["TagAllowedBorderBrush"] = new SolidColorBrush(Color.FromRgb(5, 150, 105));
+            res["TagAllowedTextBrush"] = new SolidColorBrush(Color.FromRgb(6, 78, 59));      // #064E3B
+            res["TagExcludedBgBrush"] = new SolidColorBrush(Color.FromArgb(28, 220, 38, 38));
+            res["TagExcludedBorderBrush"] = new SolidColorBrush(Color.FromRgb(220, 38, 38));
+            res["TagExcludedTextBrush"] = new SolidColorBrush(Color.FromRgb(127, 29, 29));   // #7F1D1D
         }
     }
 }

@@ -9,6 +9,7 @@ using System.Windows.Media;
 using TriggerPoint.Core.Contracts;
 using TriggerPoint.Core.Models;
 using TriggerPoint.Core.Services;
+using TriggerPoint.Infrastructure.Win32;
 
 namespace TriggerPoint.UI.Views;
 
@@ -18,7 +19,32 @@ public class PaletteItemViewModel
     public FuzzyMatchResult MatchResult { get; }
     public string Name => Item.Name;
     public string Description => Item.Description;
-    public bool HasDescription => !string.IsNullOrWhiteSpace(Description);
+    public string? ParentPath { get; }
+
+    public string SecondaryDetail
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(Description))
+                return Description;
+
+            if (!string.IsNullOrWhiteSpace(ParentPath))
+                return $"📁 {ParentPath}";
+
+            if (Item.ActionType == ActionType.Shell && !string.IsNullOrWhiteSpace(Item.Payload.Command))
+                return Item.Payload.Command;
+
+            if (Item.ActionType == ActionType.Snippet && !string.IsNullOrWhiteSpace(Item.Payload.SnippetTemplate))
+            {
+                var clean = Item.Payload.SnippetTemplate.Replace("\r", " ").Replace("\n", " ").Trim();
+                return clean.Length > 60 ? clean.Substring(0, 57) + "..." : clean;
+            }
+
+            return string.Empty;
+        }
+    }
+
+    public Visibility HasSecondaryDetail => !string.IsNullOrWhiteSpace(SecondaryDetail) ? Visibility.Visible : Visibility.Collapsed;
     public string HotkeyText => Item.Hotkey?.DisplayText ?? string.Empty;
     public Visibility HasHotkey => !string.IsNullOrWhiteSpace(HotkeyText) ? Visibility.Visible : Visibility.Collapsed;
     public string LaunchCountBadge => Item.UsageStats.LaunchCount > 0 ? $"⚡ {Item.UsageStats.LaunchCount}" : "";
@@ -31,10 +57,26 @@ public class PaletteItemViewModel
         _ => "▶"
     };
 
-    public PaletteItemViewModel(TriggerItem item, FuzzyMatchResult matchResult)
+    public Brush IconBrush
+    {
+        get
+        {
+            string key = Item.ActionType switch
+            {
+                ActionType.Folder => "FolderBrush",
+                ActionType.Shell => "ShellBrush",
+                ActionType.Snippet => "SnippetBrush",
+                _ => "AccentBrush"
+            };
+            return Application.Current.TryFindResource(key) as Brush ?? Brushes.Gray;
+        }
+    }
+
+    public PaletteItemViewModel(TriggerItem item, FuzzyMatchResult matchResult, string? parentPath = null)
     {
         Item = item;
         MatchResult = matchResult;
+        ParentPath = parentPath;
     }
 }
 
@@ -43,6 +85,7 @@ public partial class CommandPaletteView : Window
     private readonly List<TriggerItem> _allItems;
     private readonly IActionExecutor _executor;
     private readonly Guid? _scopedFolderId;
+    private readonly Dictionary<Guid, string> _folderPaths;
 
     public CommandPaletteView(
         IEnumerable<TriggerItem> items, 
@@ -53,11 +96,28 @@ public partial class CommandPaletteView : Window
         InitializeComponent();
         _executor = executor;
         _scopedFolderId = scopedFolderId;
+        _folderPaths = BuildFolderPaths(items);
 
-        // Filter items if scoped to a folder
+        // Filter items if scoped to a folder (recursively includes subfolders)
         if (scopedFolderId.HasValue)
         {
-            _allItems = items.Where(x => x.ParentId == scopedFolderId.Value && x.ActionType != ActionType.Folder).ToList();
+            var descendantFolderIds = new HashSet<Guid> { scopedFolderId.Value };
+            bool added;
+            do
+            {
+                added = false;
+                foreach (var item in items.Where(x => x.ActionType == ActionType.Folder && x.ParentId.HasValue))
+                {
+                    if (descendantFolderIds.Contains(item.ParentId!.Value) && descendantFolderIds.Add(item.Id))
+                    {
+                        added = true;
+                    }
+                }
+            } while (added);
+
+            _allItems = items.Where(x => x.ActionType != ActionType.Folder 
+                                      && x.ParentId.HasValue 
+                                      && descendantFolderIds.Contains(x.ParentId.Value)).ToList();
             ScopeBadge.Visibility = Visibility.Visible;
             ScopeText.Text = scopedFolderName ?? "Scoped";
         }
@@ -69,9 +129,38 @@ public partial class CommandPaletteView : Window
 
         Loaded += (s, e) =>
         {
+            try
+            {
+                var handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                NativeMethods.SetForegroundWindow(handle);
+            }
+            catch { }
+
             SearchTextBox.Focus();
+            Keyboard.Focus(SearchTextBox);
             FilterResults();
         };
+    }
+
+    private static Dictionary<Guid, string> BuildFolderPaths(IEnumerable<TriggerItem> allItems)
+    {
+        var itemsList = allItems.ToList();
+        var folderDict = itemsList.Where(x => x.ActionType == ActionType.Folder).ToDictionary(x => x.Id);
+        var result = new Dictionary<Guid, string>();
+
+        foreach (var folder in folderDict.Values)
+        {
+            var segments = new List<string>();
+            var curr = folder;
+            while (curr != null)
+            {
+                segments.Insert(0, curr.Name);
+                curr = curr.ParentId.HasValue && folderDict.TryGetValue(curr.ParentId.Value, out var parent) ? parent : null;
+            }
+            result[folder.Id] = string.Join(" › ", segments);
+        }
+
+        return result;
     }
 
     private void SearchTextBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -84,7 +173,10 @@ public partial class CommandPaletteView : Window
         var query = SearchTextBox.Text.Trim();
         var ranked = FuzzyMatcher.FilterAndRank(_allItems, query);
 
-        var vms = ranked.Select(r => new PaletteItemViewModel(r.Item, r)).ToList();
+        var vms = ranked.Select(r => new PaletteItemViewModel(
+            r.Item, 
+            r, 
+            r.Item.ParentId.HasValue && _folderPaths.TryGetValue(r.Item.ParentId.Value, out var path) ? path : null)).ToList();
         ResultsListBox.ItemsSource = vms;
 
         if (vms.Count > 0)
@@ -93,38 +185,54 @@ public partial class CommandPaletteView : Window
         }
     }
 
-    private void Window_KeyDown(object sender, KeyEventArgs e)
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape)
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+
+        if (key == Key.Escape)
         {
             Close();
             e.Handled = true;
             return;
         }
 
-        if (e.Key == Key.Down)
+        if (key == Key.Down)
         {
-            if (ResultsListBox.SelectedIndex < ResultsListBox.Items.Count - 1)
+            if (ResultsListBox.Items.Count > 0)
             {
-                ResultsListBox.SelectedIndex++;
+                if (ResultsListBox.SelectedIndex < ResultsListBox.Items.Count - 1)
+                {
+                    ResultsListBox.SelectedIndex++;
+                }
+                else
+                {
+                    ResultsListBox.SelectedIndex = 0; // Wrap around to top
+                }
                 ResultsListBox.ScrollIntoView(ResultsListBox.SelectedItem);
             }
             e.Handled = true;
             return;
         }
 
-        if (e.Key == Key.Up)
+        if (key == Key.Up)
         {
-            if (ResultsListBox.SelectedIndex > 0)
+            if (ResultsListBox.Items.Count > 0)
             {
-                ResultsListBox.SelectedIndex--;
+                if (ResultsListBox.SelectedIndex > 0)
+                {
+                    ResultsListBox.SelectedIndex--;
+                }
+                else
+                {
+                    ResultsListBox.SelectedIndex = ResultsListBox.Items.Count - 1; // Wrap around to bottom
+                }
                 ResultsListBox.ScrollIntoView(ResultsListBox.SelectedItem);
             }
             e.Handled = true;
             return;
         }
 
-        if (e.Key == Key.Enter)
+        if (key == Key.Enter)
         {
             ExecuteCurrentSelection(DetermineOverride());
             e.Handled = true;

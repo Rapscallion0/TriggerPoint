@@ -48,7 +48,11 @@
 
                 <!-- Brand -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="⚡" FontSize="20" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource AccentBrush}"/>
+                    <Image Source="/Assets/TriggerPoint.ico" 
+                           Width="24" Height="24" 
+                           Margin="0,0,10,0" 
+                           VerticalAlignment="Center" 
+                           RenderOptions.BitmapScalingMode="HighQuality"/>
                     <StackPanel>
                         <TextBlock Text="TriggerPoint" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/>
                         <TextBlock Text="Precision shortcuts. Instant menus. Zero bloat." FontSize="10.5" Foreground="{DynamicResource TextSecondaryBrush}"/>
@@ -67,16 +71,13 @@
                             ToolTip="Toggle global hotkeys snooze mode"
                             Click="SnoozeToggleBtn_Click"/>
 
-                    <Button Content="💾 Save &amp; Apply" 
-                            Style="{StaticResource AccentButtonStyle}" 
-                            Margin="0,0,8,0"
-                            ToolTip="Save all changes to disk and register hotkeys with Windows"
-                            Click="SaveBtn_Click"/>
-
-                    <Button Content="⚙ Settings" 
+                    <Button Content="⚙" 
                             Style="{StaticResource SecondaryButtonStyle}" 
+                            Width="32" Height="32"
+                            Padding="0"
+                            FontSize="14"
                             Margin="0,0,16,0"
-                            ToolTip="Open Application Settings (Log Level, Log Retention, Theme, Startup)"
+                            ToolTip="Application Settings (Log Level, Log Retention, Theme, Startup)"
                             Click="AppSettingsBtn_Click"/>
                 </StackPanel>
 
@@ -106,7 +107,7 @@
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="340" MinWidth="260" MaxWidth="450"/>
-                <ColumnDefinition Width="1"/>
+                <ColumnDefinition Width="6"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
@@ -117,48 +118,84 @@
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
-                <!-- Tree Header: Search & Add Dropdown -->
-                <Grid Grid.Row="0" Margin="12,10,12,6">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
+                <!-- Tree Header: Search & Add Dropdown + Filters -->
+                <StackPanel Grid.Row="0" Margin="12,10,12,6">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
 
-                    <TextBox Grid.Column="0"
-                             x:Name="TreeSearchBox"
-                             Style="{StaticResource ModernTextBoxStyle}"
-                             Height="32"
-                             Tag="Search actions..."
-                             ToolTip="Filter shortcuts and folders by name or description"
-                             TextChanged="TreeSearchBox_TextChanged"/>
+                        <TextBox Grid.Column="0"
+                                 x:Name="TreeSearchBox"
+                                 Style="{StaticResource ModernTextBoxStyle}"
+                                 Height="32"
+                                 Tag="Search actions..."
+                                 ToolTip="Filter shortcuts and folders by name or description"
+                                 TextChanged="TreeSearchBox_TextChanged"/>
 
-                    <Button Grid.Column="1"
-                            x:Name="AddMenuBtn"
-                            Content="+"
-                            Style="{StaticResource SecondaryButtonStyle}"
-                            Width="32" Height="32"
-                            FontSize="18"
-                            FontWeight="SemiBold"
-                            Padding="0"
-                            Margin="6,0,0,0"
-                            ToolTip="Add item or folder"
-                            Click="AddMenuBtn_Click">
-                        <Button.ContextMenu>
-                            <ContextMenu x:Name="AddButtonContextMenu">
-                                <MenuItem Header="New Action" Click="AddActionBtn_Click">
-                                    <MenuItem.Icon>
-                                        <TextBlock Text="⚡" FontSize="13" Foreground="{DynamicResource AccentBrush}"/>
-                                    </MenuItem.Icon>
-                                </MenuItem>
-                                <MenuItem Header="New Folder" Click="AddFolderBtn_Click">
-                                    <MenuItem.Icon>
-                                        <TextBlock Text="📁" FontSize="13" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                                    </MenuItem.Icon>
-                                </MenuItem>
-                            </ContextMenu>
-                        </Button.ContextMenu>
-                    </Button>
-                </Grid>
+                        <Button Grid.Column="1"
+                                x:Name="ToggleExpandAllBtn"
+                                Content="⊟"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Width="32" Height="32"
+                                FontSize="14"
+                                FontWeight="Bold"
+                                Padding="0"
+                                Margin="6,0,0,0"
+                                ToolTip="Collapse All Folders"
+                                Click="ToggleExpandAllBtn_Click"/>
+
+                        <Button Grid.Column="2"
+                                x:Name="AddMenuBtn"
+                                Content="+"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Width="32" Height="32"
+                                FontSize="18"
+                                FontWeight="SemiBold"
+                                Padding="0"
+                                Margin="4,0,0,0"
+                                ToolTip="Add item or folder"
+                                Click="AddMenuBtn_Click">
+                            <Button.ContextMenu>
+                                <ContextMenu x:Name="AddButtonContextMenu">
+                                    <MenuItem Header="New Action" Click="AddActionBtn_Click">
+                                        <MenuItem.Icon>
+                                            <TextBlock Text="⚡" FontSize="13" Foreground="{DynamicResource ShellBrush}"/>
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="New Folder" Click="AddFolderBtn_Click">
+                                        <MenuItem.Icon>
+                                            <TextBlock Text="📁" FontSize="13" Foreground="{DynamicResource FolderBrush}"/>
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                </ContextMenu>
+                            </Button.ContextMenu>
+                        </Button>
+                    </Grid>
+
+                    <!-- Filter Chips -->
+                    <WrapPanel Margin="0,6,0,0" x:Name="TreeFilterChipsPanel">
+                        <Button x:Name="BrokenFilterChip"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Padding="8,3"
+                                Height="24"
+                                FontSize="11"
+                                FontWeight="SemiBold"
+                                Foreground="{DynamicResource ErrorBrush}"
+                                BorderBrush="{DynamicResource ErrorBrush}"
+                                Background="#1AEF4444"
+                                Visibility="Collapsed"
+                                ToolTip="Click to toggle filtering for only items with invalid target paths"
+                                Click="BrokenFilterChip_Click">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="✕ " FontWeight="Bold" FontSize="10" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="BrokenFilterChipText" Text="0 Broken" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                    </WrapPanel>
+                </StackPanel>
 
                 <!-- TreeView -->
                 <TreeView Grid.Row="1"
@@ -171,6 +208,7 @@
                           PreviewMouseRightButtonDown="ItemsTreeView_PreviewMouseRightButtonDown"
                           MouseMove="ItemsTreeView_MouseMove"
                           DragOver="ItemsTreeView_DragOver"
+                          DragLeave="ItemsTreeView_DragLeave"
                           Drop="ItemsTreeView_Drop"
                           PreviewKeyDown="ItemsTreeView_PreviewKeyDown"
                           SelectedItemChanged="ItemsTreeView_SelectedItemChanged">
@@ -178,12 +216,22 @@
                         <ContextMenu x:Name="TreeContextMenu" Opened="TreeContextMenu_Opened">
                             <MenuItem x:Name="ContextAddActionItem" Header="New Action" Click="AddActionBtn_Click">
                                 <MenuItem.Icon>
-                                    <TextBlock Text="⚡" FontSize="13" Foreground="{DynamicResource AccentBrush}"/>
+                                    <TextBlock Text="⚡" FontSize="13" Foreground="{DynamicResource ShellBrush}"/>
                                 </MenuItem.Icon>
                             </MenuItem>
                             <MenuItem x:Name="ContextAddFolderItem" Header="New Folder" Click="AddFolderBtn_Click">
                                 <MenuItem.Icon>
-                                    <TextBlock Text="📁" FontSize="13" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                    <TextBlock Text="📁" FontSize="13" Foreground="{DynamicResource FolderBrush}"/>
+                                </MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem x:Name="ContextDuplicateItem" Header="Duplicate" InputGestureText="Ctrl+D" Click="DuplicateItemBtn_Click">
+                                <MenuItem.Icon>
+                                    <TextBlock Text="📄" FontSize="13" Foreground="{DynamicResource AccentBrush}"/>
+                                </MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem x:Name="ContextRenameItem" Header="Rename" InputGestureText="F2" Click="ContextRenameItem_Click">
+                                <MenuItem.Icon>
+                                    <TextBlock Text="✏" FontSize="13" Foreground="{DynamicResource AccentBrush}"/>
                                 </MenuItem.Icon>
                             </MenuItem>
                             <Separator x:Name="ContextDeleteSeparator"/>
@@ -192,102 +240,321 @@
                                     <TextBlock Text="🗑" FontSize="13" Foreground="{DynamicResource ErrorBrush}"/>
                                 </MenuItem.Icon>
                             </MenuItem>
+                            <Separator x:Name="ContextExportSeparator"/>
+                            <MenuItem x:Name="ContextExportItem" Header="Export..." Click="ContextExportItem_Click">
+                                <MenuItem.Icon>
+                                    <TextBlock Text="📤" FontSize="13"/>
+                                </MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem x:Name="ContextImportItem" Header="Import..." Click="ContextImportItem_Click">
+                                <MenuItem.Icon>
+                                    <TextBlock Text="📥" FontSize="13"/>
+                                </MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem x:Name="ContextRestoreItem" Header="Restore" Click="RestoreRecycledItemBtn_Click" Visibility="Collapsed">
+                                <MenuItem.Icon>
+                                    <TextBlock Text="↺" FontSize="13" Foreground="{DynamicResource AccentBrush}"/>
+                                </MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem x:Name="ContextPermanentDeleteItem" Header="Delete Permanently" Click="PermanentlyDeleteRecycledItemBtn_Click" Visibility="Collapsed">
+                                <MenuItem.Icon>
+                                    <TextBlock Text="✕" FontSize="13" Foreground="{DynamicResource ErrorBrush}"/>
+                                </MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem x:Name="ContextEmptyRecycleBinItem" Header="Empty Recycle Bin" Click="EmptyRecycleBinFromSettingsBtn_Click" Visibility="Collapsed">
+                                <MenuItem.Icon>
+                                    <TextBlock Text="🗑" FontSize="13" Foreground="{DynamicResource ErrorBrush}"/>
+                                </MenuItem.Icon>
+                            </MenuItem>
                         </ContextMenu>
                     </TreeView.ContextMenu>
                     <TreeView.ItemTemplate>
                         <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                            <Border CornerRadius="4" Padding="6,4" Margin="0,1" Background="Transparent">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-
-                                    <!-- Icon -->
-                                    <TextBlock Grid.Column="0" 
-                                               Text="{Binding IconSymbol}" 
-                                               FontSize="13" 
-                                               Margin="0,0,6,0" 
-                                               VerticalAlignment="Center"/>
-
-                                    <!-- Name -->
-                                    <TextBlock Grid.Column="1" 
-                                               Text="{Binding Name}" 
-                                               FontSize="13" 
-                                               FontWeight="Medium" 
-                                               Foreground="{DynamicResource TextPrimaryBrush}" 
-                                               VerticalAlignment="Center"/>
-
-                                    <!-- Conflict Warning Badge: Icon Only with Tooltip -->
-                                    <Border Grid.Column="2" 
-                                            Style="{StaticResource ConflictBadgeStyle}" 
-                                            Margin="6,0,0,0"
-                                            ToolTip="{Binding ConflictTooltip}"
-                                            Visibility="{Binding HasConflictVisibility}">
-                                        <TextBlock Text="⚠" 
-                                                   FontSize="11" 
-                                                   FontWeight="Bold" 
-                                                   Foreground="{DynamicResource WarningBrush}"/>
-                                    </Border>
-
-                                    <!-- Hotkey Badge -->
-                                    <Border Grid.Column="3" 
-                                            Style="{StaticResource KeyBadgeStyle}" 
-                                            Margin="6,0,0,0"
-                                            Visibility="{Binding HasHotkey, Converter={x:Null}}">
-                                        <TextBlock Text="{Binding HotkeyDisplay}" 
-                                                   FontSize="10" 
-                                                   Foreground="{DynamicResource TextMutedBrush}"/>
-                                    </Border>
+                            <Grid Margin="0,1">
+                                <!-- Drop Above Indicator Line with Bead -->
+                                <Grid VerticalAlignment="Top" Height="4" Margin="0,-2,0,0" Panel.ZIndex="10" Visibility="{Binding DropAboveVisibility}">
+                                    <Border Height="2" Background="{DynamicResource AccentBrush}" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                                    <Ellipse Width="6" Height="6" Fill="{DynamicResource AccentBrush}" HorizontalAlignment="Left" VerticalAlignment="Center"/>
                                 </Grid>
-                            </Border>
+
+                                <!-- Main Item Row Container -->
+                                <Border CornerRadius="4" 
+                                        Padding="6,4" 
+                                        Background="{Binding DropInsideBackgroundBrush}" 
+                                        BorderBrush="{Binding DropInsideBorderBrush}" 
+                                        BorderThickness="1.5">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Icon -->
+                                        <TextBlock Grid.Column="0" 
+                                                   Text="{Binding IconSymbol}" 
+                                                   Foreground="{Binding IconBrush}"
+                                                   FontSize="13" 
+                                                   Margin="0,0,6,0" 
+                                                   VerticalAlignment="Center"/>
+
+                                        <!-- Name Display -->
+                                        <TextBlock Grid.Column="1" 
+                                                   Text="{Binding Name}" 
+                                                   FontSize="13" 
+                                                   FontWeight="Medium" 
+                                                   Foreground="{DynamicResource TextPrimaryBrush}" 
+                                                   VerticalAlignment="Center"
+                                                   Visibility="{Binding NameDisplayVisibility}"/>
+
+                                        <!-- Inline Rename Input Box -->
+                                        <TextBox Grid.Column="1"
+                                                 x:Name="InlineRenameBox"
+                                                 Text="{Binding EditingNameText, UpdateSourceTrigger=PropertyChanged}"
+                                                 FontSize="12.5"
+                                                 FontWeight="Medium"
+                                                 Foreground="{DynamicResource TextPrimaryBrush}"
+                                                 Background="{DynamicResource BgInputBrush}"
+                                                 BorderBrush="{DynamicResource AccentBrush}"
+                                                 BorderThickness="1"
+                                                 Padding="4,1"
+                                                 VerticalAlignment="Center"
+                                                 Visibility="{Binding NameEditVisibility}"
+                                                 PreviewKeyDown="InlineRenameBox_PreviewKeyDown"
+                                                 KeyDown="InlineRenameBox_KeyDown"
+                                                 LostFocus="InlineRenameBox_LostFocus"
+                                                 IsVisibleChanged="InlineRenameBox_IsVisibleChanged"/>
+
+                                        <!-- Broken Shortcut Badge: Icon Only with Tooltip -->
+                                        <Border Grid.Column="2" 
+                                                Style="{StaticResource ConflictBadgeStyle}" 
+                                                Background="#25EF4444"
+                                                BorderBrush="{DynamicResource ErrorBrush}"
+                                                Margin="6,0,0,0"
+                                                ToolTip="{Binding BrokenTargetTooltip}"
+                                                Visibility="{Binding BrokenTargetVisibility}">
+                                            <TextBlock Text="✕" 
+                                                       FontSize="10" 
+                                                       FontWeight="Bold" 
+                                                       Foreground="{DynamicResource ErrorBrush}"/>
+                                        </Border>
+
+                                        <!-- Conflict Warning Badge: Icon Only with Tooltip -->
+                                        <Border Grid.Column="3" 
+                                                Style="{StaticResource ConflictBadgeStyle}" 
+                                                Margin="6,0,0,0"
+                                                ToolTip="{Binding ConflictTooltip}"
+                                                Visibility="{Binding HasConflictVisibility}">
+                                            <TextBlock Text="⚠" 
+                                                       FontSize="11" 
+                                                       FontWeight="Bold" 
+                                                       Foreground="{DynamicResource WarningBrush}"/>
+                                        </Border>
+
+                                        <!-- Hotkey Badge -->
+                                        <Border Grid.Column="4" 
+                                                Style="{StaticResource AccentKeyBadgeStyle}" 
+                                                Margin="6,0,0,0"
+                                                Visibility="{Binding HasHotkey, Converter={x:Null}}">
+                                            <TextBlock Text="{Binding HotkeyDisplay}" 
+                                                       FontSize="10" 
+                                                       Foreground="{DynamicResource AccentBrush}"/>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Drop Below Indicator Line with Bead -->
+                                <Grid VerticalAlignment="Bottom" Height="4" Margin="0,0,0,-2" Panel.ZIndex="10" Visibility="{Binding DropBelowVisibility}">
+                                    <Border Height="2" Background="{DynamicResource AccentBrush}" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                                    <Ellipse Width="6" Height="6" Fill="{DynamicResource AccentBrush}" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Grid>
                         </HierarchicalDataTemplate>
                     </TreeView.ItemTemplate>
                 </TreeView>
+
+                <!-- Floating Drag Preview Ghost -->
+                <Popup x:Name="TreeDragGhostPopup"
+                       AllowsTransparency="True"
+                       Placement="AbsolutePoint"
+                       IsOpen="False"
+                       IsHitTestVisible="False"
+                       Focusable="False">
+                    <Border Background="{DynamicResource BgSecondaryBrush}"
+                            BorderBrush="{DynamicResource AccentBrush}"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="8,4"
+                            Opacity="0.92">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock x:Name="TreeDragGhostIcon" Text="⚡" FontSize="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TreeDragGhostText" Text="Item" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                </Popup>
             </Grid>
 
-            <!-- Splitter Divider -->
+            <!-- Splitter Divider (Wider grab target with responsive hover indicator) -->
             <GridSplitter Grid.Column="1" 
-                          Width="1" 
+                          Width="6" 
                           HorizontalAlignment="Stretch" 
-                          Background="{DynamicResource BorderBrush}"/>
+                          VerticalAlignment="Stretch"
+                          ResizeBehavior="PreviousAndNext"
+                          ResizeDirection="Columns"
+                          Cursor="SizeWE"
+                          Background="Transparent"
+                          ShowsPreview="False">
+                <GridSplitter.Template>
+                    <ControlTemplate TargetType="{x:Type GridSplitter}">
+                        <Border Background="Transparent" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                            <Border Width="1" 
+                                    HorizontalAlignment="Center" 
+                                    VerticalAlignment="Stretch" 
+                                    Background="{DynamicResource BorderBrush}"
+                                    x:Name="SplitterLine"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="SplitterLine" Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                <Setter TargetName="SplitterLine" Property="Width" Value="2"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </GridSplitter.Template>
+            </GridSplitter>
 
             <!-- Right Detail Pane: Action Editor -->
-            <ScrollViewer Grid.Column="2" 
-                          Background="{DynamicResource BgPrimaryBrush}" 
-                          VerticalScrollBarVisibility="Auto" 
-                          Padding="24,20">
-                <StackPanel x:Name="EditorPanel" Visibility="Visible">
-                    <!-- Section Title -->
-                    <Grid Margin="0,0,0,16">
+            <Grid Grid.Column="2" Background="{DynamicResource BgPrimaryBrush}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/> <!-- Sticky Action Header -->
+                    <RowDefinition Height="Auto"/> <!-- Sticky Recycled Item Banner -->
+                    <RowDefinition Height="*"/>    <!-- Scrollable Form Body -->
+                </Grid.RowDefinitions>
+
+                <!-- Sticky Header Bar -->
+                <Border Grid.Row="0"
+                        Background="{DynamicResource BgPrimaryBrush}"
+                        BorderBrush="{DynamicResource BorderSubtleBrush}"
+                        BorderThickness="0,0,0,1"
+                        Padding="24,14,24,14">
+                    <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
-                        <StackPanel Grid.Column="0">
+                        <!-- Title and Badge with Ellipsis Truncation -->
+                        <DockPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0" LastChildFill="True">
+                            <Border x:Name="EditorTypeBadge"
+                                    DockPanel.Dock="Right"
+                                    CornerRadius="4"
+                                    Padding="6,2"
+                                    Margin="10,0,0,0"
+                                    VerticalAlignment="Center"
+                                    Visibility="Collapsed">
+                                <TextBlock x:Name="EditorTypeBadgeText"
+                                           FontSize="11"
+                                           FontWeight="SemiBold"/>
+                            </Border>
+
                             <TextBlock x:Name="EditorHeaderTitle" 
-                                       Text="Edit Item" 
+                                       Text="Item Name" 
                                        FontSize="18" 
                                        FontWeight="Bold" 
-                                       Foreground="{DynamicResource TextPrimaryBrush}"/>
-                        </StackPanel>
+                                       Foreground="{DynamicResource TextPrimaryBrush}"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+                        </DockPanel>
 
-                        <StackPanel Grid.Column="1" Orientation="Horizontal">
-                            <Button Content="▶ Test Action" 
-                                    Style="{StaticResource SecondaryButtonStyle}" 
+                        <!-- Toolbar: Save, Test, Delete -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="SaveBtn"
+                                    Content="💾 Save" 
+                                    Style="{StaticResource AccentButtonStyle}" 
+                                    Margin="0,0,8,0"
+                                    IsEnabled="False"
+                                    ToolTip="Save all changes to disk and register hotkeys with Windows"
+                                    Click="SaveBtn_Click"/>
+
+                            <Button x:Name="TestActionBtn"
+                                    Content="▶ Test" 
+                                    Style="{StaticResource TestActionButtonStyle}" 
                                     Margin="0,0,8,0"
                                     ToolTip="Preview and execute this action immediately to test arguments, prompts, or snippets"
                                     Click="TestActionBtn_Click"/>
-                            <Button Content="🗑 Delete" 
+
+                            <Button x:Name="DeleteItemBtn"
+                                    Content="🗑" 
                                     Style="{StaticResource SecondaryButtonStyle}" 
                                     Foreground="{DynamicResource ErrorBrush}"
-                                    ToolTip="Permanently remove this item or folder from your configuration"
+                                    BorderBrush="{DynamicResource ErrorBrush}"
+                                    Width="34" Height="34"
+                                    Padding="0"
+                                    FontSize="14"
+                                    ToolTip="Move this item or folder to the Recycle Bin"
                                     Click="DeleteItemBtn_Click"/>
                         </StackPanel>
                     </Grid>
+                </Border>
+
+                <!-- Sticky Recycled Item Action Banner (Visible when viewing deleted item) -->
+                <Border x:Name="RecycledItemBanner"
+                        Grid.Row="1"
+                        Background="{DynamicResource WarningSubtleBrush}"
+                        BorderBrush="{DynamicResource WarningBrush}"
+                        BorderThickness="0,0,0,1"
+                        Padding="24,12"
+                        Visibility="Collapsed">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="🗑" FontSize="15" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="Deleted Item (Read-Only Preview)" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource WarningBrush}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="RestoreRecycledItemBtn"
+                                    Content="↺ Restore"
+                                    Style="{StaticResource AccentButtonStyle}"
+                                    Padding="14,6"
+                                    Margin="0,0,8,0"
+                                    Click="RestoreRecycledItemBtn_Click"/>
+                            <Button x:Name="PermanentlyDeleteRecycledItemBtn"
+                                    Content="✕ Delete Permanently"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Foreground="{DynamicResource ErrorBrush}"
+                                    BorderBrush="{DynamicResource ErrorBrush}"
+                                    Padding="12,6"
+                                    Click="PermanentlyDeleteRecycledItemBtn_Click"/>
+                        </StackPanel>
+                        <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                   x:Name="RecycledItemInfoText"
+                                   Text="Deleted on --/--/----"
+                                   FontSize="11.5"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   TextWrapping="Wrap"
+                                   TextTrimming="CharacterEllipsis"
+                                   Margin="23,6,0,0"/>
+                    </Grid>
+                </Border>
+
+                <!-- Scrollable Form Body -->
+                <ScrollViewer x:Name="EditorScrollViewer"
+                              Grid.Row="2" 
+                              Background="Transparent" 
+                              VerticalScrollBarVisibility="Auto" 
+                              HorizontalScrollBarVisibility="Disabled"
+                              Padding="24,16">
+                    <StackPanel x:Name="EditorPanel" Visibility="Visible">
 
                     <!-- Conflict Warning Banner (Visible if conflict exists) -->
                     <Border x:Name="ConflictBanner" 
@@ -351,11 +618,11 @@
                             <ComboBox x:Name="ActionTypeCombo" 
                                       Height="34" 
                                       FontSize="13" 
-                                      ToolTip="Shell launches applications/scripts, Snippet expands dynamic text, Folder groups items into menus"
+                                      ToolTip="Shell launches applications/scripts, Snippet expands dynamic text, Folder groups items into categories or menus"
                                       SelectionChanged="ActionTypeCombo_SelectionChanged">
                                 <ComboBoxItem Content="Shell (Launch App / Script / File)"/>
                                 <ComboBoxItem Content="Snippet (Text Expansion)"/>
-                                <ComboBoxItem Content="Folder (Menu Container)"/>
+                                <ComboBoxItem Content="Folder (Organize / Group Items)"/>
                             </ComboBox>
                         </StackPanel>
 
@@ -363,11 +630,11 @@
                             <TextBlock Text="Presentation Mode" FontWeight="SemiBold" Margin="0,0,0,6"/>
                             <ComboBox x:Name="PresentationModeCombo" 
                                       Height="34" 
-                                      FontSize="13"
+                                      FontSize="13" 
                                       ToolTip="Direct executes immediately with no UI, Cursor Menu opens a popup at your mouse, Command Palette opens fuzzy search">
-                                <ComboBoxItem Content="Direct (Run immediately, no UI)"/>
-                                <ComboBoxItem Content="Cursor Context Menu (At mouse pointer)"/>
-                                <ComboBoxItem Content="Command Palette (Centered search modal)"/>
+                                <ComboBoxItem x:Name="PresentationDirectItem" Content="Direct (Run immediately, no UI)"/>
+                                <ComboBoxItem x:Name="PresentationCursorMenuItem" Content="Cursor Context Menu (At mouse pointer)"/>
+                                <ComboBoxItem x:Name="PresentationCommandPaletteItem" Content="Command Palette (Centered search modal)"/>
                             </ComboBox>
                         </StackPanel>
                     </Grid>
@@ -388,13 +655,20 @@
                                                             ToolTip="Global keyboard shortcut to trigger this item from anywhere in Windows (click and press keys)"/>
                         </StackPanel>
 
-                        <StackPanel Grid.Column="2">
-                            <TextBlock Text="Accelerator Key" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                        <StackPanel Grid.Column="2" x:Name="AcceleratorGroup">
+                            <TextBlock x:Name="AcceleratorLabel" Text="Menu Quick-Key" FontWeight="SemiBold" Margin="0,0,0,6"/>
                             <TextBox x:Name="AcceleratorBox" 
                                      Style="{StaticResource ModernTextBoxStyle}" 
                                      Height="34" 
                                      MaxLength="1"
-                                     ToolTip="Single-character key (1-9, A-Z) to execute instantly inside cursor context menus"/>
+                                     HorizontalContentAlignment="Center"
+                                     FontWeight="Bold"
+                                     ToolTip="Single key (1-9, A-Z) to jump &amp; execute instantly inside popup cursor menus"/>
+                            <TextBlock x:Name="AcceleratorHintText"
+                                       Text="Popup menus only" 
+                                       FontSize="10.5" 
+                                       Foreground="{DynamicResource TextMutedBrush}" 
+                                       Margin="0,4,0,0"/>
                         </StackPanel>
                     </Grid>
 
@@ -456,7 +730,7 @@
 
                             <!-- Command -->
                             <TextBlock Text="Command / Application Path" FontWeight="SemiBold" Margin="0,0,0,6"/>
-                            <Grid Margin="0,0,0,10">
+                            <Grid Margin="0,0,0,4">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
@@ -490,6 +764,10 @@
                                     </StackPanel>
                                 </Border>
                             </Grid>
+                            <TextBlock x:Name="CommandValidationStatusText"
+                                       FontSize="11.5"
+                                       Margin="2,0,0,10"
+                                       Visibility="Collapsed"/>
 
                             <!-- Arguments -->
                             <TextBlock Text="Command-Line Arguments" FontWeight="SemiBold" Margin="0,0,0,6"/>
@@ -543,16 +821,16 @@
 
                             <!-- Quick Insert Token Chips -->
                             <WrapPanel Margin="0,0,0,8">
-                                <Button Content="+ {date}" Style="{StaticResource SecondaryButtonStyle}" Padding="6,3" Margin="0,0,5,5" ToolTip="Inserts current date (yyyy-MM-dd)" Click="InsertTokenChip_Click" Tag="{}{date}"/>
-                                <Button Content="+ {time}" Style="{StaticResource SecondaryButtonStyle}" Padding="6,3" Margin="0,0,5,5" ToolTip="Inserts current time (HH:mm:ss)" Click="InsertTokenChip_Click" Tag="{}{time}"/>
-                                <Button Content="+ {datetime}" Style="{StaticResource SecondaryButtonStyle}" Padding="6,3" Margin="0,0,5,5" ToolTip="Inserts current date and time (yyyy-MM-dd HH:mm:ss)" Click="InsertTokenChip_Click" Tag="{}{datetime}"/>
-                                <Button Content="+ {clipboard}" Style="{StaticResource SecondaryButtonStyle}" Padding="6,3" Margin="0,0,5,5" ToolTip="Inserts current clipboard text" Click="InsertTokenChip_Click" Tag="{}{clipboard}"/>
-                                <Button Content="+ {cursor}" Style="{StaticResource SecondaryButtonStyle}" Padding="6,3" Margin="0,0,5,5" ToolTip="Positions the cursor caret here post-paste" Click="InsertTokenChip_Click" Tag="{}{cursor}"/>
-                                <Button Content="+ {text:Label}" Style="{StaticResource SecondaryButtonStyle}" Padding="6,3" Margin="0,0,5,5" ToolTip="Prompts for a single-line text input" Click="InsertTokenChip_Click" Tag="{}{text:Label}"/>
-                                <Button Content="+ {choice:Label|Opt1=Val1,Opt2}" Style="{StaticResource SecondaryButtonStyle}" Padding="6,3" Margin="0,0,5,5" ToolTip="Prompts for a single selection from friendly options mapped to values" Click="InsertTokenChip_Click" Tag="{}{choice:Label|Opt1=Val1,Opt2}"/>
-                                <Button Content="+ {number:Label|1,10}" Style="{StaticResource SecondaryButtonStyle}" Padding="6,3" Margin="0,0,5,5" ToolTip="Prompts for a numeric value with range limits" Click="InsertTokenChip_Click" Tag="{}{number:Label|1,10}"/>
-                                <Button Content="+ {multiline:Label}" Style="{StaticResource SecondaryButtonStyle}" Padding="6,3" Margin="0,0,5,5" ToolTip="Prompts for multi-line text input" Click="InsertTokenChip_Click" Tag="{}{multiline:Label}"/>
-                                <Button Content="+ {date_picker:Label}" Style="{StaticResource SecondaryButtonStyle}" Padding="6,3" Margin="0,0,5,5" ToolTip="Prompts with an interactive date picker" Click="InsertTokenChip_Click" Tag="{}{date_picker:Label}"/>
+                                <Button Content="+ {date}" Style="{StaticResource TokenChipDateStyle}" Margin="0,0,5,5" ToolTip="Inserts current date (yyyy-MM-dd)" Click="InsertTokenChip_Click" Tag="{}{date}"/>
+                                <Button Content="+ {time}" Style="{StaticResource TokenChipDateStyle}" Margin="0,0,5,5" ToolTip="Inserts current time (HH:mm:ss)" Click="InsertTokenChip_Click" Tag="{}{time}"/>
+                                <Button Content="+ {datetime}" Style="{StaticResource TokenChipDateStyle}" Margin="0,0,5,5" ToolTip="Inserts current date and time (yyyy-MM-dd HH:mm:ss)" Click="InsertTokenChip_Click" Tag="{}{datetime}"/>
+                                <Button Content="+ {clipboard}" Style="{StaticResource TokenChipClipStyle}" Margin="0,0,5,5" ToolTip="Inserts current clipboard text" Click="InsertTokenChip_Click" Tag="{}{clipboard}"/>
+                                <Button Content="+ {cursor}" Style="{StaticResource TokenChipClipStyle}" Margin="0,0,5,5" ToolTip="Positions the cursor caret here post-paste" Click="InsertTokenChip_Click" Tag="{}{cursor}"/>
+                                <Button Content="+ {text:Label}" Style="{StaticResource TokenChipPromptStyle}" Margin="0,0,5,5" ToolTip="Prompts for a single-line text input" Click="InsertTokenChip_Click" Tag="{}{text:Label}"/>
+                                <Button Content="+ {choice:Label|Opt1=Val1,Opt2}" Style="{StaticResource TokenChipPromptStyle}" Margin="0,0,5,5" ToolTip="Prompts for a single selection from friendly options mapped to values" Click="InsertTokenChip_Click" Tag="{}{choice:Label|Opt1=Val1,Opt2}"/>
+                                <Button Content="+ {number:Label|1,10}" Style="{StaticResource TokenChipPromptStyle}" Margin="0,0,5,5" ToolTip="Prompts for a numeric value with range limits" Click="InsertTokenChip_Click" Tag="{}{number:Label|1,10}"/>
+                                <Button Content="+ {multiline:Label}" Style="{StaticResource TokenChipPromptStyle}" Margin="0,0,5,5" ToolTip="Prompts for multi-line text input" Click="InsertTokenChip_Click" Tag="{}{multiline:Label}"/>
+                                <Button Content="+ {date_picker:Label}" Style="{StaticResource TokenChipPromptStyle}" Margin="0,0,5,5" ToolTip="Prompts with an interactive date picker" Click="InsertTokenChip_Click" Tag="{}{date_picker:Label}"/>
                             </WrapPanel>
 
                             <!-- Snippet Editor -->
@@ -587,46 +865,29 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" 
-                                           Text="Allowed Processes (Leave empty to allow all applications)" 
-                                           FontWeight="SemiBold" 
-                                           VerticalAlignment="Center"
-                                           TextTrimming="CharacterEllipsis"
-                                           Margin="0,0,8,0"/>
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
-                                    <Button Content="📋 Browse Running..." 
-                                            Style="{StaticResource SecondaryButtonStyle}" 
-                                            Padding="7,2" 
-                                            FontSize="11"
-                                            Margin="0,0,6,0"
-                                            ToolTip="Pick from currently running desktop applications"
-                                            Tag="Allowed"
-                                            Click="BrowseRunningProcess_Click"/>
-                                    <Button Content="📁 Browse File..." 
-                                            Style="{StaticResource SecondaryButtonStyle}" 
-                                            Padding="7,2" 
-                                            FontSize="11"
-                                            Margin="0,0,6,0"
-                                            ToolTip="Select an executable file from disk"
-                                            Tag="Allowed"
-                                            Click="BrowseFileProcess_Click"/>
-                                    <Border Background="{DynamicResource BgTertiaryBrush}"
-                                            BorderBrush="{DynamicResource BorderBrush}"
-                                            BorderThickness="1"
-                                            CornerRadius="4"
-                                            Padding="7,2"
-                                            Cursor="Cross"
-                                            ToolTip="Click &amp; drag crosshair onto any open window to add to Allowed list"
-                                            Tag="Allowed"
-                                            PreviewMouseLeftButtonDown="ProcessCrosshair_PreviewMouseLeftButtonDown">
-                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                            <TextBlock Text="🎯" FontSize="11" Margin="0,0,4,0"/>
-                                            <TextBlock Text="Target" FontSize="11" FontWeight="Medium"/>
-                                        </StackPanel>
-                                    </Border>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Text="Allowed Processes" 
+                                               FontWeight="SemiBold" 
+                                               FontSize="12.5" 
+                                               Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                    <TextBlock Text="Leave empty to allow all applications" 
+                                               FontSize="11" 
+                                               Foreground="{DynamicResource TextSecondaryBrush}" 
+                                               Margin="0,1,0,0"/>
                                 </StackPanel>
+                                <Button Grid.Column="1" 
+                                        Content="＋ Add Process ▾" 
+                                        Style="{StaticResource SecondaryButtonStyle}" 
+                                        Padding="9,3" 
+                                        FontSize="11" 
+                                        FontWeight="Medium" 
+                                        VerticalAlignment="Center"
+                                        ToolTip="Add allowed process via crosshair, running apps, or file browser"
+                                        Tag="Allowed"
+                                        Click="AddProcessMenuButton_Click"/>
                             </Grid>
                             <controls:TagInputControl x:Name="AllowedProcessesTagInput" 
+                                                      Variant="Allowed" 
                                                       Placeholder="Type process (e.g. code.exe) and press Enter..." 
                                                       Margin="0,0,0,14"/>
 
@@ -636,96 +897,204 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" 
-                                           Text="Excluded Processes (Action will not trigger if any match)" 
-                                           FontWeight="SemiBold" 
-                                           VerticalAlignment="Center"
-                                           TextTrimming="CharacterEllipsis"
-                                           Margin="0,0,8,0"/>
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
-                                    <Button Content="📋 Browse Running..." 
-                                            Style="{StaticResource SecondaryButtonStyle}" 
-                                            Padding="7,2" 
-                                            FontSize="11"
-                                            Margin="0,0,6,0"
-                                            ToolTip="Pick from currently running desktop applications"
-                                            Tag="Excluded"
-                                            Click="BrowseRunningProcess_Click"/>
-                                    <Button Content="📁 Browse File..." 
-                                            Style="{StaticResource SecondaryButtonStyle}" 
-                                            Padding="7,2" 
-                                            FontSize="11"
-                                            Margin="0,0,6,0"
-                                            ToolTip="Select an executable file from disk"
-                                            Tag="Excluded"
-                                            Click="BrowseFileProcess_Click"/>
-                                    <Border Background="{DynamicResource BgTertiaryBrush}"
-                                            BorderBrush="{DynamicResource BorderBrush}"
-                                            BorderThickness="1"
-                                            CornerRadius="4"
-                                            Padding="7,2"
-                                            Cursor="Cross"
-                                            ToolTip="Click &amp; drag crosshair onto any open window to add to Excluded list"
-                                            Tag="Excluded"
-                                            PreviewMouseLeftButtonDown="ProcessCrosshair_PreviewMouseLeftButtonDown">
-                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                            <TextBlock Text="🎯" FontSize="11" Margin="0,0,4,0"/>
-                                            <TextBlock Text="Target" FontSize="11" FontWeight="Medium"/>
-                                        </StackPanel>
-                                    </Border>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Text="Excluded Processes" 
+                                               FontWeight="SemiBold" 
+                                               FontSize="12.5" 
+                                               Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                    <TextBlock Text="Action will not trigger if any match" 
+                                               FontSize="11" 
+                                               Foreground="{DynamicResource TextSecondaryBrush}" 
+                                               Margin="0,1,0,0"/>
                                 </StackPanel>
+                                <Button Grid.Column="1" 
+                                        Content="＋ Add Process ▾" 
+                                        Style="{StaticResource SecondaryButtonStyle}" 
+                                        Padding="9,3" 
+                                        FontSize="11" 
+                                        FontWeight="Medium" 
+                                        VerticalAlignment="Center"
+                                        ToolTip="Add excluded process via crosshair, running apps, or file browser"
+                                        Tag="Excluded"
+                                        Click="AddProcessMenuButton_Click"/>
                             </Grid>
                             <controls:TagInputControl x:Name="ExcludedProcessesTagInput" 
+                                                      Variant="Excluded" 
                                                       Placeholder="Type process (e.g. chrome.exe) and press Enter..." 
                                                       Margin="0,0,0,16"/>
 
-                            <!-- Browser URL Filtering Section -->
+                            <!-- Browser URL Filtering Section (Collapsible Expander) -->
                             <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,12,0,0">
                                 <StackPanel>
-                                    <Grid Margin="0,0,0,6">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                                            <TextBlock Text="Browser Tab &amp; URL Rules (Optional)" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource TextPrimaryBrush}"/>
-                                            <TextBlock Text="Filters active browser tabs (Chrome, Edge, Firefox, Brave). Supports wildcards: *github.com*, localhost:*" 
-                                                       FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
-                                        </StackPanel>
-                                        <Border Grid.Column="1" 
-                                                HorizontalAlignment="Right"
-                                                VerticalAlignment="Top"
-                                                Background="{DynamicResource BgTertiaryBrush}"
-                                                BorderBrush="{DynamicResource BorderBrush}"
-                                                BorderThickness="1"
-                                                CornerRadius="4"
-                                                Padding="7,2"
-                                                Cursor="Cross"
-                                                ToolTip="Click &amp; drag crosshair onto an open browser tab to capture its active URL"
-                                                Tag="AllowedUrl"
-                                                PreviewMouseLeftButtonDown="ProcessCrosshair_PreviewMouseLeftButtonDown">
-                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                <TextBlock Text="🎯" FontSize="11" Margin="0,0,4,0"/>
-                                                <TextBlock Text="Target Tab URL" FontSize="11" FontWeight="Medium"/>
+                                    <!-- Collapsible Header -->
+                                    <Border x:Name="BrowserUrlSectionHeader" 
+                                            Background="Transparent" 
+                                            Cursor="Hand" 
+                                            Padding="4,6" 
+                                            CornerRadius="6"
+                                            PreviewMouseLeftButtonDown="BrowserUrlSectionHeader_PreviewMouseLeftButtonDown">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Style.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="Background" Value="{DynamicResource BgHoverBrush}"/>
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="🌐" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                <TextBlock Text="Browser Tab &amp; URL Rules (Optional)" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                <TextBlock Text="Filters active browser tabs (Chrome, Edge, Firefox, Brave). Supports wildcards: *github.com*, localhost:*" 
+                                                           FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
                                             </StackPanel>
-                                        </Border>
-                                    </Grid>
 
-                                    <TextBlock Text="Allowed URLs (Comma-separated or pill tags, leave blank for all)" FontWeight="Medium" FontSize="12" Margin="0,8,0,5"/>
-                                    <controls:TagInputControl x:Name="AllowedUrlsTagInput" 
-                                                              Placeholder="e.g. *github.com*, localhost:* (press Enter)..." 
-                                                              Margin="0,0,0,10"/>
+                                            <!-- Rules Configured Badge (Visible when collapsed with active rules) -->
+                                            <Border Grid.Column="2" x:Name="UrlRulesActiveBadge" 
+                                                    Background="{DynamicResource AccentColorBrush}" 
+                                                    CornerRadius="10" 
+                                                    Padding="8,2" 
+                                                    Margin="8,0"
+                                                    VerticalAlignment="Center"
+                                                    Visibility="Collapsed">
+                                                <TextBlock x:Name="UrlRulesActiveBadgeText" Text="Configured" FontSize="11" FontWeight="SemiBold" Foreground="White"/>
+                                            </Border>
 
-                                    <TextBlock Text="Excluded URLs (Action suppressed on these pages)" FontWeight="Medium" FontSize="12" Margin="0,0,0,5"/>
-                                    <controls:TagInputControl x:Name="ExcludedUrlsTagInput" 
-                                                              Placeholder="e.g. *youtube.com*, *netflix.com* (press Enter)..."/>
+                                            <!-- Expand / Collapse Indicator -->
+                                            <TextBlock Grid.Column="3" x:Name="BrowserUrlSectionChevron" 
+                                                       Text="▶" FontSize="11" 
+                                                       Foreground="{DynamicResource TextSecondaryBrush}" 
+                                                       VerticalAlignment="Center" 
+                                                       Margin="8,0,4,0"/>
+                                        </Grid>
+                                    </Border>
+
+                                    <!-- Collapsible Content -->
+                                    <StackPanel x:Name="BrowserUrlSectionContent" Margin="0,10,0,0" Visibility="Collapsed">
+                                        <!-- Allowed URLs Header -->
+                                        <Grid Margin="0,4,0,5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" 
+                                                       Text="Allowed URLs (Comma-separated or pill tags, leave blank for all)" 
+                                                       FontWeight="Medium" 
+                                                       FontSize="12" 
+                                                       VerticalAlignment="Center"/>
+                                            <Border Grid.Column="1" 
+                                                    Background="{DynamicResource BgTertiaryBrush}"
+                                                    BorderBrush="{DynamicResource BorderBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="4"
+                                                    Padding="7,2"
+                                                    Cursor="Cross"
+                                                    ToolTip="Click &amp; drag crosshair onto an open browser tab to capture into Allowed URLs"
+                                                    Tag="AllowedUrl"
+                                                    PreviewMouseLeftButtonDown="ProcessCrosshair_PreviewMouseLeftButtonDown">
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="🎯" FontSize="11" Margin="0,0,4,0"/>
+                                                    <TextBlock Text="Target Tab URL" FontSize="11" FontWeight="Medium"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </Grid>
+                                        <controls:TagInputControl x:Name="AllowedUrlsTagInput" 
+                                                                  Variant="Allowed"
+                                                                  Placeholder="e.g. *github.com*, localhost:* (press Enter)..." 
+                                                                  Margin="0,0,0,12"/>
+
+                                        <!-- Excluded URLs Header -->
+                                        <Grid Margin="0,0,0,5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" 
+                                                       Text="Excluded URLs (Action suppressed on these pages)" 
+                                                       FontWeight="Medium" 
+                                                       FontSize="12" 
+                                                       VerticalAlignment="Center"/>
+                                            <Border Grid.Column="1" 
+                                                    Background="{DynamicResource BgTertiaryBrush}"
+                                                    BorderBrush="{DynamicResource BorderBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="4"
+                                                    Padding="7,2"
+                                                    Cursor="Cross"
+                                                    ToolTip="Click &amp; drag crosshair onto an open browser tab to capture into Excluded URLs"
+                                                    Tag="ExcludedUrl"
+                                                    PreviewMouseLeftButtonDown="ProcessCrosshair_PreviewMouseLeftButtonDown">
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="🎯" FontSize="11" Margin="0,0,4,0"/>
+                                                    <TextBlock Text="Target Tab URL" FontSize="11" FontWeight="Medium"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </Grid>
+                                        <controls:TagInputControl x:Name="ExcludedUrlsTagInput" 
+                                                                  Variant="Excluded"
+                                                                  Placeholder="e.g. *youtube.com*, *netflix.com* (press Enter)..."/>
+                                    </StackPanel>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
                     </Border>
                 </StackPanel>
             </ScrollViewer>
+
+            <!-- Recycle Bin Overview Panel (Visible when Recycle Bin root folder is selected) -->
+            <ScrollViewer x:Name="RecycleBinOverviewPanel"
+                          Grid.Row="1"
+                          Grid.RowSpan="2"
+                          Background="Transparent"
+                          VerticalScrollBarVisibility="Auto"
+                          Padding="28,24"
+                          Visibility="Collapsed">
+                <StackPanel MaxWidth="600" HorizontalAlignment="Left">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                        <TextBlock Text="🗑" FontSize="26" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="Recycle Bin" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                            <TextBlock x:Name="RecycleBinCountDetailText" Text="0 items deleted" FontSize="12.5" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Border Background="{DynamicResource BgSecondaryBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="16"
+                            Margin="0,0,0,16">
+                        <StackPanel>
+                            <TextBlock Text="About the Recycle Bin" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,6"/>
+                            <TextBlock Text="Items deleted from your actions list are temporarily held here. Hotkeys assigned to deleted items are inactive to prevent conflicts. You can inspect any item, restore it back to its original location, or permanently purge it."
+                                       FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" LineHeight="18"/>
+                            <TextBlock x:Name="RecycleBinRetentionSummaryText"
+                                       Text="Retention policy: Items are retained according to your settings."
+                                       FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" Margin="0,10,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="EmptyRecycleBinFromSettingsBtn"
+                                Content="🗑 Empty Recycle Bin"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Foreground="{DynamicResource ErrorBrush}"
+                                BorderBrush="{DynamicResource ErrorBrush}"
+                                Padding="14,8"
+                                FontWeight="SemiBold"
+                                Click="EmptyRecycleBinFromSettingsBtn_Click"/>
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
         </Grid>
+    </Grid>
 
         <!-- Status Bar -->
         <Border Grid.Row="2" 
@@ -739,7 +1108,7 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock x:Name="StatusText" Text="Ready." FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                <TextBlock Grid.Column="1" Text="Single-Instance Mutex &amp; NamedPipe Active" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
+                <TextBlock x:Name="AppVersionText" Grid.Column="1" Text="v2.0.0" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
             </Grid>
         </Border>
     </Grid>

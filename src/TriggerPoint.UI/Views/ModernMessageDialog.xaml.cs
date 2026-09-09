@@ -20,10 +20,26 @@ public enum FolderDeleteChoice
     MoveToRoot
 }
 
+public enum ImportChoice
+{
+    Cancel,
+    Replace,
+    Merge
+}
+
+public enum SavePromptChoice
+{
+    Cancel,
+    Save,
+    Discard
+}
+
 public partial class ModernMessageDialog : Window
 {
     public bool UserConfirmed { get; private set; }
     public FolderDeleteChoice FolderChoice { get; private set; } = FolderDeleteChoice.Cancel;
+    public ImportChoice ImportUserChoice { get; private set; } = ImportChoice.Cancel;
+    public SavePromptChoice SaveChoice { get; private set; } = SavePromptChoice.Cancel;
 
     public ModernMessageDialog(
         string title, 
@@ -93,6 +109,62 @@ public partial class ModernMessageDialog : Window
         return dlg.FolderChoice;
     }
 
+    public static ImportChoice ShowImportChoiceDialog(
+        Window? owner, 
+        string title, 
+        string message, 
+        string primaryText = "Replace All", 
+        string alternateText = "Merge", 
+        string secondaryText = "Cancel",
+        bool isDestructive = true)
+    {
+        var dlg = new ModernMessageDialog(
+            title, 
+            message, 
+            primaryButtonText: primaryText, 
+            secondaryButtonText: secondaryText, 
+            dialogType: ModernDialogType.Question, 
+            isDestructive: isDestructive)
+        {
+            Owner = owner
+        };
+        dlg.AlternateBtn.Content = alternateText;
+        dlg.AlternateBtn.Visibility = Visibility.Visible;
+        dlg.ShowDialog();
+        return dlg.ImportUserChoice;
+    }
+
+    public static ImportChoice ShowImportChoiceDialog(
+        Window? owner,
+        string targetScopeName,
+        int folderCount,
+        int actionCount,
+        bool canReplace = true)
+    {
+        string title = "Import Configuration";
+        string message = $"The backup package contains {folderCount} folder(s) and {actionCount} action(s).\n\nDestination: {targetScopeName}\n\nHow would you like to import these items?";
+        var dlg = new ModernMessageDialog(
+            title,
+            message,
+            primaryButtonText: "Replace All",
+            secondaryButtonText: "Cancel",
+            dialogType: ModernDialogType.Question,
+            isDestructive: true)
+        {
+            Owner = owner
+        };
+        dlg.AlternateBtn.Content = "Merge (Append)";
+        dlg.AlternateBtn.Visibility = Visibility.Visible;
+
+        if (!canReplace)
+        {
+            dlg.PrimaryBtn.Visibility = Visibility.Collapsed;
+        }
+
+        dlg.ShowDialog();
+        return dlg.ImportUserChoice;
+    }
+
     public static void ShowAlert(
         Window? owner, 
         string title, 
@@ -107,28 +179,67 @@ public partial class ModernMessageDialog : Window
         dlg.ShowDialog();
     }
 
+    public static SavePromptChoice ShowUnsavedChangesDialog(
+        Window? owner, 
+        string itemName)
+    {
+        var dlg = new ModernMessageDialog(
+            "Unsaved Changes",
+            $"You have unsaved changes to '{itemName}'.\n\nWhat would you like to do before switching?",
+            primaryButtonText: "💾 Save Changes",
+            secondaryButtonText: "Cancel",
+            dialogType: ModernDialogType.Warning)
+        {
+            Owner = owner
+        };
+        dlg.AlternateBtn.Content = "Discard Changes";
+        dlg.AlternateBtn.Visibility = Visibility.Visible;
+        dlg.ShowDialog();
+        return dlg.SaveChoice;
+    }
+
+    private void SafeClose(bool? result)
+    {
+        try
+        {
+            DialogResult = result;
+        }
+        catch (InvalidOperationException)
+        {
+            // If the window is already closing, closed, or not showing as dialog, fallback to Close()
+            try
+            {
+                Close();
+            }
+            catch { }
+        }
+    }
+
     private void PrimaryBtn_Click(object sender, RoutedEventArgs e)
     {
         FolderChoice = FolderDeleteChoice.DeleteAll;
+        ImportUserChoice = ImportChoice.Replace;
+        SaveChoice = SavePromptChoice.Save;
         UserConfirmed = true;
-        DialogResult = true;
-        Close();
+        SafeClose(true);
     }
 
     private void AlternateBtn_Click(object sender, RoutedEventArgs e)
     {
         FolderChoice = FolderDeleteChoice.MoveToRoot;
+        ImportUserChoice = ImportChoice.Merge;
+        SaveChoice = SavePromptChoice.Discard;
         UserConfirmed = true;
-        DialogResult = true;
-        Close();
+        SafeClose(true);
     }
 
     private void SecondaryBtn_Click(object sender, RoutedEventArgs e)
     {
         FolderChoice = FolderDeleteChoice.Cancel;
+        ImportUserChoice = ImportChoice.Cancel;
+        SaveChoice = SavePromptChoice.Cancel;
         UserConfirmed = false;
-        DialogResult = false;
-        Close();
+        SafeClose(false);
     }
 
     private void Window_KeyDown(object sender, KeyEventArgs e)
@@ -136,9 +247,10 @@ public partial class ModernMessageDialog : Window
         if (e.Key == Key.Escape)
         {
             FolderChoice = FolderDeleteChoice.Cancel;
+            ImportUserChoice = ImportChoice.Cancel;
+            SaveChoice = SavePromptChoice.Cancel;
             UserConfirmed = false;
-            DialogResult = false;
-            Close();
+            SafeClose(false);
             e.Handled = true;
         }
         else if (e.Key == Key.Enter)
@@ -147,9 +259,16 @@ public partial class ModernMessageDialog : Window
             {
                 FolderChoice = FolderDeleteChoice.DeleteAll;
             }
+            if (ImportUserChoice == ImportChoice.Cancel)
+            {
+                ImportUserChoice = ImportChoice.Replace;
+            }
+            if (SaveChoice == SavePromptChoice.Cancel)
+            {
+                SaveChoice = SavePromptChoice.Save;
+            }
             UserConfirmed = true;
-            DialogResult = true;
-            Close();
+            SafeClose(true);
             e.Handled = true;
         }
     }

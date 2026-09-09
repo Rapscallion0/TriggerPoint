@@ -1,0 +1,82 @@
+<Window x:Class="TriggerPoint.UI.Views.ToastNotificationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="TriggerPoint Notification"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Focusable="False"
+        SizeToContent="WidthAndHeight"
+        Loaded="Window_Loaded"
+        PreviewMouseLeftButtonDown="Window_PreviewMouseLeftButtonDown">
+
+    <Border x:Name="ToastContainer"
+            Background="{DynamicResource BgSecondaryBrush}"
+            BorderBrush="{DynamicResource BorderBrush}"
+            BorderThickness="1.5"
+            CornerRadius="10"
+            Margin="12"
+            MinWidth="300"
+            MaxWidth="420"
+            Cursor="Hand"
+            ToolTip="Click to dismiss">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="20" ShadowDepth="4" Opacity="0.45" Direction="270"/>
+        </Border.Effect>
+
+        <Grid Margin="14,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Icon Column -->
+            <Border Grid.Column="0" 
+                    x:Name="IconBadge"
+                    Width="30" Height="30"
+                    CornerRadius="15"
+                    Background="{DynamicResource BgTertiaryBrush}"
+                    Margin="0,0,12,0"
+                    VerticalAlignment="Center">
+                <TextBlock x:Name="IconText"
+                           Text="✔"
+                           FontSize="15"
+                           FontWeight="Bold"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource SuccessBrush}"/>
+            </Border>
+
+            <!-- Text Column -->
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,0">
+                <TextBlock x:Name="TitleText"
+                           Text="Action Launched"
+                           FontSize="13"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource TextPrimaryBrush}"
+                           TextTrimming="CharacterEllipsis"/>
+                <TextBlock x:Name="MessageText"
+                           Text="Successfully executed action."
+                           FontSize="11.5"
+                           Foreground="{DynamicResource TextSecondaryBrush}"
+                           TextWrapping="Wrap"
+                           Margin="0,2,0,0"/>
+            </StackPanel>
+
+            <!-- Dismiss Button -->
+            <Button Grid.Column="2"
+                    Content="✕"
+                    Style="{StaticResource WindowControlButtonStyle}"
+                    Width="20" Height="20"
+                    FontSize="10"
+                    Padding="0"
+                    VerticalAlignment="Top"
+                    ToolTip="Dismiss"
+                    Click="DismissBtn_Click"/>
+        </Grid>
+    </Border>
+</Window>

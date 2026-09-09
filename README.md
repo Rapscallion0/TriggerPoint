@@ -5,16 +5,33 @@
 
 [![.NET](https://img.shields.io/badge/.NET-9.0--windows-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011%20x64-0078D6?logo=windows)](https://microsoft.com/windows)
+[![Version](https://img.shields.io/badge/Version-v2.0.0-blue.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-36%20Passed%20(100%25)-brightgreen)]()
+[![Tests](https://img.shields.io/badge/Tests-107%20Passed%20(100%25)-brightgreen)]()
 
 ---
 
 ## Overview
 
-**TriggerPoint** is a fast, lightweight Windows productivity tool that puts your most frequent actions at your fingertips. Launch apps, paste dynamic snippets, and open custom menus anywhere on your screen using simple system-wide shortcuts.
+**TriggerPoint** is a fast, lightweight Windows productivity tool that puts your most frequent actions at your fingertips. Launch apps, run scripts, paste dynamic snippets, and open custom menus anywhere on your screen using simple system-wide shortcuts.
 
-Designed to stay out of your way, TriggerPoint runs quietly in your system tray with near-zero memory usage and lightning-fast response times.
+Designed to stay out of your way, TriggerPoint runs quietly in your system tray with near-zero memory footprint and lightning-fast response times.
+
+---
+
+## What's New in v2.0.0 🚀
+
+- **Visual Precision Drag-and-Drop & Ghost Preview**: 3-zone drop targeting with visual guide indicators (Insert Above line, Move Into folder highlight, Insert Below line) and a floating preview badge that follows the mouse cursor during drags.
+- **Spring-Loaded Folders**: Pausing over a collapsed folder during a drag operation automatically springs it open (~650ms) for precise placement into nested hierarchies.
+- **Persistent Folder Collapse/Expand States**: Tree folder states are remembered across application launches and restarts. Dropping items preserves individual folder states rather than expanding the entire tree.
+- **Inconspicuous Collapse/Expand All Toggle**: A subtle 32x32 button (`⊟` / `⊞`) in the tree header toggles all folders between collapsed and expanded in a single click.
+- **Tree Menu Inline Name Editing (`<F2>`)**: Rename any folder or action directly within the tree view using `<F2>` or right-click context menu. Automatically commits on `<Enter>` or clicking outside, with full keystroke isolation.
+- **Active-Screen Toast Notifications**: Non-activating, auto-dismissing toast popups appear on the monitor currently containing the mouse cursor. Provides instant feedback for execution success or friendly diagnostics for missing executables.
+- **Shortcut & Target Validation Engine**: Validates executables, URLs, custom URI protocols, system `PATH` binaries, and environment variable paths (`%WINDIR%`, `%APPDATA%`). Shows error badges (`✕`), live path diagnostics in the editor, and a one-click filter chip (`[✕ X Broken]`).
+- **Recursive Folder Duplication (`Ctrl+D`)**: Deep-clones entire folder trees arbitrarily deep, retaining nested hierarchy while resetting hotkeys to prevent global shortcut conflicts.
+- **Command Palette Context Fallbacks**: When an action has no description, the palette displays its folder breadcrumbs (`📁 Tools › Development`), command target path, or snippet preview so entries are never blank.
+- **Recycle Bin & Safe Deletion**: Deleted items are moved to a pinned Recycle Bin with customizable retention policies, one-click restoration, or permanent purging.
+- **Modular Backup & Export**: Export entire action configurations or isolated subfolder branches to standalone `.json` packages for sharing or backup.
 
 ---
 
@@ -86,7 +103,7 @@ dotnet run --project src/TriggerPoint.UI
 #### Package Installer (`TriggerPointSetup.exe`)
 To package the app into a standalone installer:
 ```powershell
-powershell -ExecutionPolicy Bypass -File build/package.ps1
+powershell -ExecutionPolicy Bypass -File build/package.ps1 -AppVersion "2.0.0"
 ```
 The output installer will be produced at `artifacts/TriggerPointSetup.exe`.
 
@@ -108,6 +125,8 @@ TriggerPoint/
 │   └── TriggerPoint.iss              # Inno Setup installer specification
 ├── build/
 │   └── package.ps1                   # Packaging & build automation script
+├── artifacts/
+│   └── TriggerPointSetup.exe         # Compiled release installer
 └── assets/
     └── TriggerPoint.ico              # Multi-resolution application icon
 ```

@@ -9,7 +9,7 @@
         ShowInTaskbar="False"
         SizeToContent="WidthAndHeight"
         Deactivated="Window_Deactivated"
-        KeyDown="Window_KeyDown">
+        PreviewKeyDown="Window_PreviewKeyDown">
 
     <Border Background="{DynamicResource BgSecondaryBrush}"
             BorderBrush="{DynamicResource BorderBrush}"
@@ -29,38 +29,102 @@
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <!-- Optional Title/Folder header -->
-            <Border Grid.Row="0" x:Name="HeaderBorder" Padding="8,4,8,6" Visibility="Collapsed">
-                <TextBlock x:Name="HeaderTitleText" 
-                           FontSize="11" 
-                           FontWeight="Bold" 
-                           Foreground="{DynamicResource TextMutedBrush}"/>
+            <!-- Header with Back Button and Breadcrumbs -->
+            <Border Grid.Row="0" x:Name="HeaderBorder" Padding="6,4,8,6" Visibility="Collapsed">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="0" 
+                            x:Name="BackBtn" 
+                            Content="◀" 
+                            Style="{StaticResource WindowControlButtonStyle}" 
+                            Width="22" Height="22" 
+                            Padding="0" 
+                            FontSize="10" 
+                            Margin="0,0,6,0" 
+                            VerticalAlignment="Center"
+                            ToolTip="Go back to parent menu (Left Arrow / Backspace)"
+                            Click="BackBtn_Click"
+                            Visibility="Collapsed"/>
+                    <TextBlock Grid.Column="1" 
+                               x:Name="HeaderTitleText" 
+                               FontSize="11" 
+                               FontWeight="Bold" 
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource TextMutedBrush}"/>
+                </Grid>
             </Border>
 
-            <!-- Items List -->
-            <ItemsControl Grid.Row="1" x:Name="ItemsList">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Border x:Name="ItemBorder"
-                                Background="Transparent"
-                                CornerRadius="5"
-                                Padding="8,6"
-                                Margin="0,1"
-                                Cursor="Hand"
-                                MouseLeftButtonUp="ItemBorder_MouseLeftButtonUp">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
+            <!-- Empty folder notice -->
+            <TextBlock Grid.Row="1"
+                       x:Name="EmptyFolderNotice"
+                       Text="(Folder is empty)"
+                       FontSize="12"
+                       FontStyle="Italic"
+                       Foreground="{DynamicResource TextMutedBrush}"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       Margin="16,20"
+                       Visibility="Collapsed"/>
 
-                                <!-- Accelerator badge or icon -->
-                                <Border Grid.Column="0" 
-                                        Style="{StaticResource KeyBadgeStyle}"
+            <!-- Items ListBox with keyboard navigation support -->
+            <ListBox Grid.Row="1" 
+                     x:Name="ItemsListBox"
+                     Background="Transparent"
+                     BorderThickness="0"
+                     Padding="0"
+                     Margin="0"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                     SelectionMode="Single"
+                     FocusVisualStyle="{x:Null}">
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Background" Value="Transparent"/>
+                        <Setter Property="BorderThickness" Value="0"/>
+                        <Setter Property="Padding" Value="0"/>
+                        <Setter Property="Margin" Value="0,1"/>
+                        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                        <Setter Property="Cursor" Value="Hand"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <Border x:Name="itemBorder"
+                                            Background="{TemplateBinding Background}"
+                                            CornerRadius="5"
+                                            Padding="8,6"
+                                            SnapsToDevicePixels="True">
+                                        <ContentPresenter/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="itemBorder" Property="Background" Value="{DynamicResource ItemHoverBrush}"/>
+                                        </Trigger>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="itemBorder" Property="Background" Value="{DynamicResource ItemSelectedBrush}"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Grid MouseLeftButtonUp="ItemBorder_MouseLeftButtonUp">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Accelerator badge or Item Type Icon -->
+                            <Grid Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center">
+                                <Border Style="{StaticResource AccentKeyBadgeStyle}"
                                         Width="22" Height="22"
-                                        Margin="0,0,8,0"
-                                        VerticalAlignment="Center"
                                         Visibility="{Binding HasAccelerator, Converter={x:Null}}">
                                     <TextBlock Text="{Binding AcceleratorKey}" 
                                                FontSize="11" 
@@ -69,47 +133,51 @@
                                                VerticalAlignment="Center"
                                                Foreground="{DynamicResource AccentBrush}"/>
                                 </Border>
-
-                                <!-- Title and Description -->
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding Name}" 
-                                               FontWeight="Medium" 
-                                               FontSize="13" 
-                                               Foreground="{DynamicResource TextPrimaryBrush}"/>
-                                    <TextBlock Text="{Binding Description}" 
-                                               FontSize="11" 
-                                               Foreground="{DynamicResource TextSecondaryBrush}"
-                                               Visibility="{Binding HasDescription, Converter={x:Null}}"/>
-                                </StackPanel>
-
-                                <!-- Hotkey or Type Badge -->
-                                <TextBlock Grid.Column="2" 
-                                           Text="{Binding TypeBadge}" 
-                                           FontSize="11" 
-                                           Foreground="{DynamicResource TextMutedBrush}"
+                                <TextBlock Text="{Binding IconSymbol}"
+                                           FontSize="13"
+                                           Width="22"
+                                           TextAlignment="Center"
+                                           HorizontalAlignment="Center"
                                            VerticalAlignment="Center"
-                                           Margin="8,0,0,0"/>
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           Visibility="{Binding HasNoAccelerator, Converter={x:Null}}"/>
                             </Grid>
-                        </Border>
-                        <DataTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource ItemHoverBrush}"/>
-                            </Trigger>
-                        </DataTemplate.Triggers>
+
+                            <!-- Title and Description -->
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Name}" 
+                                           FontWeight="Medium" 
+                                           FontSize="13" 
+                                           Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                <TextBlock Text="{Binding Description}" 
+                                           FontSize="11" 
+                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                           Visibility="{Binding HasDescription, Converter={x:Null}}"/>
+                            </StackPanel>
+
+                            <!-- Hotkey or Type Badge -->
+                            <TextBlock Grid.Column="2" 
+                                       Text="{Binding TypeBadge}" 
+                                       FontSize="11" 
+                                       Foreground="{DynamicResource TextMutedBrush}"
+                                       VerticalAlignment="Center"
+                                       Margin="8,0,0,0"/>
+                        </Grid>
                     </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                </ListBox.ItemTemplate>
+            </ListBox>
 
             <!-- Keyboard shortcut hint footer -->
             <Border Grid.Row="2" 
                     BorderBrush="{DynamicResource BorderSubtleBrush}" 
                     BorderThickness="0,1,0,0" 
                     Margin="4,6,4,2" 
-                    Padding="4,4,4,0">
-                <TextBlock Text="⏎ Run  •  Ctrl+⏎ Admin  •  Shift+⏎ Reveal  •  Alt+⏎ Edit"
-                           FontSize="10"
+                    Padding="4,4,4,1">
+                <TextBlock FontSize="10.5"
                            Foreground="{DynamicResource TextMutedBrush}"
-                           HorizontalAlignment="Center"/>
+                           HorizontalAlignment="Center">
+                    <Run Text="⏎" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/><Run Text=" Run/Open   •   "/><Run Text="◀" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/><Run Text=" Back   •   "/><Run Text="Ctrl+" Foreground="{DynamicResource TextSecondaryBrush}"/><Run Text="⏎" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/><Run Text=" Admin"/>
+                </TextBlock>
             </Border>
         </Grid>
     </Border>

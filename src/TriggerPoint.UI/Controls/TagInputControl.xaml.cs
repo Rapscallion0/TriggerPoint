@@ -6,8 +6,16 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 
 namespace TriggerPoint.UI.Controls;
+
+public enum TagVariant
+{
+    Default,
+    Allowed,
+    Excluded
+}
 
 public class PillViewModel : INotifyPropertyChanged
 {
@@ -88,6 +96,52 @@ public partial class TagInputControl : UserControl
 
     public event EventHandler? TagsChanged;
 
+    public static readonly DependencyProperty VariantProperty =
+        DependencyProperty.Register(
+            nameof(Variant),
+            typeof(TagVariant),
+            typeof(TagInputControl),
+            new PropertyMetadata(TagVariant.Default, (d, e) =>
+            {
+                if (d is TagInputControl control)
+                {
+                    control.UpdateVariantStyles();
+                }
+            }));
+
+    public TagVariant Variant
+    {
+        get => (TagVariant)GetValue(VariantProperty);
+        set => SetValue(VariantProperty, value);
+    }
+
+    public static readonly DependencyProperty PillBackgroundProperty =
+        DependencyProperty.Register(nameof(PillBackground), typeof(Brush), typeof(TagInputControl));
+
+    public Brush PillBackground
+    {
+        get => (Brush)GetValue(PillBackgroundProperty);
+        set => SetValue(PillBackgroundProperty, value);
+    }
+
+    public static readonly DependencyProperty PillBorderBrushProperty =
+        DependencyProperty.Register(nameof(PillBorderBrush), typeof(Brush), typeof(TagInputControl));
+
+    public Brush PillBorderBrush
+    {
+        get => (Brush)GetValue(PillBorderBrushProperty);
+        set => SetValue(PillBorderBrushProperty, value);
+    }
+
+    public static readonly DependencyProperty PillForegroundProperty =
+        DependencyProperty.Register(nameof(PillForeground), typeof(Brush), typeof(TagInputControl));
+
+    public Brush PillForeground
+    {
+        get => (Brush)GetValue(PillForegroundProperty);
+        set => SetValue(PillForegroundProperty, value);
+    }
+
     public static readonly DependencyProperty PlaceholderProperty =
         DependencyProperty.Register(
             nameof(Placeholder),
@@ -110,8 +164,31 @@ public partial class TagInputControl : UserControl
     public TagInputControl()
     {
         InitializeComponent();
+        UpdateVariantStyles();
         PillsItemsControl.ItemsSource = Tags;
         UpdatePlaceholderVisibility();
+    }
+
+    private void UpdateVariantStyles()
+    {
+        switch (Variant)
+        {
+            case TagVariant.Allowed:
+                SetResourceReference(PillBackgroundProperty, "TagAllowedBgBrush");
+                SetResourceReference(PillBorderBrushProperty, "TagAllowedBorderBrush");
+                SetResourceReference(PillForegroundProperty, "TagAllowedTextBrush");
+                break;
+            case TagVariant.Excluded:
+                SetResourceReference(PillBackgroundProperty, "TagExcludedBgBrush");
+                SetResourceReference(PillBorderBrushProperty, "TagExcludedBorderBrush");
+                SetResourceReference(PillForegroundProperty, "TagExcludedTextBrush");
+                break;
+            default:
+                SetResourceReference(PillBackgroundProperty, "BgTertiaryBrush");
+                SetResourceReference(PillBorderBrushProperty, "BorderBrush");
+                SetResourceReference(PillForegroundProperty, "TextPrimaryBrush");
+                break;
+        }
     }
 
     public void SetTags(IEnumerable<string>? items)

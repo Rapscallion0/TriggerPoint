@@ -16,6 +16,8 @@ public class ShellActionExecutor : IActionExecutor
     private readonly IContextFilterService _contextFilterService;
 
     public event Action<TriggerItem>? OpenSettingsRequested;
+    public event Action<TriggerItem, string>? ExecutionSucceeded;
+    public event Action<TriggerItem, string>? ExecutionFailed;
 
     public ShellActionExecutor(
         ISnippetService snippetService,
@@ -50,8 +52,17 @@ public class ShellActionExecutor : IActionExecutor
 
         if (item.ActionType == ActionType.Snippet)
         {
-            var targetHwnd = _contextFilterService.GetForegroundWindowHandle();
-            await _snippetService.InjectSnippetAsync(item.Payload.SnippetTemplate, targetHwnd).ConfigureAwait(false);
+            try
+            {
+                var targetHwnd = _contextFilterService.GetForegroundWindowHandle();
+                await _snippetService.InjectSnippetAsync(item.Payload.SnippetTemplate, targetHwnd).ConfigureAwait(false);
+                ExecutionSucceeded?.Invoke(item, "Snippet injected into active window.");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to inject snippet for action '{Name}'", item.Name);
+                ExecutionFailed?.Invoke(item, $"Failed to inject snippet: {ex.Message}");
+            }
             return;
         }
 
@@ -67,6 +78,7 @@ public class ShellActionExecutor : IActionExecutor
         if (string.IsNullOrWhiteSpace(command))
         {
             _logger.Warning("Cannot execute shell action '{Name}': command is empty.", item.Name);
+            ExecutionFailed?.Invoke(item, "Application / Command path is empty.");
             return;
         }
 
@@ -84,12 +96,15 @@ public class ShellActionExecutor : IActionExecutor
                         Arguments = $"/select,\"{expandedPath}\"",
                         UseShellExecute = true
                     });
+                    ExecutionSucceeded?.Invoke(item, $"Revealed in Explorer: {Path.GetFileName(expandedPath)}");
                     return;
                 }
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "Failed to reveal in explorer: {Command}", command);
+                ExecutionFailed?.Invoke(item, $"Failed to reveal in explorer: {ex.Message}");
+                return;
             }
         }
 
@@ -135,10 +150,24 @@ public class ShellActionExecutor : IActionExecutor
 
             _logger.Information("Launching process '{FileName}' with args '{Args}'", psi.FileName, psi.Arguments);
             Process.Start(psi);
+            ExecutionSucceeded?.Invoke(item, $"Launched: {item.Name}");
+        }
+        catch (System.ComponentModel.Win32Exception win32Ex)
+        {
+            string detail = win32Ex.NativeErrorCode switch
+            {
+                2 => $"Target file not found:\n{command}",
+                3 => $"Path not found:\n{command}",
+                5 => $"Access denied (admin privileges may be required):\n{command}",
+                _ => $"{win32Ex.Message}:\n{command}"
+            };
+            _logger.Error(win32Ex, "Failed to launch shell process '{Command}' for action '{Name}'", command, item.Name);
+            ExecutionFailed?.Invoke(item, detail);
         }
         catch (Exception ex)
         {
             _logger.Error(ex, "Failed to launch shell process '{Command}' for action '{Name}'", command, item.Name);
+            ExecutionFailed?.Invoke(item, $"{ex.Message}:\n{command}");
         }
     }
 }

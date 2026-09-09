@@ -79,6 +79,7 @@ public partial class HotkeyRecorderControl : UserControl
 
     private void RecordingBorder_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        if (!IsEnabled) return;
         Focus();
         StartRecording();
         e.Handled = true;

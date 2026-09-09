@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using TriggerPoint.Core.Contracts;
 using TriggerPoint.Core.Models;
+using TriggerPoint.Core.Services;
 using TriggerPoint.Infrastructure.Persistence;
 using TriggerPoint.Infrastructure.Services;
 using TriggerPoint.Infrastructure.Win32;
@@ -17,6 +18,9 @@ namespace TriggerPoint.UI;
 
 public partial class App : Application
 {
+    public static readonly Guid OpenSettingsActionId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+    public static readonly Guid CommandPaletteActionId = Guid.Parse("00000000-0000-0000-0000-000000000002");
+
     private IServiceProvider? _serviceProvider;
     private SingleInstanceService? _singleInstanceService;
     private TrayIconService? _trayIconService;
@@ -26,6 +30,38 @@ public partial class App : Application
     private IConfigRepository? _repository;
     private ILogManagerService? _logManagerService;
     private Serilog.Core.LoggingLevelSwitch _levelSwitch = new();
+
+    public static List<TriggerItem> CreateVirtualApplicationItems(AppSettings? settings)
+    {
+        var list = new List<TriggerItem>();
+        if (settings == null) return list;
+
+        if (settings.OpenSettingsHotkey != null && !settings.OpenSettingsHotkey.IsEmpty)
+        {
+            list.Add(new TriggerItem
+            {
+                Id = OpenSettingsActionId,
+                Name = "Open TriggerPoint Window",
+                Hotkey = settings.OpenSettingsHotkey,
+                IsEnabled = true,
+                PresentationMode = PresentationMode.Direct
+            });
+        }
+
+        if (settings.CommandPaletteHotkey != null && !settings.CommandPaletteHotkey.IsEmpty)
+        {
+            list.Add(new TriggerItem
+            {
+                Id = CommandPaletteActionId,
+                Name = "Open Command Palette",
+                Hotkey = settings.CommandPaletteHotkey,
+                IsEnabled = true,
+                PresentationMode = PresentationMode.Direct
+            });
+        }
+
+        return list;
+    }
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -103,11 +139,23 @@ public partial class App : Application
         _repository = _serviceProvider.GetRequiredService<IConfigRepository>();
         _shortcutListener = _serviceProvider.GetRequiredService<IShortcutListener>();
         _executor = _serviceProvider.GetRequiredService<IActionExecutor>();
+        var toastService = _serviceProvider.GetRequiredService<IToastNotificationService>();
 
-        // Wire executor open settings request
+        // Wire executor open settings and toast notifications
         if (_executor is ShellActionExecutor shellExec)
         {
             shellExec.OpenSettingsRequested += item => Dispatcher.Invoke(() => ShowSettingsWindow(item));
+            shellExec.ExecutionSucceeded += (item, detail) =>
+            {
+                if (appSettings.ShowSuccessToasts)
+                {
+                    toastService.ShowSuccess(item.Name, detail);
+                }
+            };
+            shellExec.ExecutionFailed += (item, error) =>
+            {
+                toastService.ShowError($"Failed to launch '{item.Name}'", error);
+            };
         }
 
         // 6. Initialize Win32 Hotkey Listener
@@ -119,23 +167,53 @@ public partial class App : Application
         _settingsWindow = new SettingsWindow(_repository, _shortcutListener, _executor, contextFilterService, _logManagerService);
         MainWindow = _settingsWindow;
 
-        // 8. Load and register hotkeys
-        var items = await _repository.LoadAsync();
-        _shortcutListener.RegisterAll(items);
+        // 8. Startup Recycle Bin Purge
+        try
+        {
+            await _repository.PurgeRecycleBinAsync(appSettings.RecycleBinRetentionDays);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Failed to purge recycle bin on startup.");
+        }
 
-        // 9. Setup System Tray Icon
+        // 9. Load and register hotkeys (including global application shortcuts)
+        var items = await _repository.LoadAsync();
+        var allItems = new List<TriggerItem>(items);
+        allItems.AddRange(CreateVirtualApplicationItems(appSettings));
+        _shortcutListener.RegisterAll(allItems);
+
+        // Optional startup shortcut health check
+        if (appSettings.ValidateShortcutsOnStartup)
+        {
+            _ = Task.Run(() =>
+            {
+                int brokenCount = items.Where(x => x.ActionType == ActionType.Shell && x.IsEnabled).Count(x => !ShortcutValidator.Validate(x).IsValid);
+                if (brokenCount > 0)
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        toastService.ShowWarning(
+                            "Shortcut Health Check",
+                            $"{brokenCount} action{(brokenCount == 1 ? " has a" : "s have")} missing target files. Open Settings to inspect.");
+                    });
+                }
+            });
+        }
+
+        // 10. Setup System Tray Icon
         _trayIconService = new TrayIconService(
             _shortcutListener,
             openSettingsAction: () => Dispatcher.Invoke(() => ShowSettingsWindow()),
             openPaletteAction: () => Dispatcher.Invoke(() => OpenCommandPalette()),
             reloadConfigAction: async () =>
             {
-                var reloaded = await _repository.LoadAsync();
-                _shortcutListener.RegisterAll(reloaded);
-                _trayIconService?.ShowNotification("Configuration Reloaded", $"Loaded {reloaded.Count} shortcuts.");
+                await ReloadApplicationSettingsAndHotkeysAsync();
+                _trayIconService?.ShowNotification("Configuration Reloaded", "Configuration and shortcuts reloaded.");
             },
             exitAction: () => Dispatcher.Invoke(ExitApplication),
-            openAppSettingsAction: () => Dispatcher.Invoke(() => ShowApplicationSettingsWindow()));
+            openAppSettingsAction: () => Dispatcher.Invoke(async () => await ShowApplicationSettingsWindowAsync()),
+            commandPaletteHotkeyText: appSettings.CommandPaletteHotkey?.DisplayText ?? "Alt+Space");
 
         // If explicitly requested with --settings, show action settings window
         if (e.Args.Contains("--settings", StringComparer.OrdinalIgnoreCase))
@@ -156,12 +234,25 @@ public partial class App : Application
         services.AddSingleton<ITelemetryService, TelemetryService>();
         services.AddSingleton<IShortcutListener, Win32HotkeyListener>();
         services.AddSingleton<IActionExecutor, ShellActionExecutor>();
+        services.AddSingleton<IToastNotificationService, ToastNotificationService>();
     }
 
     private void ShortcutListener_HotkeyTriggered(object? sender, TriggerItem item)
     {
         Dispatcher.Invoke(async () =>
         {
+            if (item.Id == OpenSettingsActionId)
+            {
+                ShowSettingsWindow();
+                return;
+            }
+
+            if (item.Id == CommandPaletteActionId)
+            {
+                OpenCommandPalette();
+                return;
+            }
+
             switch (item.PresentationMode)
             {
                 case PresentationMode.Direct:
@@ -186,18 +277,21 @@ public partial class App : Application
     {
         if (_repository == null || _executor == null) return;
 
-        // Fetch children if folder, otherwise sibling/root actions
         _ = Task.Run(async () =>
         {
             var allItems = await _repository.LoadAsync();
-            var targetItems = triggerItem.ActionType == ActionType.Folder
-                ? allItems.Where(x => x.ParentId == triggerItem.Id).ToList()
-                : allItems.Where(x => x.ActionType != ActionType.Folder).ToList();
 
             await Dispatcher.InvokeAsync(() =>
             {
-                var menu = new CursorContextMenuView(targetItems, _executor, triggerItem.Name);
+                var menu = new CursorContextMenuView(allItems, _executor, triggerItem);
                 menu.Show();
+                menu.Activate();
+                try
+                {
+                    var handle = new System.Windows.Interop.WindowInteropHelper(menu).Handle;
+                    NativeMethods.SetForegroundWindow(handle);
+                }
+                catch { }
             });
         });
     }
@@ -222,6 +316,13 @@ public partial class App : Application
             {
                 var palette = new CommandPaletteView(allItems, _executor, scopeId, scopeName);
                 palette.Show();
+                palette.Activate();
+                try
+                {
+                    var handle = new System.Windows.Interop.WindowInteropHelper(palette).Handle;
+                    NativeMethods.SetForegroundWindow(handle);
+                }
+                catch { }
             });
         });
     }
@@ -241,7 +342,7 @@ public partial class App : Application
         }
     }
 
-    public void ShowApplicationSettingsWindow()
+    public async Task ShowApplicationSettingsWindowAsync()
     {
         if (_repository == null || _logManagerService == null) return;
 
@@ -251,6 +352,31 @@ public partial class App : Application
             appSettingsWin.Owner = _settingsWindow;
         }
         appSettingsWin.ShowDialog();
+
+        await ReloadApplicationSettingsAndHotkeysAsync();
+    }
+
+    public void ShowApplicationSettingsWindow()
+    {
+        _ = ShowApplicationSettingsWindowAsync();
+    }
+
+    public async Task ReloadApplicationSettingsAndHotkeysAsync()
+    {
+        if (_repository == null || _shortcutListener == null) return;
+        try
+        {
+            var settings = await _repository.LoadSettingsAsync();
+            var items = await _repository.LoadAsync();
+            var allItems = new List<TriggerItem>(items);
+            allItems.AddRange(CreateVirtualApplicationItems(settings));
+            _shortcutListener.RegisterAll(allItems);
+            _trayIconService?.UpdateCommandPaletteHotkey(settings.CommandPaletteHotkey?.DisplayText);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Failed to reload application settings and hotkeys.");
+        }
     }
 
     private void OnSecondInstanceSignaled(string message)

@@ -11,7 +11,7 @@
         Topmost="True"
         ShowInTaskbar="False"
         Deactivated="Window_Deactivated"
-        KeyDown="Window_KeyDown">
+        PreviewKeyDown="Window_PreviewKeyDown">
 
     <Border Background="{DynamicResource BgSecondaryBrush}"
             BorderBrush="{DynamicResource BorderBrush}"
@@ -126,28 +126,30 @@
                                        FontSize="14"
                                        Width="24"
                                        VerticalAlignment="Center"
-                                       Foreground="{DynamicResource AccentBrush}"/>
+                                       Foreground="{Binding IconBrush}"/>
 
-                            <!-- Match Highlight Title & Description -->
+                            <!-- Match Highlight Title & Description / Detail -->
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="6,0,12,0">
-                                <TextBlock x:Name="TitleTextBlock"
+                                <TextBlock Text="{Binding Name}"
                                            FontSize="13"
                                            FontWeight="SemiBold"
-                                           Foreground="{DynamicResource TextPrimaryBrush}"/>
-                                <TextBlock Text="{Binding Description}"
+                                           Foreground="{DynamicResource TextPrimaryBrush}"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{Binding SecondaryDetail}"
                                            FontSize="11"
                                            Foreground="{DynamicResource TextSecondaryBrush}"
-                                           Visibility="{Binding HasDescription, Converter={x:Null}}"/>
+                                           TextTrimming="CharacterEllipsis"
+                                           Visibility="{Binding HasSecondaryDetail, Converter={x:Null}}"/>
                             </StackPanel>
 
                             <!-- Badges: Hotkey + Usage Count -->
                             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                <Border Style="{StaticResource KeyBadgeStyle}" 
+                                <Border Style="{StaticResource AccentKeyBadgeStyle}" 
                                         Margin="0,0,6,0"
                                         Visibility="{Binding HasHotkey, Converter={x:Null}}">
                                     <TextBlock Text="{Binding HotkeyText}" 
                                                FontSize="11" 
-                                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                               Foreground="{DynamicResource AccentBrush}"/>
                                 </Border>
                                 <TextBlock Text="{Binding LaunchCountBadge}" 
                                            FontSize="10" 
@@ -165,12 +167,11 @@
                     BorderThickness="0,1,0,0"
                     Margin="0,10,0,0"
                     Padding="0,8,0,0">
-                <Grid>
-                    <TextBlock Text="⏎ Run   •   Ctrl+⏎ Run as Admin   •   Shift+⏎ Reveal in Explorer   •   Alt+⏎ Open in Settings"
-                               FontSize="11"
-                               Foreground="{DynamicResource TextMutedBrush}"
-                               HorizontalAlignment="Center"/>
-                </Grid>
+                <TextBlock FontSize="11"
+                           Foreground="{DynamicResource TextMutedBrush}"
+                           HorizontalAlignment="Center">
+                    <Run Text="⏎" FontSize="13.5" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/><Run Text=" Run   •   "/><Run Text="Ctrl+" Foreground="{DynamicResource TextSecondaryBrush}"/><Run Text="⏎" FontSize="13.5" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/><Run Text=" Run as Admin   •   "/><Run Text="Shift+" Foreground="{DynamicResource TextSecondaryBrush}"/><Run Text="⏎" FontSize="13.5" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/><Run Text=" Reveal in Explorer   •   "/><Run Text="Alt+" Foreground="{DynamicResource TextSecondaryBrush}"/><Run Text="⏎" FontSize="13.5" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/><Run Text=" Open in Settings"/>
+                </TextBlock>
             </Border>
         </Grid>
     </Border>
