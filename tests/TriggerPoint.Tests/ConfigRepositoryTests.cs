@@ -129,4 +129,130 @@ public class ConfigRepositoryTests : IDisposable
         Assert.True(reloaded.RunAtStartup);
         Assert.True(reloaded.StartMinimized);
     }
+
+    [Fact]
+    public async Task SaveAsync_DoesNotOverwriteBackupIfPrimaryIsCorruptedOrEmpty()
+    {
+        var repo = new JsonConfigRepository(_testDir);
+        var originalItems = (await repo.LoadAsync()).ToList();
+
+        originalItems.Add(new TriggerItem
+        {
+            Name = "Precious Backup Item",
+            ActionType = ActionType.Snippet,
+            Payload = new ActionPayload { SnippetTemplate = "hello" }
+        });
+        await repo.SaveAsync(originalItems);
+        await repo.SaveAsync(originalItems); // Now in .bak
+
+        var bakContentBefore = await File.ReadAllTextAsync(repo.BackupFilePath);
+        Assert.Contains("Precious Backup Item", bakContentBefore);
+
+        // Corrupt primary file or truncate to 0 bytes
+        await File.WriteAllTextAsync(repo.ConfigFilePath, "");
+
+        // Call SaveAsync with valid new items
+        var newItems = new List<TriggerItem>
+        {
+            new TriggerItem { Name = "New Item", ActionType = ActionType.Folder }
+        };
+        await repo.SaveAsync(newItems);
+
+        // The .bak file MUST NOT be overwritten by the 0-byte primary file!
+        var bakContentAfter = await File.ReadAllTextAsync(repo.BackupFilePath);
+        Assert.Contains("Precious Backup Item", bakContentAfter);
+    }
+
+    [Fact]
+    public async Task LoadAsync_RecoversFromBackupIfPrimaryIsEmptyJsonArray()
+    {
+        var repo = new JsonConfigRepository(_testDir);
+        var originalItems = (await repo.LoadAsync()).ToList();
+
+        originalItems.Add(new TriggerItem
+        {
+            Name = "Must Not Be Lost",
+            ActionType = ActionType.Shell,
+            Payload = new ActionPayload { Command = "cmd.exe" }
+        });
+        await repo.SaveAsync(originalItems);
+        await repo.SaveAsync(originalItems); // Rotated into .bak
+
+        // Overwrite primary with empty JSON array "[]"
+        await File.WriteAllTextAsync(repo.ConfigFilePath, "[]");
+
+        // LoadAsync must detect empty array and recover from .bak
+        var loaded = await repo.LoadAsync();
+        Assert.Contains(loaded, x => x.Name == "Must Not Be Lost");
+    }
+
+    [Fact]
+    public async Task LoadAsync_RecoversFromBackupIfPrimaryIsZeroBytes()
+    {
+        var repo = new JsonConfigRepository(_testDir);
+        var originalItems = (await repo.LoadAsync()).ToList();
+
+        originalItems.Add(new TriggerItem
+        {
+            Name = "ZeroByte Recovery Item",
+            ActionType = ActionType.Shell,
+            Payload = new ActionPayload { Command = "notepad.exe" }
+        });
+        await repo.SaveAsync(originalItems);
+        await repo.SaveAsync(originalItems);
+
+        // Truncate primary file to 0 bytes
+        await File.WriteAllTextAsync(repo.ConfigFilePath, "");
+
+        var loaded = await repo.LoadAsync();
+        Assert.Contains(loaded, x => x.Name == "ZeroByte Recovery Item");
+    }
+
+    [Fact]
+    public async Task SaveAsync_GuardsAgainstAccidentalEmptyListSave()
+    {
+        var repo = new JsonConfigRepository(_testDir);
+        var originalItems = (await repo.LoadAsync()).ToList();
+
+        originalItems.Add(new TriggerItem
+        {
+            Name = "Guard Test Item",
+            ActionType = ActionType.Folder
+        });
+        await repo.SaveAsync(originalItems);
+
+        // Attempt to save an empty list
+        await repo.SaveAsync(new List<TriggerItem>());
+
+        // Primary file must NOT be wiped with 0 items
+        var reloaded = await repo.LoadAsync();
+        Assert.Contains(reloaded, x => x.Name == "Guard Test Item");
+    }
+
+    [Fact]
+    public async Task LoadAsync_RecoversFromHistoricalSnapshotIfBackupMissing()
+    {
+        var repo = new JsonConfigRepository(_testDir);
+        var originalItems = (await repo.LoadAsync()).ToList();
+
+        originalItems.Add(new TriggerItem
+        {
+            Name = "Snapshot Archive Item",
+            ActionType = ActionType.Folder
+        });
+        await repo.SaveAsync(originalItems);
+        await repo.SaveAsync(originalItems);
+
+        // Verify snapshot exists in backups/
+        var snapshotFiles = Directory.GetFiles(repo.BackupsDirectory, "triggerpoint_*.json");
+        Assert.NotEmpty(snapshotFiles);
+
+        // Corrupt primary file AND delete .bak
+        await File.WriteAllTextAsync(repo.ConfigFilePath, "CORRUPT");
+        if (File.Exists(repo.BackupFilePath)) File.Delete(repo.BackupFilePath);
+
+        // LoadAsync must recover from the historical snapshot in backups/
+        var loaded = await repo.LoadAsync();
+        Assert.Contains(loaded, x => x.Name == "Snapshot Archive Item");
+    }
 }

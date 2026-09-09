@@ -244,13 +244,23 @@ public class TriggerTreeItemViewModel : INotifyPropertyChanged
             }
             else
             {
-                if (Item.IsExpanded != value)
-                {
-                    Item.IsExpanded = value;
-                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsExpanded)));
-                }
+                Item.IsExpanded = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsExpanded)));
             }
         }
+    }
+
+    public void SetExpanded(bool value)
+    {
+        if (IsRecycleBinRoot)
+        {
+            _isExpanded = value;
+        }
+        else
+        {
+            Item.IsExpanded = value;
+        }
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsExpanded)));
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -298,10 +308,14 @@ public partial class SettingsWindow : Window
     private ObservableCollection<TriggerTreeItemViewModel> _treeRoots = [];
     private TriggerItem? _selectedItem;
     private TriggerItem? _originalItemSnapshot;
+    private bool _isDataLoaded;
     private bool _isUpdatingForm;
     private bool _isItemDirty;
     private bool _isRevertingTreeSelection;
+    private bool _isRebuildingTree;
     private readonly DispatcherTimer _snippetPreviewDebounceTimer;
+    private readonly DispatcherTimer _folderExpansionSaveTimer;
+    private readonly DispatcherTimer _appSettingsSaveTimer;
 
     // TreeView drag & drop re-sorting
     private Point? _treeDragStartPoint;
@@ -352,6 +366,9 @@ public partial class SettingsWindow : Window
         HotkeyRecorder.BindingRecorded += HotkeyRecorder_BindingRecorded;
         _shortcutListener.ConflictsUpdated += (s, e) => Dispatcher.Invoke(RefreshTreeConflictStates);
         _shortcutListener.SnoozeChanged += (s, isSnoozed) => Dispatcher.Invoke(UpdateSnoozeButtonUi);
+
+        ItemsTreeView.AddHandler(TreeViewItem.ExpandedEvent, new RoutedEventHandler(OnTreeViewItemExpandedCollapsed));
+        ItemsTreeView.AddHandler(TreeViewItem.CollapsedEvent, new RoutedEventHandler(OnTreeViewItemExpandedCollapsed));
 
         AllowedProcessesTagInput.TagsChanged += (s, e) =>
         {
@@ -407,6 +424,32 @@ public partial class SettingsWindow : Window
             await UpdateSnippetLivePreviewAsync();
         };
 
+        _folderExpansionSaveTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(500)
+        };
+        _folderExpansionSaveTimer.Tick += (s, e) =>
+        {
+            _folderExpansionSaveTimer.Stop();
+            if (_isDataLoaded && _items.Count > 0)
+            {
+                _ = _repository.SaveAsync(_items);
+            }
+        };
+
+        _appSettingsSaveTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(500)
+        };
+        _appSettingsSaveTimer.Tick += (s, e) =>
+        {
+            _appSettingsSaveTimer.Stop();
+            if (_appSettings != null)
+            {
+                _ = _repository.SaveSettingsAsync(_appSettings);
+            }
+        };
+
         SnippetTemplateBox.TextChanged += (s, e) =>
         {
             OnFormEdited();
@@ -424,13 +467,59 @@ public partial class SettingsWindow : Window
             }
         };
 
-        var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+        var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+        var version = assembly.GetName().Version;
         if (AppVersionText != null && version != null)
         {
-            AppVersionText.Text = $"v{version.Major}.{version.Minor}.{version.Build}";
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            string progFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+            bool isSystem = (!string.IsNullOrEmpty(progFiles) && baseDir.StartsWith(progFiles, StringComparison.OrdinalIgnoreCase)) ||
+                            (!string.IsNullOrEmpty(progFilesX86) && baseDir.StartsWith(progFilesX86, StringComparison.OrdinalIgnoreCase));
+            string scope = isSystem ? "System" : "User";
+
+            string semVer = $"v{version.Major}.{version.Minor}.{version.Build}";
+
+            var fvi = System.Diagnostics.FileVersionInfo.GetVersionInfo(assembly.Location);
+            int buildNumber = fvi.FilePrivatePart > 0 ? fvi.FilePrivatePart : (version.Revision > 0 ? version.Revision : 0);
+
+            var infoVerAttr = (System.Reflection.AssemblyInformationalVersionAttribute?)
+                Attribute.GetCustomAttribute(assembly, typeof(System.Reflection.AssemblyInformationalVersionAttribute));
+            string infoVer = infoVerAttr?.InformationalVersion ?? "";
+            string commitHash = "";
+            int plusIndex = infoVer.IndexOf('+');
+            if (plusIndex >= 0 && plusIndex < infoVer.Length - 1)
+            {
+                commitHash = infoVer.Substring(plusIndex + 1);
+                if (commitHash.Length > 7) commitHash = commitHash.Substring(0, 7);
+            }
+
+#if DEBUG
+            AppVersionText.Text = $"{semVer} (Debug, {scope})";
+            AppVersionText.ToolTip = $"TriggerPoint {semVer} (Debug build at {baseDir})";
+#else
+            if (buildNumber > 0)
+            {
+                AppVersionText.Text = $"{semVer} (Build {buildNumber}, {scope})";
+                string commitText = !string.IsNullOrEmpty(commitHash) ? $", commit {commitHash}" : "";
+                AppVersionText.ToolTip = $"TriggerPoint {semVer} (Build {buildNumber}{commitText}, {scope}-wide install at {baseDir})";
+            }
+            else
+            {
+                AppVersionText.Text = $"{semVer} ({scope})";
+                AppVersionText.ToolTip = $"TriggerPoint {semVer} ({scope}-wide install at {baseDir})";
+            }
+#endif
         }
 
-        Loaded += async (s, e) => await LoadDataAsync();
+        _ = LoadDataAsync();
+        Loaded += async (s, e) =>
+        {
+            if (!_isDataLoaded)
+            {
+                await LoadDataAsync();
+            }
+        };
     }
 
     private void SetDirty(bool isDirty = true)
@@ -526,6 +615,7 @@ public partial class SettingsWindow : Window
         {
             _appSettings = new AppSettings();
         }
+        _isDataLoaded = true;
         RegisterShortcuts();
         RebuildTree();
         UpdateSnoozeButtonUi();
@@ -557,101 +647,110 @@ public partial class SettingsWindow : Window
 
     private void RebuildTree()
     {
-        _treeRoots.Clear();
-        var folderMap = new Dictionary<Guid, TriggerTreeItemViewModel>();
-
-        // First pass: Folders
-        var folders = _items.Where(x => x.ActionType == ActionType.Folder).OrderBy(x => x.OrderIndex).ToList();
-        foreach (var item in folders)
+        _isRebuildingTree = true;
+        try
         {
-            folderMap[item.Id] = new TriggerTreeItemViewModel(item);
-        }
+            _treeRoots.Clear();
+            var folderMap = new Dictionary<Guid, TriggerTreeItemViewModel>();
 
-        foreach (var item in folders)
-        {
-            var vm = folderMap[item.Id];
-            if (item.ParentId.HasValue && folderMap.TryGetValue(item.ParentId.Value, out var parentVm))
+            // First pass: Folders
+            var folders = _items.Where(x => x.ActionType == ActionType.Folder).OrderBy(x => x.OrderIndex).ToList();
+            foreach (var item in folders)
             {
-                parentVm.Children.Add(vm);
+                folderMap[item.Id] = new TriggerTreeItemViewModel(item);
             }
-            else
-            {
-                _treeRoots.Add(vm);
-            }
-        }
 
-        // Second pass: Actions
-        foreach (var item in _items.Where(x => x.ActionType != ActionType.Folder).OrderBy(x => x.OrderIndex))
-        {
-            var vm = new TriggerTreeItemViewModel(item);
-            if (item.ActionType == ActionType.Shell)
+            foreach (var item in folders)
             {
-                var validation = ShortcutValidator.Validate(item.Payload.Command);
-                if (validation.Status != ShortcutValidationStatus.Valid)
+                var vm = folderMap[item.Id];
+                if (item.ParentId.HasValue && folderMap.TryGetValue(item.ParentId.Value, out var parentVm))
                 {
-                    vm.IsBrokenTarget = true;
-                    vm.BrokenTargetMessage = validation.Message;
+                    parentVm.Children.Add(vm);
+                }
+                else
+                {
+                    _treeRoots.Add(vm);
                 }
             }
 
-            if (item.ParentId.HasValue && folderMap.TryGetValue(item.ParentId.Value, out var parentVm))
+            // Second pass: Actions
+            foreach (var item in _items.Where(x => x.ActionType != ActionType.Folder).OrderBy(x => x.OrderIndex))
             {
-                parentVm.Children.Add(vm);
-            }
-            else
-            {
-                _treeRoots.Add(vm);
-            }
-        }
-
-        // Third pass: Recycle Bin (pinned at bottom of tree if non-empty)
-        if (_recycledItems.Count > 0)
-        {
-            var recycleBinRootItem = new TriggerItem
-            {
-                Id = Guid.Empty,
-                Name = $"Recycle Bin ({_recycledItems.Count})",
-                ActionType = ActionType.Folder,
-                Description = "Contains deleted actions and folders"
-            };
-            var recycleBinVm = new TriggerTreeItemViewModel(recycleBinRootItem)
-            {
-                IsRecycleBinRoot = true,
-                IsExpanded = true
-            };
-            foreach (var rbi in _recycledItems)
-            {
-                var rVm = new TriggerTreeItemViewModel(rbi.Item)
+                var vm = new TriggerTreeItemViewModel(item);
+                if (item.ActionType == ActionType.Shell)
                 {
-                    IsRecycledItem = true,
-                    RecycledInfo = rbi
-                };
-                recycleBinVm.Children.Add(rVm);
+                    var validation = ShortcutValidator.Validate(item.Payload.Command);
+                    if (validation.Status != ShortcutValidationStatus.Valid)
+                    {
+                        vm.IsBrokenTarget = true;
+                        vm.BrokenTargetMessage = validation.Message;
+                    }
+                }
+
+                if (item.ParentId.HasValue && folderMap.TryGetValue(item.ParentId.Value, out var parentVm))
+                {
+                    parentVm.Children.Add(vm);
+                }
+                else
+                {
+                    _treeRoots.Add(vm);
+                }
             }
-            _treeRoots.Add(recycleBinVm);
-        }
 
-        ItemsTreeView.ItemsSource = _treeRoots;
-        UpdateBrokenFilterChipCount();
-        UpdateExpandAllButtonGlyph();
-
-        // Restore selection or select first item if available
-        if (_treeRoots.Count > 0)
-        {
-            if (_selectedItem != null && (_selectedItem.Id == Guid.Empty || _items.Any(x => x.Id == _selectedItem.Id) || _recycledItems.Any(x => x.Item.Id == _selectedItem.Id)))
+            // Third pass: Recycle Bin (pinned at bottom of tree if non-empty)
+            if (_recycledItems.Count > 0)
             {
-                SelectTreeItem(_selectedItem);
+                var recycleBinRootItem = new TriggerItem
+                {
+                    Id = Guid.Empty,
+                    Name = $"Recycle Bin ({_recycledItems.Count})",
+                    ActionType = ActionType.Folder,
+                    Description = "Contains deleted actions and folders"
+                };
+                var recycleBinVm = new TriggerTreeItemViewModel(recycleBinRootItem)
+                {
+                    IsRecycleBinRoot = true,
+                    IsExpanded = _appSettings?.IsRecycleBinExpanded ?? false
+                };
+                foreach (var rbi in _recycledItems)
+                {
+                    var rVm = new TriggerTreeItemViewModel(rbi.Item)
+                    {
+                        IsRecycledItem = true,
+                        RecycledInfo = rbi
+                    };
+                    recycleBinVm.Children.Add(rVm);
+                }
+                _treeRoots.Add(recycleBinVm);
+            }
+
+            ItemsTreeView.ItemsSource = _treeRoots;
+            UpdateBrokenFilterChipCount();
+            UpdateExpandAllButtonGlyph();
+
+            // Restore selection or select first item if available
+            if (_treeRoots.Count > 0)
+            {
+                if (_selectedItem != null && (_selectedItem.Id == Guid.Empty || _items.Any(x => x.Id == _selectedItem.Id) || _recycledItems.Any(x => x.Item.Id == _selectedItem.Id)))
+                {
+                    SelectTreeItem(_selectedItem);
+                }
+                else
+                {
+                    var firstRoot = _treeRoots[0];
+                    var first = (firstRoot.IsExpanded && firstRoot.Children.Count > 0) ? firstRoot.Children[0] : firstRoot;
+                    SelectTreeItem(first.Item);
+                }
             }
             else
             {
-                var first = _treeRoots[0].Children.Count > 0 ? _treeRoots[0].Children[0] : _treeRoots[0];
-                SelectTreeItem(first.Item);
+                _selectedItem = null;
+                ClearForm();
             }
         }
-        else
+        finally
         {
-            _selectedItem = null;
-            ClearForm();
+            _isRebuildingTree = false;
         }
     }
 
@@ -1454,6 +1553,7 @@ public partial class SettingsWindow : Window
 
         try
         {
+            _folderExpansionSaveTimer.Stop();
             await _repository.SaveAsync(_items);
             RegisterShortcuts();
             RefreshTreeConflictStates();
@@ -2589,6 +2689,64 @@ public partial class SettingsWindow : Window
         UpdateTreeFilter();
     }
 
+    private void OnTreeViewItemExpandedCollapsed(object sender, RoutedEventArgs e)
+    {
+        if (!_isDataLoaded || _isRebuildingTree) return;
+
+        if (e.OriginalSource is TreeViewItem tvi && tvi.DataContext is TriggerTreeItemViewModel vm)
+        {
+            if (vm.Item.ActionType == ActionType.Folder && !vm.IsRecycleBinRoot)
+            {
+                vm.Item.IsExpanded = tvi.IsExpanded;
+                UpdateExpandAllButtonGlyph();
+                ScheduleFolderExpansionSave();
+            }
+            else if (vm.IsRecycleBinRoot && _appSettings != null)
+            {
+                _appSettings.IsRecycleBinExpanded = tvi.IsExpanded;
+                ScheduleAppSettingsSave();
+            }
+        }
+    }
+
+    private void ScheduleFolderExpansionSave()
+    {
+        if (!_isDataLoaded) return;
+        _folderExpansionSaveTimer.Stop();
+        _folderExpansionSaveTimer.Start();
+    }
+
+    private void ScheduleAppSettingsSave()
+    {
+        if (_appSettings == null) return;
+        _appSettingsSaveTimer.Stop();
+        _appSettingsSaveTimer.Start();
+    }
+
+    private void FlushFolderExpansionSave()
+    {
+        if (_folderExpansionSaveTimer?.IsEnabled == true)
+        {
+            _folderExpansionSaveTimer.Stop();
+            if (_isDataLoaded && _items.Count > 0)
+            {
+                _ = _repository.SaveAsync(_items);
+            }
+        }
+    }
+
+    private void FlushAppSettingsSave()
+    {
+        if (_appSettingsSaveTimer?.IsEnabled == true)
+        {
+            _appSettingsSaveTimer.Stop();
+            if (_appSettings != null)
+            {
+                _ = _repository.SaveSettingsAsync(_appSettings);
+            }
+        }
+    }
+
     private void ToggleExpandAllBtn_Click(object sender, RoutedEventArgs e)
     {
         var folders = _items.Where(x => x.ActionType == ActionType.Folder).ToList();
@@ -2597,13 +2755,10 @@ public partial class SettingsWindow : Window
         bool anyExpanded = folders.Any(f => f.IsExpanded);
         bool newState = !anyExpanded;
 
-        foreach (var f in folders)
-        {
-            f.IsExpanded = newState;
-        }
-
         SetAllFoldersExpanded(_treeRoots, newState);
+        SetAllTreeViewItemsExpanded(ItemsTreeView, newState);
         UpdateExpandAllButtonGlyph();
+        _folderExpansionSaveTimer.Stop();
         _ = _repository.SaveAsync(_items);
     }
 
@@ -2613,9 +2768,25 @@ public partial class SettingsWindow : Window
         {
             if (vm.Item.ActionType == ActionType.Folder && !vm.IsRecycleBinRoot)
             {
-                vm.IsExpanded = expanded;
+                vm.SetExpanded(expanded);
             }
             SetAllFoldersExpanded(vm.Children, expanded);
+        }
+    }
+
+    private static void SetAllTreeViewItemsExpanded(ItemsControl parent, bool expanded)
+    {
+        for (int i = 0; i < parent.Items.Count; i++)
+        {
+            if (parent.ItemContainerGenerator.ContainerFromIndex(i) is TreeViewItem tvi)
+            {
+                tvi.IsExpanded = expanded;
+                if (expanded)
+                {
+                    tvi.UpdateLayout();
+                }
+                SetAllTreeViewItemsExpanded(tvi, expanded);
+            }
         }
     }
 
@@ -3768,14 +3939,49 @@ public partial class SettingsWindow : Window
             return;
         }
 
-        // Persist folder expansion states across launches
-        _ = _repository.SaveAsync(_items);
-
-        if (!IsExiting)
+        if (IsExiting)
         {
-            // Minimize/Hide to tray instead of closing
-            e.Cancel = true;
-            Hide();
+            try
+            {
+                if (_folderExpansionSaveTimer?.IsEnabled == true)
+                {
+                    _folderExpansionSaveTimer.Stop();
+                    if (_isDataLoaded && _items.Count > 0)
+                    {
+                        _repository.SaveAsync(_items).GetAwaiter().GetResult();
+                    }
+                }
+                if (_appSettingsSaveTimer?.IsEnabled == true)
+                {
+                    _appSettingsSaveTimer.Stop();
+                    if (_appSettings != null)
+                    {
+                        _repository.SaveSettingsAsync(_appSettings).GetAwaiter().GetResult();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "Failed to flush tree expansion state on exit.");
+            }
+            return;
         }
+
+        FlushFolderExpansionSave();
+        FlushAppSettingsSave();
+
+        // Only persist folder expansion states when hiding to tray if data was actually loaded and has items
+        if (_isDataLoaded && _items.Count > 0)
+        {
+            _ = _repository.SaveAsync(_items);
+        }
+        if (_appSettings != null)
+        {
+            _ = _repository.SaveSettingsAsync(_appSettings);
+        }
+
+        // Minimize/Hide to tray instead of closing
+        e.Cancel = true;
+        Hide();
     }
 }

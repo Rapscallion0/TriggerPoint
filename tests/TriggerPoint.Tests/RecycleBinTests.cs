@@ -231,4 +231,50 @@ public class RecycleBinTests : IDisposable
         Assert.True(result.IsValid);
         Assert.Null(result.ErrorMessage);
     }
+
+    [Fact]
+    public async Task IsRecycleBinExpanded_DefaultsToFalse_AndPersistsRoundtrip()
+    {
+        var repo = new JsonConfigRepository(_testDir);
+        var initialSettings = await repo.LoadSettingsAsync();
+        Assert.False(initialSettings.IsRecycleBinExpanded);
+
+        initialSettings.IsRecycleBinExpanded = true;
+        await repo.SaveSettingsAsync(initialSettings);
+
+        var loadedSettings = await repo.LoadSettingsAsync();
+        Assert.True(loadedSettings.IsRecycleBinExpanded);
+
+        loadedSettings.IsRecycleBinExpanded = false;
+        await repo.SaveSettingsAsync(loadedSettings);
+
+        var reloadedSettings = await repo.LoadSettingsAsync();
+        Assert.False(reloadedSettings.IsRecycleBinExpanded);
+    }
+
+    [Fact]
+    public async Task FolderExpansionState_PersistsThroughRepository()
+    {
+        var repo = new JsonConfigRepository(_testDir);
+        var folder = new TriggerItem
+        {
+            Id = Guid.NewGuid(),
+            Name = "My Folder",
+            ActionType = ActionType.Folder,
+            IsExpanded = false
+        };
+
+        await repo.SaveAsync(new[] { folder });
+
+        var loadedItems = (await repo.LoadAsync()).ToList();
+        Assert.Single(loadedItems);
+        Assert.False(loadedItems[0].IsExpanded);
+
+        loadedItems[0].IsExpanded = true;
+        await repo.SaveAsync(loadedItems);
+
+        var reloadedItems = (await repo.LoadAsync()).ToList();
+        Assert.Single(reloadedItems);
+        Assert.True(reloadedItems[0].IsExpanded);
+    }
 }

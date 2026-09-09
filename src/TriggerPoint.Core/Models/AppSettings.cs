@@ -40,6 +40,7 @@ public class AppSettings
     public ToastMonitorPlacement ToastPlacement { get; set; } = ToastMonitorPlacement.PrimaryMonitor;
     public bool ValidateShortcutsOnStartup { get; set; } = true;
     public int LogSplitThresholdMb { get; set; } = 100;
+    public bool IsRecycleBinExpanded { get; set; } = false;
 
     public void Normalize()
     {

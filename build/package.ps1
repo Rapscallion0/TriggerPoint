@@ -20,7 +20,7 @@
 [CmdletBinding()]
 param(
     [string]$Configuration = "Release",
-    [string]$AppVersion = "2.0.1",
+    [string]$AppVersion = "",
     [string]$PublishDir = "",
     [string]$ArtifactsDir = "",
     [switch]$SkipPublish
@@ -31,12 +31,40 @@ $ErrorActionPreference = "Stop"
 $rootDir = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $rootDir
 
+# 1. Resolve Version from Directory.Build.props (Single Source of Truth)
+$propsPath = Join-Path $rootDir "Directory.Build.props"
+if ([string]::IsNullOrWhiteSpace($AppVersion)) {
+    if (Test-Path $propsPath) {
+        [xml]$propsXml = Get-Content $propsPath
+        $AppVersion = $propsXml.Project.PropertyGroup.Version.Trim()
+    } else {
+        $AppVersion = "2.0.1"
+    }
+}
+
+# Resolve Git commit height (build number) and git hash
+$buildNumber = 0
+$gitHash = ""
+try {
+    $countOut = (& git rev-list --count HEAD 2>$null)
+    if ($LASTEXITCODE -eq 0 -and $countOut) {
+        $buildNumber = [int]($countOut.Trim())
+    }
+    $hashOut = (& git rev-parse --short HEAD 2>$null)
+    if ($LASTEXITCODE -eq 0 -and $hashOut) {
+        $gitHash = $hashOut.Trim()
+    }
+} catch {}
+
+$fileVersion = "$AppVersion.$buildNumber"
+$informationalVersion = if ($gitHash) { "$AppVersion+$gitHash" } else { "$AppVersion" }
+
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host "  TriggerPoint Packaging & Installer Automation" -ForegroundColor Cyan
-Write-Host "  Version: $AppVersion | Configuration: $Configuration" -ForegroundColor Cyan
+Write-Host "  Version: $AppVersion (Build $buildNumber | Git: $gitHash) | Configuration: $Configuration" -ForegroundColor Cyan
 Write-Host "============================================================" -ForegroundColor Cyan
 
-# 1. Resolve Directories
+# 2. Resolve Directories
 if ([string]::IsNullOrWhiteSpace($PublishDir)) {
     $PublishDir = Join-Path $rootDir "src\TriggerPoint.UI\bin\$Configuration\net9.0-windows\win-x64\publish"
 }
@@ -136,6 +164,9 @@ if (-not $SkipPublish) {
         "-c", $Configuration,
         "-r", "win-x64",
         "--self-contained", "false",
+        "-p:Version=$AppVersion",
+        "-p:FileVersion=$fileVersion",
+        "-p:InformationalVersion=$informationalVersion",
         "-o", $PublishDir
     )
 

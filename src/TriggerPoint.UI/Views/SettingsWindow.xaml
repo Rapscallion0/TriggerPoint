@@ -212,6 +212,12 @@
                           Drop="ItemsTreeView_Drop"
                           PreviewKeyDown="ItemsTreeView_PreviewKeyDown"
                           SelectedItemChanged="ItemsTreeView_SelectedItemChanged">
+                    <TreeView.ItemContainerStyle>
+                        <Style TargetType="{x:Type TreeViewItem}" BasedOn="{StaticResource {x:Type TreeViewItem}}">
+                            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+                            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
+                        </Style>
+                    </TreeView.ItemContainerStyle>
                     <TreeView.ContextMenu>
                         <ContextMenu x:Name="TreeContextMenu" Opened="TreeContextMenu_Opened">
                             <MenuItem x:Name="ContextAddActionItem" Header="New Action" Click="AddActionBtn_Click">
@@ -269,7 +275,7 @@
                         </ContextMenu>
                     </TreeView.ContextMenu>
                     <TreeView.ItemTemplate>
-                        <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                        <HierarchicalDataTemplate ItemsSource="{Binding Children}" ItemContainerStyle="{StaticResource {x:Type TreeViewItem}}">
                             <Grid Margin="0,1">
                                 <!-- Drop Above Indicator Line with Bead -->
                                 <Grid VerticalAlignment="Top" Height="4" Margin="0,-2,0,0" Panel.ZIndex="10" Visibility="{Binding DropAboveVisibility}">
@@ -1286,7 +1292,7 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock x:Name="StatusText" Text="Ready." FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                <TextBlock x:Name="AppVersionText" Grid.Column="1" Text="v2.0.0" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
+                <TextBlock x:Name="AppVersionText" Grid.Column="1" Text="v..." FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
             </Grid>
         </Border>
     </Grid>

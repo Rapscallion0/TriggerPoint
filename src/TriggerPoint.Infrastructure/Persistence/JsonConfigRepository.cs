@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
@@ -14,6 +15,7 @@ public class JsonConfigRepository : IConfigRepository
 {
     private readonly string _configFilePath;
     private readonly string _backupFilePath;
+    private readonly string _backupsDir;
     private readonly string _appSettingsFilePath;
     private readonly string _appSettingsBackupFilePath;
     private readonly string _recycleBinFilePath;
@@ -37,15 +39,102 @@ public class JsonConfigRepository : IConfigRepository
         Directory.CreateDirectory(baseDir);
         _configFilePath = Path.Combine(baseDir, "triggerpoint.json");
         _backupFilePath = Path.Combine(baseDir, "triggerpoint.bak");
+        _backupsDir = Path.Combine(baseDir, "backups");
         _appSettingsFilePath = Path.Combine(baseDir, "appsettings.json");
         _appSettingsBackupFilePath = Path.Combine(baseDir, "appsettings.bak");
         _recycleBinFilePath = Path.Combine(baseDir, "recyclebin.json");
+
+        Directory.CreateDirectory(_backupsDir);
     }
 
     public string ConfigFilePath => _configFilePath;
     public string BackupFilePath => _backupFilePath;
+    public string BackupsDirectory => _backupsDir;
     public string AppSettingsFilePath => _appSettingsFilePath;
     public string RecycleBinFilePath => _recycleBinFilePath;
+
+    private static bool IsValidTriggerItemsFile(string filePath, out List<TriggerItem>? items)
+    {
+        items = null;
+        try
+        {
+            if (!File.Exists(filePath)) return false;
+            var fileInfo = new FileInfo(filePath);
+            if (fileInfo.Length < 4) return false;
+
+            using var stream = File.OpenRead(filePath);
+            items = JsonSerializer.Deserialize<List<TriggerItem>>(stream, JsonOptions);
+            return items != null && items.Count > 0;
+        }
+        catch
+        {
+            items = null;
+            return false;
+        }
+    }
+
+    private List<TriggerItem>? TryRecoverFromBackups()
+    {
+        // 1. Try triggerpoint.bak
+        if (IsValidTriggerItemsFile(_backupFilePath, out var backupItems) && backupItems != null)
+        {
+            try
+            {
+                File.Copy(_backupFilePath, _configFilePath, true);
+            }
+            catch { }
+            return backupItems;
+        }
+
+        // 2. Try historical snapshots in backups/
+        if (Directory.Exists(_backupsDir))
+        {
+            var snapshotFiles = Directory.GetFiles(_backupsDir, "triggerpoint_*.json")
+                .OrderByDescending(File.GetLastWriteTimeUtc);
+
+            foreach (var file in snapshotFiles)
+            {
+                if (IsValidTriggerItemsFile(file, out var snapshotItems) && snapshotItems != null)
+                {
+                    try
+                    {
+                        File.Copy(file, _configFilePath, true);
+                        File.Copy(file, _backupFilePath, true);
+                    }
+                    catch { }
+                    return snapshotItems;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private void RotateHistoricalSnapshot(string sourceFilePath)
+    {
+        try
+        {
+            if (!Directory.Exists(_backupsDir))
+            {
+                Directory.CreateDirectory(_backupsDir);
+            }
+
+            var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
+            var destPath = Path.Combine(_backupsDir, $"triggerpoint_{timestamp}.json");
+            File.Copy(sourceFilePath, destPath, true);
+
+            // Retain the 10 newest snapshots, prune older ones
+            var existing = Directory.GetFiles(_backupsDir, "triggerpoint_*.json")
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .Skip(10);
+
+            foreach (var oldFile in existing)
+            {
+                try { File.Delete(oldFile); } catch { }
+            }
+        }
+        catch { }
+    }
 
     public async Task<IReadOnlyList<TriggerItem>> LoadAsync()
     {
@@ -56,40 +145,41 @@ public class JsonConfigRepository : IConfigRepository
             {
                 try
                 {
-                    using var stream = File.OpenRead(_configFilePath);
-                    var items = await JsonSerializer.DeserializeAsync<List<TriggerItem>>(stream, JsonOptions).ConfigureAwait(false);
-                    if (items != null)
+                    if (new FileInfo(_configFilePath).Length > 0)
                     {
-                        return items;
+                        using var stream = File.OpenRead(_configFilePath);
+                        var items = await JsonSerializer.DeserializeAsync<List<TriggerItem>>(stream, JsonOptions).ConfigureAwait(false);
+                        if (items != null && items.Count > 0)
+                        {
+                            return items;
+                        }
                     }
                 }
                 catch (Exception)
                 {
-                    // Primary file corrupted, try backup recovery
-                    if (File.Exists(_backupFilePath))
-                    {
-                        try
-                        {
-                            using var backupStream = File.OpenRead(_backupFilePath);
-                            var backupItems = await JsonSerializer.DeserializeAsync<List<TriggerItem>>(backupStream, JsonOptions).ConfigureAwait(false);
-                            if (backupItems != null)
-                            {
-                                // Restore primary file from backup
-                                File.Copy(_backupFilePath, _configFilePath, true);
-                                return backupItems;
-                            }
-                        }
-                        catch
-                        {
-                            // Backup also failed; proceed to defaults
-                        }
-                    }
+                    // Primary file corrupted, 0-bytes, or invalid
+                }
+
+                // If primary file was 0-bytes, empty array, or corrupted, attempt recovery
+                var recovered = TryRecoverFromBackups();
+                if (recovered != null && recovered.Count > 0)
+                {
+                    return recovered;
+                }
+            }
+            else
+            {
+                // File does not exist yet; check if backups exist before creating defaults
+                var recovered = TryRecoverFromBackups();
+                if (recovered != null && recovered.Count > 0)
+                {
+                    return recovered;
                 }
             }
 
-            // If file doesn't exist or failed to load, generate defaults
+            // Only if primary doesn't exist and no backups exist, generate defaults
             var defaults = CreateDefaultItems();
-            await SaveInternalAsync(defaults).ConfigureAwait(false);
+            await SaveInternalAsync(defaults, isGeneratingDefaults: true).ConfigureAwait(false);
             return defaults;
         }
         finally
@@ -103,7 +193,7 @@ public class JsonConfigRepository : IConfigRepository
         await _fileLock.WaitAsync().ConfigureAwait(false);
         try
         {
-            await SaveInternalAsync(items).ConfigureAwait(false);
+            await SaveInternalAsync(items, isGeneratingDefaults: false).ConfigureAwait(false);
         }
         finally
         {
@@ -182,32 +272,47 @@ public class JsonConfigRepository : IConfigRepository
         {
             await JsonSerializer.SerializeAsync(stream, settings, JsonOptions).ConfigureAwait(false);
             await stream.FlushAsync().ConfigureAwait(false);
+            stream.Flush(flushToDisk: true);
         }
 
-        if (File.Exists(_appSettingsFilePath))
+        // Rotate rolling backup ONLY IF existing appsettings.json is valid and non-empty
+        if (File.Exists(_appSettingsFilePath) && new FileInfo(_appSettingsFilePath).Length > 10)
         {
-            File.Copy(_appSettingsFilePath, _appSettingsBackupFilePath, true);
+            try
+            {
+                File.Copy(_appSettingsFilePath, _appSettingsBackupFilePath, true);
+            }
+            catch { }
         }
 
         File.Move(tempFilePath, _appSettingsFilePath, true);
     }
 
-    private async Task SaveInternalAsync(IEnumerable<TriggerItem> items)
+    private async Task SaveInternalAsync(IEnumerable<TriggerItem> items, bool isGeneratingDefaults)
     {
         var itemList = new List<TriggerItem>(items);
+
+        // Safety Guard: Do not allow saving an empty list if existing config on disk has valid items
+        if (itemList.Count == 0 && !isGeneratingDefaults && IsValidTriggerItemsFile(_configFilePath, out var existing) && existing != null && existing.Count > 0)
+        {
+            return;
+        }
+
         var tempFilePath = _configFilePath + ".tmp";
 
-        // 1. Write to temporary file
+        // 1. Write to temporary file and force OS flush to physical disk
         await using (var stream = new FileStream(tempFilePath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, true))
         {
             await JsonSerializer.SerializeAsync(stream, itemList, JsonOptions).ConfigureAwait(false);
             await stream.FlushAsync().ConfigureAwait(false);
+            stream.Flush(flushToDisk: true);
         }
 
-        // 2. Rotate rolling backup if primary file exists
-        if (File.Exists(_configFilePath))
+        // 2. Rotate rolling backup ONLY IF the current primary file is non-empty and valid!
+        if (IsValidTriggerItemsFile(_configFilePath, out _))
         {
             File.Copy(_configFilePath, _backupFilePath, true);
+            RotateHistoricalSnapshot(_configFilePath);
         }
 
         // 3. Atomically replace target
