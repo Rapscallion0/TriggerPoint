@@ -40,7 +40,7 @@ public static class HotkeyRegistryValidator
                 {
                     var conflict = HotkeyConflictStatus.CreateInternal(
                         Guid.Empty,
-                        "Open TriggerPoint Window",
+                        "Open Action Manager",
                         "Application Settings",
                         item.Hotkey.DisplayText);
                     conflicts[item.Id] = conflict;
@@ -118,7 +118,7 @@ public static class HotkeyRegistryValidator
             {
                 return HotkeyConflictStatus.CreateInternal(
                     Guid.Empty,
-                    "Open TriggerPoint Window",
+                    "Open Action Manager",
                     "Application Settings",
                     newBinding.DisplayText);
             }
@@ -215,14 +215,14 @@ public static class HotkeyRegistryValidator
         if (openSettingsHotkey != null && !openSettingsHotkey.IsEmpty)
         {
             var conflict = CheckApplicationHotkeyConflict(
-                "Open TriggerPoint Window", 
+                "Open Action Manager", 
                 openSettingsHotkey, 
                 allItems, 
                 ("Command Palette", commandPaletteHotkey));
 
             if (conflict != null)
             {
-                return (false, $"The shortcut '{openSettingsHotkey.DisplayText}' for 'Open TriggerPoint Window' conflicts with '{conflict.ConflictingActionName}' ({conflict.ConflictingFolderName}).");
+                return (false, $"The shortcut '{openSettingsHotkey.DisplayText}' for 'Open Action Manager' conflicts with '{conflict.ConflictingActionName}' ({conflict.ConflictingFolderName}).");
             }
         }
 
@@ -232,7 +232,7 @@ public static class HotkeyRegistryValidator
                 "Command Palette", 
                 commandPaletteHotkey, 
                 allItems, 
-                ("Open TriggerPoint Window", openSettingsHotkey));
+                ("Open Action Manager", openSettingsHotkey));
 
             if (conflict != null)
             {

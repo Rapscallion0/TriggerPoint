@@ -4,6 +4,7 @@ using System.IO.Pipes;
 using System.Threading;
 using System.Threading.Tasks;
 using Serilog;
+using TriggerPoint.Infrastructure.Win32;
 
 namespace TriggerPoint.Infrastructure.Services;
 
@@ -46,6 +47,7 @@ public class SingleInstanceService : IDisposable
     {
         try
         {
+            NativeMethods.AllowSetForegroundWindow(NativeMethods.ASFW_ANY);
             using var client = new NamedPipeClientStream(".", PipeName, PipeDirection.Out);
             await client.ConnectAsync(1000).ConfigureAwait(false);
             using var writer = new StreamWriter(client) { AutoFlush = true };

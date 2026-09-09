@@ -4,7 +4,7 @@
 ; =====================================================================
 
 #ifndef AppVersion
-#define AppVersion "2.0.0"
+#define AppVersion "2.0.1"
 #endif
 
 #ifndef PublishDir
@@ -17,12 +17,14 @@ AppName=TriggerPoint
 AppVersion={#AppVersion}
 AppVerName=TriggerPoint {#AppVersion}
 AppPublisher=TriggerPoint
-DefaultDirName={localappdata}\Programs\TriggerPoint
+DefaultDirName={autopf}\TriggerPoint
 DefaultGroupName=TriggerPoint
 DisableProgramGroupPage=yes
+DisableDirPage=no
 
-; Non-administrative, per-user installation (Zero UAC elevation required)
+; Dual-mode installation: allows installing for all users (Program Files) or current user (LocalAppData)
 PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=dialog
 ArchitecturesInstallIn64BitMode=x64compatible
 
 ; Mutex detection and clean process termination
@@ -53,12 +55,12 @@ Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 Source: "..\assets\TriggerPoint.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{userprograms}\TriggerPoint\TriggerPoint"; Filename: "{app}\TriggerPoint.exe"; IconFilename: "{app}\TriggerPoint.ico"
-Name: "{userprograms}\TriggerPoint\Uninstall TriggerPoint"; Filename: "{uninstallexe}"
-Name: "{userdesktop}\TriggerPoint"; Filename: "{app}\TriggerPoint.exe"; IconFilename: "{app}\TriggerPoint.ico"; Tasks: desktopicon
+Name: "{autoprograms}\TriggerPoint\TriggerPoint"; Filename: "{app}\TriggerPoint.exe"; IconFilename: "{app}\TriggerPoint.ico"
+Name: "{autoprograms}\TriggerPoint\Uninstall TriggerPoint"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\TriggerPoint"; Filename: "{app}\TriggerPoint.exe"; IconFilename: "{app}\TriggerPoint.ico"; Tasks: desktopicon
 
 [Registry]
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "TriggerPoint"; ValueData: """{app}\TriggerPoint.exe"""; Tasks: autostart; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "TriggerPoint"; ValueData: """{app}\TriggerPoint.exe"""; Tasks: autostart; Flags: uninsdeletevalue
 
 [Run]
 Filename: "{app}\TriggerPoint.exe"; Description: "{cm:LaunchProgram,TriggerPoint}"; Flags: nowait postinstall skipifsilent

@@ -29,7 +29,7 @@ public class ShellActionExecutor : IActionExecutor
         _contextFilterService = contextFilterService;
     }
 
-    public async Task ExecuteAsync(TriggerItem item, ExecutionOverride executionOverride = ExecutionOverride.Standard)
+    public async Task ExecuteAsync(TriggerItem item, ExecutionOverride executionOverride = ExecutionOverride.Standard, IntPtr? targetHwnd = null)
     {
         if (item == null) return;
 
@@ -54,8 +54,18 @@ public class ShellActionExecutor : IActionExecutor
         {
             try
             {
-                var targetHwnd = _contextFilterService.GetForegroundWindowHandle();
-                await _snippetService.InjectSnippetAsync(item.Payload.SnippetTemplate, targetHwnd).ConfigureAwait(false);
+                var effectiveHwnd = targetHwnd ?? IntPtr.Zero;
+                if (effectiveHwnd == IntPtr.Zero)
+                {
+                    effectiveHwnd = _contextFilterService.LastExternalForegroundHwnd;
+                }
+                if (effectiveHwnd == IntPtr.Zero)
+                {
+                    effectiveHwnd = _contextFilterService.GetForegroundWindowHandle();
+                }
+
+                _logger.Information("Executing snippet '{Name}' for target window handle {Hwnd}", item.Name, effectiveHwnd);
+                await _snippetService.InjectSnippetAsync(item.Payload.SnippetTemplate, effectiveHwnd).ConfigureAwait(false);
                 ExecutionSucceeded?.Invoke(item, "Snippet injected into active window.");
             }
             catch (Exception ex)

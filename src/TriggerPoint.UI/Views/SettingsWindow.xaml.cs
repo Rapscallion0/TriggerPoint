@@ -301,6 +301,7 @@ public partial class SettingsWindow : Window
     private bool _isUpdatingForm;
     private bool _isItemDirty;
     private bool _isRevertingTreeSelection;
+    private readonly DispatcherTimer _snippetPreviewDebounceTimer;
 
     // TreeView drag & drop re-sorting
     private Point? _treeDragStartPoint;
@@ -350,6 +351,7 @@ public partial class SettingsWindow : Window
 
         HotkeyRecorder.BindingRecorded += HotkeyRecorder_BindingRecorded;
         _shortcutListener.ConflictsUpdated += (s, e) => Dispatcher.Invoke(RefreshTreeConflictStates);
+        _shortcutListener.SnoozeChanged += (s, isSnoozed) => Dispatcher.Invoke(UpdateSnoozeButtonUi);
 
         AllowedProcessesTagInput.TagsChanged += (s, e) =>
         {
@@ -394,7 +396,23 @@ public partial class SettingsWindow : Window
         ShellArgsBox.TextChanged += (s, e) => OnFormEdited();
         ShellWorkDirBox.TextChanged += (s, e) => OnFormEdited();
         ShellRunAsAdminCheck.Click += (s, e) => OnFormEdited();
-        SnippetTemplateBox.TextChanged += (s, e) => OnFormEdited();
+        
+        _snippetPreviewDebounceTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(150)
+        };
+        _snippetPreviewDebounceTimer.Tick += async (s, e) =>
+        {
+            _snippetPreviewDebounceTimer.Stop();
+            await UpdateSnippetLivePreviewAsync();
+        };
+
+        SnippetTemplateBox.TextChanged += (s, e) =>
+        {
+            OnFormEdited();
+            UpdateContextualTokenAssistant();
+            QueueSnippetLivePreviewUpdate();
+        };
         AcceleratorBox.TextChanged += (s, e) => OnFormEdited();
         PresentationModeCombo.SelectionChanged += (s, e) => OnFormEdited();
 
@@ -421,6 +439,10 @@ public partial class SettingsWindow : Window
         if (SaveBtn != null)
         {
             SaveBtn.IsEnabled = isDirty;
+        }
+        if (RevertItemBtn != null)
+        {
+            RevertItemBtn.IsEnabled = isDirty;
         }
     }
 
@@ -721,6 +743,7 @@ public partial class SettingsWindow : Window
                 if (DeleteItemBtn != null) DeleteItemBtn.Visibility = Visibility.Collapsed;
                 if (TestActionBtn != null) TestActionBtn.Visibility = Visibility.Collapsed;
                 if (SaveBtn != null) SaveBtn.IsEnabled = false;
+                if (RevertItemBtn != null) RevertItemBtn.Visibility = Visibility.Collapsed;
 
                 if (RecycleBinCountDetailText != null)
                 {
@@ -753,6 +776,7 @@ public partial class SettingsWindow : Window
                 if (DeleteItemBtn != null) DeleteItemBtn.Visibility = Visibility.Collapsed;
                 if (TestActionBtn != null) TestActionBtn.Visibility = Visibility.Collapsed;
                 if (SaveBtn != null) SaveBtn.IsEnabled = false;
+                if (RevertItemBtn != null) RevertItemBtn.Visibility = Visibility.Collapsed;
                 if (RestoreRecycledItemBtn != null) RestoreRecycledItemBtn.IsEnabled = true;
                 if (PermanentlyDeleteRecycledItemBtn != null) PermanentlyDeleteRecycledItemBtn.IsEnabled = true;
 
@@ -771,6 +795,11 @@ public partial class SettingsWindow : Window
                     EditorPanel.Opacity = 1.0;
                 }
                 if (DeleteItemBtn != null) DeleteItemBtn.Visibility = Visibility.Visible;
+                if (RevertItemBtn != null)
+                {
+                    RevertItemBtn.Visibility = Visibility.Visible;
+                    RevertItemBtn.IsEnabled = _isItemDirty;
+                }
                 if (TestActionBtn != null)
                 {
                     TestActionBtn.Visibility = item.ActionType == ActionType.Folder ? Visibility.Collapsed : Visibility.Visible;
@@ -814,6 +843,8 @@ public partial class SettingsWindow : Window
         finally
         {
             _isUpdatingForm = false;
+            UpdateContextualTokenAssistant();
+            QueueSnippetLivePreviewUpdate();
         }
     }
 
@@ -994,7 +1025,370 @@ public partial class SettingsWindow : Window
             SnippetTemplateBox.Text = SnippetTemplateBox.Text.Insert(caret, token);
             SnippetTemplateBox.CaretIndex = caret + token.Length;
             SnippetTemplateBox.Focus();
+            UpdateContextualTokenAssistant();
+            QueueSnippetLivePreviewUpdate();
         }
+    }
+
+    private void InsertTokenPreset_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { Tag: string token })
+        {
+            var caret = SnippetTemplateBox.CaretIndex;
+            SnippetTemplateBox.Text = SnippetTemplateBox.Text.Insert(caret, token);
+            SnippetTemplateBox.CaretIndex = caret + token.Length;
+            SnippetTemplateBox.Focus();
+            UpdateContextualTokenAssistant();
+            QueueSnippetLivePreviewUpdate();
+        }
+    }
+
+    private void SnippetTemplateBox_SelectionChanged(object sender, RoutedEventArgs e)
+    {
+        UpdateContextualTokenAssistant();
+    }
+
+    private void RefreshSnippetPreviewBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _ = UpdateSnippetLivePreviewAsync();
+    }
+
+    private void QueueSnippetLivePreviewUpdate()
+    {
+        _snippetPreviewDebounceTimer?.Stop();
+        _snippetPreviewDebounceTimer?.Start();
+    }
+
+    private async Task UpdateSnippetLivePreviewAsync()
+    {
+        if (SnippetLivePreviewText == null || SnippetPreviewStatsText == null) return;
+
+        var template = SnippetTemplateBox.Text;
+        if (string.IsNullOrWhiteSpace(template))
+        {
+            SnippetLivePreviewText.Text = "Type a snippet template above to see a real-time expansion preview...";
+            SnippetLivePreviewText.Foreground = Application.Current.TryFindResource("TextSecondaryBrush") as Brush ?? Brushes.Gray;
+            SnippetPreviewStatsText.Text = "0 chars • 0 tokens";
+            return;
+        }
+
+        try
+        {
+            string previewClip = string.Empty;
+            try
+            {
+                if (Clipboard.ContainsText())
+                {
+                    previewClip = Clipboard.GetText();
+                    if (previewClip.Length > 40) previewClip = previewClip[..37] + "...";
+                }
+            }
+            catch { }
+
+            if (string.IsNullOrEmpty(previewClip)) previewClip = "[Clipboard text]";
+
+            var evaluated = await PlaceholderParser.EvaluateAsync(
+                template,
+                clipboardProvider: () => Task.FromResult(previewClip),
+                referenceTime: DateTime.Now,
+                activeWindowTitle: "Example Window Title",
+                activeProcessName: "notepad.exe").ConfigureAwait(true);
+
+            var (clean, _) = PlaceholderParser.ProcessCursorPosition(evaluated);
+
+            SnippetLivePreviewText.Text = clean;
+            SnippetLivePreviewText.Foreground = Application.Current.TryFindResource("TextPrimaryBrush") as Brush ?? Brushes.White;
+
+            var tokenMatches = System.Text.RegularExpressions.Regex.Matches(template, @"\{[^{}]+\}");
+            SnippetPreviewStatsText.Text = $"{clean.Length} chars • {tokenMatches.Count} tokens";
+        }
+        catch (Exception ex)
+        {
+            SnippetLivePreviewText.Text = $"Preview error: {ex.Message}";
+            SnippetLivePreviewText.Foreground = Application.Current.TryFindResource("ErrorBrush") as Brush ?? Brushes.Red;
+        }
+    }
+
+    private void UpdateContextualTokenAssistant()
+    {
+        if (TokenAssistantBorder == null || AssistantOptionsPillsPanel == null) return;
+
+        var tokenInfo = GetTokenAtCaret();
+        if (tokenInfo == null)
+        {
+            AssistantBadgeBorder.Visibility = Visibility.Collapsed;
+            AssistantDescriptionText.Text = "Type '{' or move caret inside a token to see parameters and quick format options.";
+            AssistantOptionsPillsPanel.Children.Clear();
+            AssistantOptionsPillsPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var (start, end, fullToken, prefix, arg) = tokenInfo.Value;
+        AssistantOptionsPillsPanel.Children.Clear();
+
+        switch (prefix)
+        {
+            case "date":
+                AssistantBadgeBorder.Visibility = Visibility.Visible;
+                AssistantTokenBadge.Text = "{date:format}";
+                AssistantDescriptionText.Text = "Current date. Options: custom format (.NET specifiers) and relative offsets (+/- days, weeks, months).";
+                AddAssistantPill("MM/dd/yyyy (US)", "MM/dd/yyyy", start, end, prefix);
+                AddAssistantPill("dd/MM/yyyy (EU)", "dd/MM/yyyy", start, end, prefix);
+                AddAssistantPill("dddd, MMMM d, yyyy (Full)", "dddd, MMMM d, yyyy", start, end, prefix);
+                AddAssistantPill("yyyyMMdd (Compact)", "yyyyMMdd", start, end, prefix);
+                AddAssistantPill("+1d (Tomorrow)", "+1d", start, end, prefix);
+                AddAssistantPill("-1d (Yesterday)", "-1d", start, end, prefix);
+                AddAssistantPill("+7d (Next Week)", "+7d", start, end, prefix);
+                AddAssistantPill("+1m (Next Month)", "+1m", start, end, prefix);
+                AddAssistantPill("+1d:MM/dd/yyyy", "+1d:MM/dd/yyyy", start, end, prefix);
+                break;
+
+            case "tomorrow":
+                AssistantBadgeBorder.Visibility = Visibility.Visible;
+                AssistantTokenBadge.Text = "{tomorrow:format}";
+                AssistantDescriptionText.Text = "Tomorrow's date with optional format specifier.";
+                AddAssistantPill("MM/dd/yyyy", "MM/dd/yyyy", start, end, prefix);
+                AddAssistantPill("dddd, MMMM d", "dddd, MMMM d", start, end, prefix);
+                AddAssistantPill("yyyyMMdd", "yyyyMMdd", start, end, prefix);
+                break;
+
+            case "yesterday":
+                AssistantBadgeBorder.Visibility = Visibility.Visible;
+                AssistantTokenBadge.Text = "{yesterday:format}";
+                AssistantDescriptionText.Text = "Yesterday's date with optional format specifier.";
+                AddAssistantPill("MM/dd/yyyy", "MM/dd/yyyy", start, end, prefix);
+                AddAssistantPill("dddd, MMMM d", "dddd, MMMM d", start, end, prefix);
+                AddAssistantPill("yyyyMMdd", "yyyyMMdd", start, end, prefix);
+                break;
+
+            case "time":
+                AssistantBadgeBorder.Visibility = Visibility.Visible;
+                AssistantTokenBadge.Text = "{time:format}";
+                AssistantDescriptionText.Text = "Current time. Options: 12/24-hour specifiers and relative offsets (+/- hours, minutes).";
+                AddAssistantPill("HH:mm:ss (24-Hour)", "HH:mm:ss", start, end, prefix);
+                AddAssistantPill("hh:mm tt (12-Hour AM/PM)", "hh:mm tt", start, end, prefix);
+                AddAssistantPill("HH:mm (Short 24-Hour)", "HH:mm", start, end, prefix);
+                AddAssistantPill("+1h (One Hour Later)", "+1h:HH:mm", start, end, prefix);
+                AddAssistantPill("-30m (30 Mins Ago)", "-30m:HH:mm", start, end, prefix);
+                break;
+
+            case "datetime":
+                AssistantBadgeBorder.Visibility = Visibility.Visible;
+                AssistantTokenBadge.Text = "{datetime:format}";
+                AssistantDescriptionText.Text = "Current date and time combined.";
+                AddAssistantPill("yyyy-MM-ddTHH:mm:ss (ISO)", "yyyy-MM-ddTHH:mm:ss", start, end, prefix);
+                AddAssistantPill("MM/dd/yyyy hh:mm tt", "MM/dd/yyyy hh:mm tt", start, end, prefix);
+                AddAssistantPill("yyyy-MM-dd HH:mm", "yyyy-MM-dd HH:mm", start, end, prefix);
+                break;
+
+            case "guid":
+            case "uuid":
+                AssistantBadgeBorder.Visibility = Visibility.Visible;
+                AssistantTokenBadge.Text = "{guid:modifier}";
+                AssistantDescriptionText.Text = "Generates a unique identifier with optional casing and format.";
+                AddAssistantPill("upper (Uppercase)", "upper", start, end, prefix);
+                AddAssistantPill("N (32 Digits No Hyphens)", "N", start, end, prefix);
+                AddAssistantPill("B (Braced)", "B", start, end, prefix);
+                AddAssistantPill("P (Parentheses)", "P", start, end, prefix);
+                AddAssistantPill("N:upper (Compact Uppercase)", "N:upper", start, end, prefix);
+                break;
+
+            case "clipboard":
+                AssistantBadgeBorder.Visibility = Visibility.Visible;
+                AssistantTokenBadge.Text = "{clipboard:modifier}";
+                AssistantDescriptionText.Text = "Inserts current clipboard text with optional transformation modifier.";
+                AddAssistantPill("trim (Strip Whitespace)", "trim", start, end, prefix);
+                AddAssistantPill("upper (UPPERCASE)", "upper", start, end, prefix);
+                AddAssistantPill("lower (lowercase)", "lower", start, end, prefix);
+                AddAssistantPill("urlencode (URL-Safe)", "urlencode", start, end, prefix);
+                AddAssistantPill("urldecode (Decoded)", "urldecode", start, end, prefix);
+                break;
+
+            case "env":
+                AssistantBadgeBorder.Visibility = Visibility.Visible;
+                AssistantTokenBadge.Text = "{env:VARIABLE_NAME}";
+                AssistantDescriptionText.Text = "Resolves a Windows environment variable.";
+                AddAssistantPill("USERPROFILE", "USERPROFILE", start, end, prefix);
+                AddAssistantPill("TEMP", "TEMP", start, end, prefix);
+                AddAssistantPill("APPDATA", "APPDATA", start, end, prefix);
+                AddAssistantPill("COMPUTERNAME", "COMPUTERNAME", start, end, prefix);
+                AddAssistantPill("PATH", "PATH", start, end, prefix);
+                break;
+
+            case "random":
+                AssistantBadgeBorder.Visibility = Visibility.Visible;
+                AssistantTokenBadge.Text = "{random:min,max}";
+                AssistantDescriptionText.Text = "Generates a random integer or picks from comma-separated options.";
+                AddAssistantPill("1000,9999 (4-Digit PIN)", "1000,9999", start, end, prefix);
+                AddAssistantPill("1,100", "1,100", start, end, prefix);
+                AddAssistantPill("yes,no,maybe", "yes,no,maybe", start, end, prefix);
+                break;
+
+            case "text":
+                AssistantBadgeBorder.Visibility = Visibility.Visible;
+                AssistantTokenBadge.Text = "{text:Label|DefaultValue}";
+                AssistantDescriptionText.Text = "Single-line interactive input prompt. Add '|Default' to pre-populate.";
+                AddAssistantPill("Label|Default", "Label|Default", start, end, prefix);
+                AddAssistantPill("Client Name|Acme Corp", "Client Name|Acme Corp", start, end, prefix);
+                break;
+
+            case "multiline":
+                AssistantBadgeBorder.Visibility = Visibility.Visible;
+                AssistantTokenBadge.Text = "{multiline:Label|DefaultText}";
+                AssistantDescriptionText.Text = "Multi-line text prompt dialog. Add '|Default' to pre-populate boilerplate text.";
+                AddAssistantPill("Notes|Template notes here", "Notes|Template notes here", start, end, prefix);
+                break;
+
+            case "choice":
+                AssistantBadgeBorder.Visibility = Visibility.Visible;
+                AssistantTokenBadge.Text = "{choice:Label|Opt1=Val1,Opt2*=Val2}";
+                AssistantDescriptionText.Text = "Dropdown selection prompt. Append '*' to an option (e.g. Staging*=stg) to mark as default.";
+                AddAssistantPill("Env|Prod=prod,Staging*=stg,Dev=dev", "Env|Prod=prod,Staging*=stg,Dev=dev", start, end, prefix);
+                AddAssistantPill("Status|Open,In Progress*,Resolved", "Status|Open,In Progress*,Resolved", start, end, prefix);
+                break;
+
+            case "number":
+                AssistantBadgeBorder.Visibility = Visibility.Visible;
+                AssistantTokenBadge.Text = "{number:Label|min,max|default}";
+                AssistantDescriptionText.Text = "Numeric input prompt with optional min, max range and default number.";
+                AddAssistantPill("Retries|1,10|3", "Retries|1,10|3", start, end, prefix);
+                AddAssistantPill("Age|0,120|25", "Age|0,120|25", start, end, prefix);
+                AddAssistantPill("Quantity|1,100", "Quantity|1,100", start, end, prefix);
+                break;
+
+            case "date_picker":
+                AssistantBadgeBorder.Visibility = Visibility.Visible;
+                AssistantTokenBadge.Text = "{date_picker:Label|Format}";
+                AssistantDescriptionText.Text = "Calendar date picker prompt. Options: custom format (.NET specifiers) and relative offsets (+/- days, weeks).";
+                AddAssistantPill("Due Date|MM/dd/yyyy (US)", "DueDate|MM/dd/yyyy", start, end, prefix);
+                AddAssistantPill("Due Date|dd/MM/yyyy (EU)", "DueDate|dd/MM/yyyy", start, end, prefix);
+                AddAssistantPill("Due Date|yyyy-MM-dd (ISO)", "DueDate|yyyy-MM-dd", start, end, prefix);
+                AddAssistantPill("Due Date|yyyyMMdd (Compact)", "DueDate|yyyyMMdd", start, end, prefix);
+                AddAssistantPill("Due Date|dddd, MMMM d, yyyy (Full)", "DueDate|dddd, MMMM d, yyyy", start, end, prefix);
+                AddAssistantPill("Due Date|MM/dd/yyyy|+1d (Tomorrow)", "DueDate|MM/dd/yyyy|+1d", start, end, prefix);
+                AddAssistantPill("Due Date|MM/dd/yyyy|+7d (Next Week)", "DueDate|MM/dd/yyyy|+7d", start, end, prefix);
+                break;
+
+            case "username":
+            case "user":
+                AssistantBadgeBorder.Visibility = Visibility.Visible;
+                AssistantTokenBadge.Text = "{username}";
+                AssistantDescriptionText.Text = $"Inserts the current Windows username ({Environment.UserName}).";
+                break;
+
+            case "machine":
+            case "computer":
+                AssistantBadgeBorder.Visibility = Visibility.Visible;
+                AssistantTokenBadge.Text = "{machine}";
+                AssistantDescriptionText.Text = $"Inserts the computer hostname ({Environment.MachineName}).";
+                break;
+
+            case "active_window":
+                AssistantBadgeBorder.Visibility = Visibility.Visible;
+                AssistantTokenBadge.Text = "{active_window}";
+                AssistantDescriptionText.Text = "Inserts the window title of the target application window that triggered the shortcut.";
+                break;
+
+            case "active_process":
+                AssistantBadgeBorder.Visibility = Visibility.Visible;
+                AssistantTokenBadge.Text = "{active_process}";
+                AssistantDescriptionText.Text = "Inserts the executable filename of the target application (e.g. Code.exe, chrome.exe).";
+                break;
+
+            case "cursor":
+                AssistantBadgeBorder.Visibility = Visibility.Visible;
+                AssistantTokenBadge.Text = "{cursor}";
+                AssistantDescriptionText.Text = "Positions the text caret at this position after pasting snippet text.";
+                break;
+
+            default:
+                AssistantBadgeBorder.Visibility = Visibility.Visible;
+                AssistantTokenBadge.Text = $"{{{prefix}}}";
+                AssistantDescriptionText.Text = "Dynamic snippet token.";
+                break;
+        }
+
+        AssistantOptionsPillsPanel.Visibility = AssistantOptionsPillsPanel.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void AddAssistantPill(string displayLabel, string parameterValue, int tokenStart, int tokenEnd, string prefix)
+    {
+        var btn = new Button
+        {
+            Content = displayLabel,
+            Style = Application.Current.TryFindResource("TokenAssistantPillStyle") as Style,
+            ToolTip = $"Apply '{parameterValue}' to {{{prefix}}}"
+        };
+
+        btn.Click += (s, e) =>
+        {
+            string replacement = string.IsNullOrEmpty(parameterValue) ? $"{{{prefix}}}" : $"{{{prefix}:{parameterValue}}}";
+            var text = SnippetTemplateBox.Text;
+            if (tokenStart >= 0 && tokenEnd <= text.Length && tokenStart <= tokenEnd)
+            {
+                SnippetTemplateBox.Text = text.Remove(tokenStart, tokenEnd - tokenStart).Insert(tokenStart, replacement);
+                SnippetTemplateBox.CaretIndex = tokenStart + replacement.Length;
+                SnippetTemplateBox.Focus();
+                UpdateContextualTokenAssistant();
+                QueueSnippetLivePreviewUpdate();
+            }
+        };
+
+        AssistantOptionsPillsPanel.Children.Add(btn);
+    }
+
+    private (int Start, int End, string FullToken, string Prefix, string Arg)? GetTokenAtCaret()
+    {
+        var text = SnippetTemplateBox.Text;
+        if (string.IsNullOrEmpty(text)) return null;
+        var caret = Math.Clamp(SnippetTemplateBox.CaretIndex, 0, text.Length);
+
+        // Search backwards for '{'
+        int start = -1;
+        for (int i = caret - 1; i >= 0; i--)
+        {
+            if (text[i] == '}') break; // already closed before caret
+            if (text[i] == '{')
+            {
+                start = i;
+                break;
+            }
+        }
+        if (start == -1)
+        {
+            if (caret < text.Length && text[caret] == '{')
+            {
+                start = caret;
+            }
+            else
+            {
+                return null;
+            }
+        }
+
+        // Search forwards for '}'
+        int end = -1;
+        for (int i = start + 1; i < text.Length; i++)
+        {
+            if (text[i] == '{') break;
+            if (text[i] == '}')
+            {
+                end = i + 1;
+                break;
+            }
+        }
+        if (end == -1)
+        {
+            end = text.Length;
+        }
+
+        var fullToken = text[start..end];
+        var inner = fullToken.TrimStart('{').TrimEnd('}').Trim();
+        var colonIdx = inner.IndexOf(':');
+        var prefix = colonIdx > 0 ? inner[..colonIdx].Trim().ToLowerInvariant() : inner.ToLowerInvariant();
+        var arg = colonIdx > 0 ? inner[(colonIdx + 1)..].Trim() : string.Empty;
+
+        return (start, end, fullToken, prefix, arg);
     }
 
     private void BrowseFileBtn_Click(object sender, RoutedEventArgs e)
@@ -1082,6 +1476,17 @@ public partial class SettingsWindow : Window
     private async void SaveBtn_Click(object sender, RoutedEventArgs e)
     {
         await SaveConfigurationCoreAsync();
+    }
+
+    private void RevertItemBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedItem == null || _originalItemSnapshot == null) return;
+
+        RestoreItemFromSnapshot(_selectedItem, _originalItemSnapshot);
+        PopulateForm(_selectedItem);
+        FindViewModel(_selectedItem)?.NotifyUpdated();
+        SetDirty(false);
+        StatusText.Text = $"Reverted unsaved changes to '{_selectedItem.Name}'.";
     }
 
     private async void AppSettingsBtn_Click(object sender, RoutedEventArgs e)
@@ -2001,7 +2406,6 @@ public partial class SettingsWindow : Window
     private void SnoozeToggleBtn_Click(object sender, RoutedEventArgs e)
     {
         _shortcutListener.IsSnoozed = !_shortcutListener.IsSnoozed;
-        UpdateSnoozeButtonUi();
     }
 
     private void UpdateSnoozeButtonUi()

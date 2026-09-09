@@ -44,6 +44,7 @@ public partial class CursorContextMenuView : Window
 {
     private readonly List<TriggerItem> _allItems;
     private readonly IActionExecutor _executor;
+    private readonly IntPtr _targetHwnd;
     private readonly Stack<TriggerItem?> _navHistory = new();
     private TriggerItem? _currentFolder;
     private List<CursorMenuItemViewModel> _displayedItems = new();
@@ -55,12 +56,14 @@ public partial class CursorContextMenuView : Window
     public CursorContextMenuView(
         IEnumerable<TriggerItem> allItems, 
         IActionExecutor executor, 
-        TriggerItem? initialFolder = null)
+        TriggerItem? initialFolder = null,
+        IntPtr targetHwnd = default)
     {
         InitializeComponent();
         _executor = executor;
         _allItems = allItems.ToList();
         _currentFolder = initialFolder;
+        _targetHwnd = targetHwnd;
 
         RenderCurrentFolder();
         Loaded += CursorContextMenuView_Loaded;
@@ -242,7 +245,7 @@ public partial class CursorContextMenuView : Window
             }
             else
             {
-                Close();
+                SafeClose();
             }
             e.Handled = true;
             return;
@@ -401,14 +404,27 @@ public partial class CursorContextMenuView : Window
         }
     }
 
+    private bool _isClosing;
+
+    private void SafeClose()
+    {
+        if (_isClosing) return;
+        _isClosing = true;
+        try
+        {
+            Close();
+        }
+        catch { }
+    }
+
     private void ExecuteItem(TriggerItem item, ExecutionOverride executionOverride)
     {
-        Close();
-        _ = _executor.ExecuteAsync(item, executionOverride);
+        SafeClose();
+        _ = _executor.ExecuteAsync(item, executionOverride, _targetHwnd);
     }
 
     private void Window_Deactivated(object sender, EventArgs e)
     {
-        Close();
+        SafeClose();
     }
 }

@@ -24,6 +24,7 @@ public class TrayIconService : IDisposable
     private readonly Action _reloadConfigAction;
     private readonly Action _exitAction;
 
+    private readonly ToolStripMenuItem _settingsMenuItem;
     private readonly ToolStripMenuItem _paletteMenuItem;
     private readonly ToolStripMenuItem _snoozeMenuItem;
     private Icon? _currentGeneratedIcon;
@@ -35,7 +36,8 @@ public class TrayIconService : IDisposable
         Action reloadConfigAction,
         Action exitAction,
         Action? openAppSettingsAction = null,
-        string? commandPaletteHotkeyText = "Alt+Space")
+        string? commandPaletteHotkeyText = "Alt+Space",
+        string? openSettingsHotkeyText = "Ctrl+Alt+T")
     {
         _shortcutListener = shortcutListener;
         _openSettingsAction = openSettingsAction;
@@ -52,11 +54,11 @@ public class TrayIconService : IDisposable
 
         var contextMenu = new ContextMenuStrip();
 
-        var settingsItem = new ToolStripMenuItem("Action Settings...", null, (s, e) => _openSettingsAction())
+        _settingsMenuItem = new ToolStripMenuItem(FormatSettingsMenuText(openSettingsHotkeyText), null, (s, e) => _openSettingsAction())
         {
             Font = new Font(contextMenu.Font, FontStyle.Bold)
         };
-        contextMenu.Items.Add(settingsItem);
+        contextMenu.Items.Add(_settingsMenuItem);
 
         if (_openAppSettingsAction != null)
         {
@@ -69,20 +71,13 @@ public class TrayIconService : IDisposable
 
         contextMenu.Items.Add(new ToolStripSeparator());
 
-        ToolStripMenuItem? snoozeItem = null;
-        snoozeItem = new ToolStripMenuItem("Snooze Global Hotkeys", null, (s, e) =>
+        _snoozeMenuItem = new ToolStripMenuItem("Snooze Global Hotkeys", null, (s, e) =>
         {
             _shortcutListener.IsSnoozed = !_shortcutListener.IsSnoozed;
-            if (snoozeItem != null)
-            {
-                snoozeItem.Checked = _shortcutListener.IsSnoozed;
-            }
-            UpdateTrayIcon();
         })
         {
             Checked = _shortcutListener.IsSnoozed
         };
-        _snoozeMenuItem = snoozeItem;
         contextMenu.Items.Add(_snoozeMenuItem);
 
         var reloadItem = new ToolStripMenuItem("Reload Configuration", null, (s, e) => _reloadConfigAction());
@@ -97,6 +92,7 @@ public class TrayIconService : IDisposable
         _notifyIcon.DoubleClick += (s, e) => _openSettingsAction();
 
         _shortcutListener.ConflictsUpdated += (s, e) => UpdateTrayIcon();
+        _shortcutListener.SnoozeChanged += (s, isSnoozed) => UpdateTrayIcon();
 
         UpdateTrayIcon();
     }
@@ -119,7 +115,35 @@ public class TrayIconService : IDisposable
         _notifyIcon.Icon = _currentGeneratedIcon;
         oldIcon?.Dispose();
 
-        _snoozeMenuItem.Checked = _shortcutListener.IsSnoozed;
+        if (_snoozeMenuItem != null)
+        {
+            _snoozeMenuItem.Checked = _shortcutListener.IsSnoozed;
+            _snoozeMenuItem.Text = _shortcutListener.IsSnoozed ? "Snooze Global Hotkeys (Snoozed)" : "Snooze Global Hotkeys";
+            var oldMenuImage = _snoozeMenuItem.Image;
+            _snoozeMenuItem.Image = RenderSnoozeMenuImage(_shortcutListener.IsSnoozed);
+            oldMenuImage?.Dispose();
+        }
+    }
+
+    public static Image RenderSnoozeMenuImage(bool isSnoozed)
+    {
+        var bmp = new Bitmap(16, 16);
+        using var g = Graphics.FromImage(bmp);
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+
+        // Status indicator dot with subtle rim
+        var dotColor = isSnoozed 
+            ? Color.FromArgb(245, 158, 11)   // Warning Amber #F59E0B
+            : Color.FromArgb(16, 185, 129);  // Success Emerald #10B981
+
+        using var brush = new SolidBrush(dotColor);
+        g.FillEllipse(brush, 4f, 4f, 8f, 8f);
+
+        using var pen = new Pen(Color.FromArgb(90, 255, 255, 255), 1f);
+        g.DrawEllipse(pen, 4f, 4f, 8f, 8f);
+
+        return bmp;
     }
 
     public static Icon RenderReticleIcon(TrayIconStatus status, bool isDarkTaskbar = true)
@@ -184,6 +208,18 @@ public class TrayIconService : IDisposable
             : $"Command Palette ({hotkeyDisplayText})";
     }
 
+    public void UpdateOpenSettingsHotkey(string? hotkeyDisplayText)
+    {
+        _settingsMenuItem.Text = FormatSettingsMenuText(hotkeyDisplayText);
+    }
+
+    private static string FormatSettingsMenuText(string? hotkeyDisplayText)
+    {
+        return string.IsNullOrWhiteSpace(hotkeyDisplayText)
+            ? "Action Manager"
+            : $"Action Manager ({hotkeyDisplayText})";
+    }
+
     public void ShowNotification(string title, string message, ToolTipIcon icon = ToolTipIcon.Info)
     {
         _notifyIcon.ShowBalloonTip(3000, title, message, icon);
@@ -192,6 +228,7 @@ public class TrayIconService : IDisposable
     public void Dispose()
     {
         _notifyIcon.Visible = false;
+        _snoozeMenuItem?.Image?.Dispose();
         _notifyIcon.Dispose();
         _currentGeneratedIcon?.Dispose();
         GC.SuppressFinalize(this);

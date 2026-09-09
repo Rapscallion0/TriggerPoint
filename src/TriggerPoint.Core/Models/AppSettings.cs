@@ -19,6 +19,12 @@ public enum ThemePreference
     Light
 }
 
+public enum ToastMonitorPlacement
+{
+    PrimaryMonitor,
+    ActiveMonitor
+}
+
 public class AppSettings
 {
     public LogLevelOption LogLevel { get; set; } = LogLevelOption.Information;
@@ -31,12 +37,16 @@ public class AppSettings
     public ShortcutBinding? CommandPaletteHotkey { get; set; } = new(ModifierKeys.Alt, 32, "Space");
     public ThemePreference Theme { get; set; } = ThemePreference.System;
     public bool ShowSuccessToasts { get; set; } = true;
+    public ToastMonitorPlacement ToastPlacement { get; set; } = ToastMonitorPlacement.PrimaryMonitor;
     public bool ValidateShortcutsOnStartup { get; set; } = true;
+    public int LogSplitThresholdMb { get; set; } = 100;
 
     public void Normalize()
     {
         if (LogRetentionDays < 1) LogRetentionDays = 1;
         if (LogRetentionDays > 90) LogRetentionDays = 90;
         if (RecycleBinRetentionDays < 0) RecycleBinRetentionDays = 0;
+        if (LogSplitThresholdMb < 10) LogSplitThresholdMb = 10;
+        if (LogSplitThresholdMb > 1024) LogSplitThresholdMb = 1024;
     }
 }

@@ -84,6 +84,7 @@ public partial class CommandPaletteView : Window
 {
     private readonly List<TriggerItem> _allItems;
     private readonly IActionExecutor _executor;
+    private readonly IntPtr _targetHwnd;
     private readonly Guid? _scopedFolderId;
     private readonly Dictionary<Guid, string> _folderPaths;
 
@@ -91,10 +92,12 @@ public partial class CommandPaletteView : Window
         IEnumerable<TriggerItem> items, 
         IActionExecutor executor, 
         Guid? scopedFolderId = null,
-        string? scopedFolderName = null)
+        string? scopedFolderName = null,
+        IntPtr targetHwnd = default)
     {
         InitializeComponent();
         _executor = executor;
+        _targetHwnd = targetHwnd;
         _scopedFolderId = scopedFolderId;
         _folderPaths = BuildFolderPaths(items);
 
@@ -191,7 +194,7 @@ public partial class CommandPaletteView : Window
 
         if (key == Key.Escape)
         {
-            Close();
+            SafeClose();
             e.Handled = true;
             return;
         }
@@ -250,6 +253,19 @@ public partial class CommandPaletteView : Window
         return ExecutionOverride.Standard;
     }
 
+    private bool _isClosing;
+
+    private void SafeClose()
+    {
+        if (_isClosing) return;
+        _isClosing = true;
+        try
+        {
+            Close();
+        }
+        catch { }
+    }
+
     private void ResultsListBox_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
         ExecuteCurrentSelection(DetermineOverride());
@@ -259,13 +275,13 @@ public partial class CommandPaletteView : Window
     {
         if (ResultsListBox.SelectedItem is PaletteItemViewModel vm)
         {
-            Close();
-            _ = _executor.ExecuteAsync(vm.Item, executionOverride);
+            SafeClose();
+            _ = _executor.ExecuteAsync(vm.Item, executionOverride, _targetHwnd);
         }
     }
 
     private void Window_Deactivated(object sender, EventArgs e)
     {
-        Close();
+        SafeClose();
     }
 }

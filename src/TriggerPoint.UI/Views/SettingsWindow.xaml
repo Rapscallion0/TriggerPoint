@@ -474,10 +474,21 @@
                             <Button x:Name="SaveBtn"
                                     Content="💾 Save" 
                                     Style="{StaticResource AccentButtonStyle}" 
-                                    Margin="0,0,8,0"
+                                    Margin="0,0,6,0"
                                     IsEnabled="False"
                                     ToolTip="Save all changes to disk and register hotkeys with Windows"
                                     Click="SaveBtn_Click"/>
+
+                            <Button x:Name="RevertItemBtn"
+                                    Content="↺" 
+                                    Style="{StaticResource SecondaryButtonStyle}" 
+                                    Margin="0,0,8,0"
+                                    Width="34" Height="34"
+                                    Padding="0"
+                                    FontSize="16"
+                                    IsEnabled="False"
+                                    ToolTip="Revert unsaved changes to this item"
+                                    Click="RevertItemBtn_Click"/>
 
                             <Button x:Name="TestActionBtn"
                                     Content="▶ Test" 
@@ -681,7 +692,9 @@
                             Padding="16" 
                             Margin="0,0,0,16">
                         <StackPanel>
-                            <TextBlock Text="Shell Execution Payload" FontWeight="Bold" FontSize="14" Margin="0,0,0,12"/>
+                            <TextBlock Text="Shell Execution Payload" FontWeight="Bold" FontSize="14" Margin="0,0,0,0"/>
+
+                            <Border Height="1" Background="{DynamicResource BorderSubtleBrush}" Margin="0,8,0,12" SnapsToDevicePixels="True"/>
 
                             <!-- Drag and Drop Target Area & Window Crosshair -->
                             <Border x:Name="DropTargetZone"
@@ -816,21 +829,74 @@
                             Margin="0,0,0,16" 
                             Visibility="Collapsed">
                         <StackPanel>
-                            <TextBlock Text="Snippet Template" FontWeight="Bold" FontSize="14" Margin="0,0,0,6"/>
-                            <TextBlock Text="Supports dynamic tokens and interactive prompts." FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,10"/>
+                            <TextBlock Text="Snippet Template" FontWeight="Bold" FontSize="14" Margin="0,0,0,4"/>
+                            <TextBlock Text="Supports dynamic tokens and interactive prompts." FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,0"/>
+
+                            <Border Height="1" Background="{DynamicResource BorderSubtleBrush}" Margin="0,8,0,12" SnapsToDevicePixels="True"/>
 
                             <!-- Quick Insert Token Chips -->
                             <WrapPanel Margin="0,0,0,8">
-                                <Button Content="+ {date}" Style="{StaticResource TokenChipDateStyle}" Margin="0,0,5,5" ToolTip="Inserts current date (yyyy-MM-dd)" Click="InsertTokenChip_Click" Tag="{}{date}"/>
-                                <Button Content="+ {time}" Style="{StaticResource TokenChipDateStyle}" Margin="0,0,5,5" ToolTip="Inserts current time (HH:mm:ss)" Click="InsertTokenChip_Click" Tag="{}{time}"/>
-                                <Button Content="+ {datetime}" Style="{StaticResource TokenChipDateStyle}" Margin="0,0,5,5" ToolTip="Inserts current date and time (yyyy-MM-dd HH:mm:ss)" Click="InsertTokenChip_Click" Tag="{}{datetime}"/>
-                                <Button Content="+ {clipboard}" Style="{StaticResource TokenChipClipStyle}" Margin="0,0,5,5" ToolTip="Inserts current clipboard text" Click="InsertTokenChip_Click" Tag="{}{clipboard}"/>
+                                <Button Content="+ {date} ▾" Style="{StaticResource TokenChipDateStyle}" Margin="0,0,5,5" ToolTip="Left-click to insert {date}. Right-click for presets." Click="InsertTokenChip_Click" Tag="{}{date}">
+                                    <Button.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="Standard: {date} (2026-09-09)" Click="InsertTokenPreset_Click" Tag="{}{date}"/>
+                                            <MenuItem Header="US Format: {date:MM/dd/yyyy}" Click="InsertTokenPreset_Click" Tag="{}{date:MM/dd/yyyy}"/>
+                                            <MenuItem Header="European: {date:dd/MM/yyyy}" Click="InsertTokenPreset_Click" Tag="{}{date:dd/MM/yyyy}"/>
+                                            <MenuItem Header="Full Day &amp; Date: {date:dddd, MMMM d, yyyy}" Click="InsertTokenPreset_Click" Tag="{}{date:dddd, MMMM d, yyyy}"/>
+                                            <Separator/>
+                                            <MenuItem Header="Tomorrow: {date:+1d}" Click="InsertTokenPreset_Click" Tag="{}{date:+1d}"/>
+                                            <MenuItem Header="Yesterday: {date:-1d}" Click="InsertTokenPreset_Click" Tag="{}{date:-1d}"/>
+                                            <MenuItem Header="Next Week: {date:+7d}" Click="InsertTokenPreset_Click" Tag="{}{date:+7d}"/>
+                                            <MenuItem Header="Next Month: {date:+1m}" Click="InsertTokenPreset_Click" Tag="{}{date:+1m}"/>
+                                        </ContextMenu>
+                                    </Button.ContextMenu>
+                                </Button>
+
+                                <Button Content="+ {time} ▾" Style="{StaticResource TokenChipDateStyle}" Margin="0,0,5,5" ToolTip="Left-click to insert {time}. Right-click for presets." Click="InsertTokenChip_Click" Tag="{}{time}">
+                                    <Button.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="24-Hour with seconds: {time} (14:30:15)" Click="InsertTokenPreset_Click" Tag="{}{time}"/>
+                                            <MenuItem Header="12-Hour AM/PM: {time:hh:mm tt} (02:30 PM)" Click="InsertTokenPreset_Click" Tag="{}{time:hh:mm tt}"/>
+                                            <MenuItem Header="24-Hour short: {time:HH:mm} (14:30)" Click="InsertTokenPreset_Click" Tag="{}{time:HH:mm}"/>
+                                            <Separator/>
+                                            <MenuItem Header="One hour later: {time:+1h:HH:mm}" Click="InsertTokenPreset_Click" Tag="{}{time:+1h:HH:mm}"/>
+                                        </ContextMenu>
+                                    </Button.ContextMenu>
+                                </Button>
+
+                                <Button Content="+ {datetime}" Style="{StaticResource TokenChipDateStyle}" Margin="0,0,5,5" ToolTip="Inserts current date and time (yyyy-MM-dd HH:mm:ss). Custom formats: {datetime:yyyy-MM-ddTHH:mm:ss}" Click="InsertTokenChip_Click" Tag="{}{datetime}"/>
+                                
+                                <Button Content="+ {guid} ▾" Style="{StaticResource TokenChipClipStyle}" Margin="0,0,5,5" ToolTip="Left-click to insert {guid}. Right-click for presets." Click="InsertTokenChip_Click" Tag="{}{guid}">
+                                    <Button.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="Standard Hyphenated: {guid}" Click="InsertTokenPreset_Click" Tag="{}{guid}"/>
+                                            <MenuItem Header="Uppercase: {guid:upper}" Click="InsertTokenPreset_Click" Tag="{}{guid:upper}"/>
+                                            <MenuItem Header="Compact 32-Hex: {guid:N}" Click="InsertTokenPreset_Click" Tag="{}{guid:N}"/>
+                                            <MenuItem Header="Braced: {guid:B}" Click="InsertTokenPreset_Click" Tag="{}{guid:B}"/>
+                                        </ContextMenu>
+                                    </Button.ContextMenu>
+                                </Button>
+
+                                <Button Content="+ {clipboard}" Style="{StaticResource TokenChipClipStyle}" Margin="0,0,5,5" ToolTip="Inserts current clipboard text. Modifiers: {clipboard:trim}, {clipboard:upper}, {clipboard:urlencode}" Click="InsertTokenChip_Click" Tag="{}{clipboard}"/>
+                                <Button Content="+ {username}" Style="{StaticResource TokenChipClipStyle}" Margin="0,0,5,5" ToolTip="Inserts current Windows username. Also supports {machine} and {env:VARIABLE}" Click="InsertTokenChip_Click" Tag="{}{username}"/>
+                                <Button Content="+ {active_window}" Style="{StaticResource TokenChipClipStyle}" Margin="0,0,5,5" ToolTip="Inserts active window title. Also supports {active_process}" Click="InsertTokenChip_Click" Tag="{}{active_window}"/>
                                 <Button Content="+ {cursor}" Style="{StaticResource TokenChipClipStyle}" Margin="0,0,5,5" ToolTip="Positions the cursor caret here post-paste" Click="InsertTokenChip_Click" Tag="{}{cursor}"/>
-                                <Button Content="+ {text:Label}" Style="{StaticResource TokenChipPromptStyle}" Margin="0,0,5,5" ToolTip="Prompts for a single-line text input" Click="InsertTokenChip_Click" Tag="{}{text:Label}"/>
-                                <Button Content="+ {choice:Label|Opt1=Val1,Opt2}" Style="{StaticResource TokenChipPromptStyle}" Margin="0,0,5,5" ToolTip="Prompts for a single selection from friendly options mapped to values" Click="InsertTokenChip_Click" Tag="{}{choice:Label|Opt1=Val1,Opt2}"/>
-                                <Button Content="+ {number:Label|1,10}" Style="{StaticResource TokenChipPromptStyle}" Margin="0,0,5,5" ToolTip="Prompts for a numeric value with range limits" Click="InsertTokenChip_Click" Tag="{}{number:Label|1,10}"/>
-                                <Button Content="+ {multiline:Label}" Style="{StaticResource TokenChipPromptStyle}" Margin="0,0,5,5" ToolTip="Prompts for multi-line text input" Click="InsertTokenChip_Click" Tag="{}{multiline:Label}"/>
-                                <Button Content="+ {date_picker:Label}" Style="{StaticResource TokenChipPromptStyle}" Margin="0,0,5,5" ToolTip="Prompts with an interactive date picker" Click="InsertTokenChip_Click" Tag="{}{date_picker:Label}"/>
+                                <Button Content="+ {text:Label}" Style="{StaticResource TokenChipPromptStyle}" Margin="0,0,5,5" ToolTip="Prompts for a single-line text input. Supports defaults: {text:Label|Default}" Click="InsertTokenChip_Click" Tag="{}{text:Label}"/>
+                                <Button Content="+ {choice:Label|Opt1=Val1,Opt2}" Style="{StaticResource TokenChipPromptStyle}" Margin="0,0,5,5" ToolTip="Prompts for a single selection. Supports default: {choice:Label|Opt1=Val1*,Opt2}" Click="InsertTokenChip_Click" Tag="{}{choice:Label|Opt1=Val1,Opt2}"/>
+                                <Button Content="+ {number:Label|1,10}" Style="{StaticResource TokenChipPromptStyle}" Margin="0,0,5,5" ToolTip="Prompts for a numeric value with range limits: {number:Label|min,max|default}" Click="InsertTokenChip_Click" Tag="{}{number:Label|1,10}"/>
+                                <Button Content="+ {multiline:Label}" Style="{StaticResource TokenChipPromptStyle}" Margin="0,0,5,5" ToolTip="Prompts for multi-line text input. Supports defaults: {multiline:Label|Default}" Click="InsertTokenChip_Click" Tag="{}{multiline:Label}"/>
+                                <Button Content="+ {date_picker:Label} ▾" Style="{StaticResource TokenChipPromptStyle}" Margin="0,0,5,5" ToolTip="Prompts with an interactive date picker. Supports custom formats: {date_picker:Label|Format}" Click="InsertTokenChip_Click" Tag="{}{date_picker:DueDate}">
+                                    <Button.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="Standard: {date_picker:DueDate|yyyy-MM-dd}" Tag="{}{date_picker:DueDate|yyyy-MM-dd}" Click="InsertTokenPreset_Click"/>
+                                            <MenuItem Header="US Format: {date_picker:DueDate|MM/dd/yyyy}" Tag="{}{date_picker:DueDate|MM/dd/yyyy}" Click="InsertTokenPreset_Click"/>
+                                            <MenuItem Header="EU Format: {date_picker:DueDate|dd/MM/yyyy}" Tag="{}{date_picker:DueDate|dd/MM/yyyy}" Click="InsertTokenPreset_Click"/>
+                                            <MenuItem Header="Compact: {date_picker:DueDate|yyyyMMdd}" Tag="{}{date_picker:DueDate|yyyyMMdd}" Click="InsertTokenPreset_Click"/>
+                                            <MenuItem Header="Full Date: {date_picker:DueDate|dddd, MMMM d, yyyy}" Tag="{}{date_picker:DueDate|dddd, MMMM d, yyyy}" Click="InsertTokenPreset_Click"/>
+                                            <MenuItem Header="Next Week: {date_picker:DueDate|MM/dd/yyyy|+7d}" Tag="{}{date_picker:DueDate|MM/dd/yyyy|+7d}" Click="InsertTokenPreset_Click"/>
+                                        </ContextMenu>
+                                    </Button.ContextMenu>
+                                </Button>
                             </WrapPanel>
 
                             <!-- Snippet Editor -->
@@ -838,11 +904,121 @@
                                      Style="{StaticResource ModernTextBoxStyle}" 
                                      FontFamily="{StaticResource CodeFont}" 
                                      FontSize="13" 
-                                     Height="120" 
+                                     Height="110" 
                                      AcceptsReturn="True" 
                                      TextWrapping="Wrap" 
                                      VerticalScrollBarVisibility="Auto" 
-                                     ToolTip="Enter the text template to expand. Click token chips above to insert dynamic tokens"/>
+                                     ToolTip="Enter the text template to expand. Click token chips above to insert dynamic tokens"
+                                     SelectionChanged="SnippetTemplateBox_SelectionChanged"/>
+
+                            <!-- Contextual Token Assistant Bar -->
+                            <Border x:Name="TokenAssistantBorder" 
+                                    Background="{DynamicResource BgTertiaryBrush}"
+                                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="10,8"
+                                    Margin="0,8,0,0">
+                                <StackPanel>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="💡" FontSize="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                            <Border x:Name="AssistantBadgeBorder" 
+                                                    Background="{DynamicResource AccentSubtleBrush}" 
+                                                    CornerRadius="4" 
+                                                    Padding="6,2" 
+                                                    Margin="0,0,8,0"
+                                                    Visibility="Collapsed">
+                                                <TextBlock x:Name="AssistantTokenBadge" 
+                                                           Text="{}{date:format}" 
+                                                           FontSize="11" 
+                                                           FontFamily="{StaticResource CodeFont}" 
+                                                           FontWeight="SemiBold" 
+                                                           Foreground="{DynamicResource AccentBrush}"/>
+                                            </Border>
+                                        </StackPanel>
+
+                                        <TextBlock Grid.Column="1" 
+                                                   x:Name="AssistantDescriptionText" 
+                                                   Text="Type '{' or move caret inside a token to see parameters and quick format options."
+                                                   FontSize="11.5" 
+                                                   Foreground="{DynamicResource TextSecondaryBrush}" 
+                                                   VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </Grid>
+
+                                    <!-- Clickable Format & Parameter Pills -->
+                                    <WrapPanel x:Name="AssistantOptionsPillsPanel" Margin="0,8,0,0" Visibility="Collapsed"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Live Expansion Preview Card -->
+                            <Border Background="{DynamicResource BgPrimaryBrush}"
+                                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="12"
+                                    Margin="0,12,0,0">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="👁" FontSize="13" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                            <TextBlock Text="Live Expansion Preview" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center"/>
+                                        </StackPanel>
+
+                                        <Border Grid.Column="1" 
+                                                Background="{DynamicResource BgSecondaryBrush}" 
+                                                BorderBrush="{DynamicResource BorderSubtleBrush}" 
+                                                BorderThickness="1" 
+                                                CornerRadius="4" 
+                                                Padding="6,2" 
+                                                Margin="0,0,8,0" 
+                                                VerticalAlignment="Center">
+                                            <TextBlock x:Name="SnippetPreviewStatsText" 
+                                                       Text="0 chars • 0 tokens" 
+                                                       FontSize="10.5" 
+                                                       Foreground="{DynamicResource TextMutedBrush}"/>
+                                        </Border>
+
+                                        <Button Grid.Column="2" 
+                                                x:Name="RefreshSnippetPreviewBtn" 
+                                                Content="↺ Refresh" 
+                                                Style="{StaticResource SecondaryButtonStyle}" 
+                                                FontSize="11" 
+                                                Padding="7,2" 
+                                                ToolTip="Refresh live evaluation"
+                                                Click="RefreshSnippetPreviewBtn_Click"/>
+                                    </Grid>
+
+                                    <Border Background="{DynamicResource BgInputBrush}"
+                                            BorderBrush="{DynamicResource BorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="4"
+                                            Padding="10,8"
+                                            MinHeight="56"
+                                            MaxHeight="140">
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                            <TextBlock x:Name="SnippetLivePreviewText" 
+                                                       Text="Type a snippet template above to see a real-time expansion preview..." 
+                                                       FontFamily="{StaticResource CodeFont}" 
+                                                       FontSize="12" 
+                                                       Foreground="{DynamicResource TextSecondaryBrush}" 
+                                                       TextWrapping="Wrap"/>
+                                        </ScrollViewer>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
                     </Border>
 
@@ -857,7 +1033,9 @@
                             Drop="ProcessFilterGroup_Drop">
                         <StackPanel>
                             <TextBlock Text="Process Context Rules (Optional)" FontWeight="Bold" FontSize="14" Margin="0,0,0,4"/>
-                            <TextBlock Text="Scope this action to specific applications or browser URLs. Drag executables or use target tools." FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,12"/>
+                            <TextBlock Text="Scope this action to specific applications or browser URLs. Drag executables or use target tools." FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,0"/>
+
+                            <Border Height="1" Background="{DynamicResource BorderSubtleBrush}" Margin="0,8,0,12" SnapsToDevicePixels="True"/>
 
                             <!-- Allowed Processes -->
                             <Grid Margin="0,0,0,6">

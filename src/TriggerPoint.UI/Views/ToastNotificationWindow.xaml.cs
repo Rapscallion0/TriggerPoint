@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
+using TriggerPoint.Core.Models;
 using TriggerPoint.Infrastructure.Win32;
 
 namespace TriggerPoint.UI.Views;
@@ -20,10 +21,22 @@ public enum ToastType
 public partial class ToastNotificationWindow : Window
 {
     private readonly DispatcherTimer _timer = new();
+    private readonly ToastMonitorPlacement _placement;
+    private readonly double _verticalOffset;
     private bool _isClosing;
 
-    public ToastNotificationWindow(ToastType type, string title, string message)
+    public bool IsClosing => _isClosing;
+
+    public ToastNotificationWindow(
+        ToastType type, 
+        string title, 
+        string message, 
+        ToastMonitorPlacement placement = ToastMonitorPlacement.PrimaryMonitor,
+        double verticalOffset = 0.0)
     {
+        _placement = placement;
+        _verticalOffset = verticalOffset;
+
         InitializeComponent();
 
         TitleText.Text = title;
@@ -57,22 +70,69 @@ public partial class ToastNotificationWindow : Window
         };
     }
 
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        Reposition();
+    }
+
     private void Window_Loaded(object sender, RoutedEventArgs e)
     {
-        PositionOnActiveScreen();
+        Reposition();
         AnimateIn();
         _timer.Start();
     }
 
-    private void PositionOnActiveScreen()
+    public void Reposition()
     {
-        if (!NativeMethods.GetCursorPos(out var pt)) return;
+        if (_placement == ToastMonitorPlacement.ActiveMonitor)
+        {
+            PositionOnActiveScreen(_verticalOffset);
+        }
+        else
+        {
+            PositionOnPrimaryScreen(_verticalOffset);
+        }
+    }
+
+    private void PositionOnPrimaryScreen(double verticalOffset)
+    {
+        // SystemParameters.WorkArea is in WPF DIPs for the Primary Monitor and cleanly excludes the taskbar
+        var workArea = SystemParameters.WorkArea;
+        double winWidth = ActualWidth > 0 ? ActualWidth : 340;
+        double winHeight = ActualHeight > 0 ? ActualHeight : 80;
+
+        Left = workArea.Right - winWidth - 16;
+        Top = workArea.Bottom - winHeight - 16 - verticalOffset;
+    }
+
+    private void PositionOnActiveScreen(double verticalOffset)
+    {
+        if (!NativeMethods.GetCursorPos(out var pt))
+        {
+            PositionOnPrimaryScreen(verticalOffset);
+            return;
+        }
 
         var hMonitor = NativeMethods.MonitorFromPoint(pt, NativeMethods.MONITOR_DEFAULTTONEAREST);
         var monitorInfo = new NativeMethods.MONITORINFO { cbSize = Marshal.SizeOf<NativeMethods.MONITORINFO>() };
-        NativeMethods.GetMonitorInfo(hMonitor, ref monitorInfo);
+        if (!NativeMethods.GetMonitorInfo(hMonitor, ref monitorInfo))
+        {
+            PositionOnPrimaryScreen(verticalOffset);
+            return;
+        }
 
-        double dpiScale = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
+        double dpiScale = 1.0;
+        try
+        {
+            var dpi = VisualTreeHelper.GetDpi(this);
+            dpiScale = dpi.DpiScaleX > 0 ? dpi.DpiScaleX : 1.0;
+        }
+        catch
+        {
+            dpiScale = 1.0;
+        }
+
         double workRight = monitorInfo.rcWork.Right / dpiScale;
         double workBottom = monitorInfo.rcWork.Bottom / dpiScale;
 
@@ -80,7 +140,7 @@ public partial class ToastNotificationWindow : Window
         double winHeight = ActualHeight > 0 ? ActualHeight : 80;
 
         Left = workRight - winWidth - 16;
-        Top = workBottom - winHeight - 16;
+        Top = workBottom - winHeight - 16 - verticalOffset;
     }
 
     private void AnimateIn()

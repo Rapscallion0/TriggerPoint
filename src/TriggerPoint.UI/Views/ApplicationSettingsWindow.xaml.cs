@@ -36,6 +36,30 @@ public partial class ApplicationSettingsWindow : Window
         Loaded += async (s, e) => await LoadCurrentSettingsAsync();
     }
 
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        CenterOnPrimaryDisplay();
+    }
+
+    private void CenterOnPrimaryDisplay()
+    {
+        var workArea = SystemParameters.WorkArea;
+        double winWidth = Width > 0 ? Width : 600;
+        double winHeight = Height > 0 ? Height : 650;
+
+        Left = workArea.Left + Math.Max(0, (workArea.Width - winWidth) / 2.0);
+        Top = workArea.Top + Math.Max(0, (workArea.Height - winHeight) / 2.0);
+    }
+
+    private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton == MouseButton.Left)
+        {
+            DragMove();
+        }
+    }
+
     private async System.Threading.Tasks.Task LoadCurrentSettingsAsync()
     {
         try
@@ -68,6 +92,19 @@ public partial class ApplicationSettingsWindow : Window
             };
             RetentionDaysText.Text = $"{_currentSettings.LogRetentionDays} days";
 
+            // Populate Log Split Threshold
+            LogSplitThresholdCombo.SelectedIndex = _currentSettings.LogSplitThresholdMb switch
+            {
+                25 => 0,
+                50 => 1,
+                100 => 2,
+                250 => 3,
+                500 => 4,
+                1000 => 5,
+                _ => 2
+            };
+            LogSplitThresholdText.Text = $"{_currentSettings.LogSplitThresholdMb} MB";
+
             // Populate Theme
             ThemeCombo.SelectedIndex = _currentSettings.Theme switch
             {
@@ -82,6 +119,10 @@ public partial class ApplicationSettingsWindow : Window
             StartMinimizedCheck.IsChecked = _currentSettings.StartMinimized;
             HideWindowOnTargetCheck.IsChecked = _currentSettings.HideOnTargetWindow;
             ShowSuccessToastsCheck.IsChecked = _currentSettings.ShowSuccessToasts;
+            ToastPlacementCombo.SelectedIndex = _currentSettings.ToastPlacement == ToastMonitorPlacement.ActiveMonitor ? 1 : 0;
+            ToastPlacementPanel.IsEnabled = _currentSettings.ShowSuccessToasts;
+            ShowSuccessToastsCheck.Checked += (s, e) => ToastPlacementPanel.IsEnabled = true;
+            ShowSuccessToastsCheck.Unchecked += (s, e) => ToastPlacementPanel.IsEnabled = false;
             ValidateOnStartupCheck.IsChecked = _currentSettings.ValidateShortcutsOnStartup;
 
             // Populate Global Shortcuts
@@ -215,6 +256,24 @@ public partial class ApplicationSettingsWindow : Window
         _ => 7
     };
 
+    private void LogSplitThresholdCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (LogSplitThresholdCombo == null || LogSplitThresholdText == null) return;
+        int mb = GetSelectedLogSplitThreshold();
+        LogSplitThresholdText.Text = $"{mb} MB";
+    }
+
+    private int GetSelectedLogSplitThreshold() => LogSplitThresholdCombo.SelectedIndex switch
+    {
+        0 => 25,
+        1 => 50,
+        2 => 100,
+        3 => 250,
+        4 => 500,
+        5 => 1000,
+        _ => 100
+    };
+
     private async void SaveSettingsBtn_Click(object sender, RoutedEventArgs e)
     {
         try
@@ -252,6 +311,7 @@ public partial class ApplicationSettingsWindow : Window
             };
 
             var retentionDays = GetSelectedRetentionDays();
+            var splitThresholdMb = GetSelectedLogSplitThreshold();
             var themePref = ThemeCombo.SelectedIndex switch
             {
                 0 => ThemePreference.System,
@@ -266,11 +326,15 @@ public partial class ApplicationSettingsWindow : Window
 
             _currentSettings.LogLevel = level;
             _currentSettings.LogRetentionDays = retentionDays;
+            _currentSettings.LogSplitThresholdMb = splitThresholdMb;
             _currentSettings.Theme = themePref;
             _currentSettings.RunAtStartup = runStartup;
             _currentSettings.StartMinimized = startMinimized;
             _currentSettings.HideOnTargetWindow = hideOnTarget;
             _currentSettings.ShowSuccessToasts = ShowSuccessToastsCheck.IsChecked == true;
+            _currentSettings.ToastPlacement = ToastPlacementCombo.SelectedIndex == 1 
+                ? ToastMonitorPlacement.ActiveMonitor 
+                : ToastMonitorPlacement.PrimaryMonitor;
             _currentSettings.ValidateShortcutsOnStartup = ValidateOnStartupCheck.IsChecked == true;
             _currentSettings.OpenSettingsHotkey = openSettingsHotkey;
             _currentSettings.CommandPaletteHotkey = cmdPaletteHotkey;
@@ -288,8 +352,8 @@ public partial class ApplicationSettingsWindow : Window
             // 4. Configure Windows Startup Registry Key
             SetRunAtStartup(runStartup, startMinimized);
 
-            Logger.Information("Application settings successfully updated. LogLevel={LogLevel}, RetentionDays={RetentionDays}, Theme={Theme}, Startup={Startup}, RecycleDays={RecycleDays}",
-                level, retentionDays, themePref, runStartup, recycleDays);
+            Logger.Information("Application settings successfully updated. LogLevel={LogLevel}, RetentionDays={RetentionDays}, SplitThreshold={SplitThreshold}MB, Theme={Theme}, Startup={Startup}, RecycleDays={RecycleDays}",
+                level, retentionDays, splitThresholdMb, themePref, runStartup, recycleDays);
 
             DialogResult = true;
             Close();
@@ -428,7 +492,7 @@ public partial class ApplicationSettingsWindow : Window
                 }
 
                 bool apply = ModernMessageDialog.ShowConfirm(this, "Apply Application Settings",
-                    $"The selected file contains Application Settings:\n• Theme: {package.Settings.Theme}\n• Log Level: {package.Settings.LogLevel}\n• Retention: {package.Settings.LogRetentionDays} days\n• Run at Startup: {package.Settings.RunAtStartup}\n\nApply these settings now?",
+                    $"The selected file contains Application Settings:\n• Theme: {package.Settings.Theme}\n• Log Level: {package.Settings.LogLevel}\n• Retention: {package.Settings.LogRetentionDays} days\n• Split Threshold: {package.Settings.LogSplitThresholdMb} MB\n• Run at Startup: {package.Settings.RunAtStartup}\n\nApply these settings now?",
                     "Apply Settings", "Cancel");
 
                 if (apply)

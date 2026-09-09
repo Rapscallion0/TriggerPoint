@@ -5,9 +5,9 @@
 
 [![.NET](https://img.shields.io/badge/.NET-9.0--windows-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011%20x64-0078D6?logo=windows)](https://microsoft.com/windows)
-[![Version](https://img.shields.io/badge/Version-v2.0.0-blue.svg)]()
+[![Version](https://img.shields.io/badge/Version-v2.0.1-blue.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-107%20Passed%20(100%25)-brightgreen)]()
+[![Tests](https://img.shields.io/badge/Tests-123%20Passed%20(100%25)-brightgreen)]()
 
 ---
 
@@ -53,11 +53,22 @@ Designed to stay out of your way, TriggerPoint runs quietly in your system tray 
 
 ### 📝 Dynamic Snippets & Text Expansion
 - Send keystrokes or clipboard-injected templates directly into the focused window.
-- Built-in dynamic token chips:
-  - `{clip}`: Current clipboard text
-  - `{date}` / `{time}` / `{datetime}`: Localized timestamps
-  - `{guid}`: Fresh unique identifier
-  - `{selection}`: Active text selection
+- **Dynamic Date & Time Formatting & Offsets**:
+  - `{date}`, `{date:format}` (e.g. `{date:MM/dd/yyyy}`, `{date:dddd, MMMM d, yyyy}`)
+  - Relative date offsets: `{date:+1d}`, `{date:-1d:yyyy-MM-dd}`, `{tomorrow}`, `{yesterday}`
+  - `{time}`, `{time:format}` (e.g. `{time:hh:mm tt}`, `{time:HH:mm}`), `{time:+1h}`
+  - `{datetime}`, `{datetime:format}` (e.g. `{datetime:yyyy-MM-ddTHH:mm:ss}`)
+- **Developer & System Tokens**:
+  - `{guid}` / `{uuid}` (with `{guid:upper}`, `{guid:N}`, `{guid:B}`)
+  - `{username}` / `{user}`, `{machine}` / `{computer}`
+  - `{env:VAR_NAME}` for Windows environment variables
+  - `{random:min,max}` or `{random:opt1,opt2}`
+- **Context & Clipboard Tokens**:
+  - `{active_window}` (target window title) and `{active_process}` (target executable)
+  - `{clipboard}` (with modifiers: `{clipboard:trim}`, `{clipboard:upper}`, `{clipboard:urlencode}`)
+  - `{cursor}` (caret positioning post-expansion)
+- **Interactive Prompts with Defaults**:
+  - `{text:Label|Default}`, `{multiline:Label|Default}`, `{choice:Label|Opt1=v1*,Opt2=v2}`, `{number:Label|min,max|default}`, `{date_picker:Label|Format}` (e.g. `{date_picker:Due Date|MM/dd/yyyy}`)
 
 ### 🛡 Process & Context Filters
 - Restrict actions to run only within specific applications (or exclude them).
@@ -103,7 +114,7 @@ dotnet run --project src/TriggerPoint.UI
 #### Package Installer (`TriggerPointSetup.exe`)
 To package the app into a standalone installer:
 ```powershell
-powershell -ExecutionPolicy Bypass -File build/package.ps1 -AppVersion "2.0.0"
+powershell -ExecutionPolicy Bypass -File build/package.ps1 -AppVersion "2.0.1"
 ```
 The output installer will be produced at `artifacts/TriggerPointSetup.exe`.
 

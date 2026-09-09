@@ -17,6 +17,8 @@ public class ContextFilterService : IContextFilterService
     private DateTime _cacheTimestamp = DateTime.MinValue;
     private static readonly TimeSpan CacheDuration = TimeSpan.FromMilliseconds(350);
 
+    public IntPtr LastExternalForegroundHwnd { get; set; } = IntPtr.Zero;
+
     public IntPtr GetForegroundWindowHandle()
     {
         return NativeMethods.GetForegroundWindow();

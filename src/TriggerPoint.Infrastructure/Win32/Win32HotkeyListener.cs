@@ -33,6 +33,7 @@ public class Win32HotkeyListener : IShortcutListener
             {
                 _isSnoozed = value;
                 _logger.Information("Hotkey listener snoozed state changed to: {IsSnoozed}", _isSnoozed);
+                SnoozeChanged?.Invoke(this, _isSnoozed);
             }
         }
     }
@@ -41,6 +42,7 @@ public class Win32HotkeyListener : IShortcutListener
 
     public event EventHandler<TriggerItem>? HotkeyTriggered;
     public event EventHandler? ConflictsUpdated;
+    public event EventHandler<bool>? SnoozeChanged;
 
     public void Start(IntPtr windowHandle)
     {

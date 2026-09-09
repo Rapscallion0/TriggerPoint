@@ -9,6 +9,7 @@
         ShowInTaskbar="False"
         ShowActivated="False"
         Focusable="False"
+        WindowStartupLocation="Manual"
         SizeToContent="WidthAndHeight"
         Loaded="Window_Loaded"
         PreviewMouseLeftButtonDown="Window_PreviewMouseLeftButtonDown">

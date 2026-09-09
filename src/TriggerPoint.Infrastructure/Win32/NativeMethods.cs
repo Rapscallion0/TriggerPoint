@@ -25,9 +25,16 @@ public static class NativeMethods
     public const int INPUT_KEYBOARD = 1;
     public const uint KEYEVENTF_KEYUP = 0x0002;
     public const uint KEYEVENTF_UNICODE = 0x0004;
+    public const byte VK_RETURN = 0x0D;
+    public const byte VK_SHIFT = 0x10;
     public const byte VK_CONTROL = 0x11;
-    public const byte VK_V = 0x56;
+    public const byte VK_MENU = 0x12;
     public const byte VK_LEFT = 0x25;
+    public const byte VK_V = 0x56;
+    public const byte VK_LWIN = 0x5B;
+    public const byte VK_RWIN = 0x5C;
+
+    public const uint ASFW_ANY = 0xFFFFFFFF;
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -43,6 +50,14 @@ public static class NativeMethods
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool AllowSetForegroundWindow(uint dwProcessId);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool BringWindowToTop(IntPtr hWnd);
 
     [DllImport("user32.dll")]
     public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
@@ -100,6 +115,40 @@ public static class NativeMethods
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool CloseHandle(IntPtr hObject);
+
+    public static string GetWindowTitle(IntPtr hWnd)
+    {
+        if (hWnd == IntPtr.Zero) return string.Empty;
+        var length = GetWindowTextLength(hWnd);
+        if (length == 0) return string.Empty;
+        var sb = new StringBuilder(length + 1);
+        GetWindowText(hWnd, sb, sb.Capacity);
+        return sb.ToString();
+    }
+
+    public static string GetProcessNameForWindow(IntPtr hWnd)
+    {
+        if (hWnd == IntPtr.Zero) return string.Empty;
+        GetWindowThreadProcessId(hWnd, out uint processId);
+        if (processId == 0) return string.Empty;
+        var hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, processId);
+        if (hProcess == IntPtr.Zero) return string.Empty;
+        try
+        {
+            var sb = new StringBuilder(1024);
+            uint size = (uint)sb.Capacity;
+            if (QueryFullProcessImageName(hProcess, 0, sb, ref size))
+            {
+                return System.IO.Path.GetFileName(sb.ToString());
+            }
+        }
+        catch { }
+        finally
+        {
+            CloseHandle(hProcess);
+        }
+        return string.Empty;
+    }
 
     // Clipboard APIs
     [DllImport("user32.dll", SetLastError = true)]
@@ -216,7 +265,24 @@ public static class NativeMethods
     public struct InputUnion
     {
         [FieldOffset(0)]
+        public MOUSEINPUT mi;
+
+        [FieldOffset(0)]
         public KEYBDINPUT ki;
+
+        [FieldOffset(0)]
+        public HARDWAREINPUT hi;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MOUSEINPUT
+    {
+        public int dx;
+        public int dy;
+        public uint mouseData;
+        public uint dwFlags;
+        public uint time;
+        public IntPtr dwExtraInfo;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -227,6 +293,14 @@ public static class NativeMethods
         public uint dwFlags;
         public uint time;
         public IntPtr dwExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct HARDWAREINPUT
+    {
+        public uint uMsg;
+        public ushort wParamL;
+        public ushort wParamH;
     }
 
     // COM Interfaces for Shell Links (.lnk hotkey inspection)

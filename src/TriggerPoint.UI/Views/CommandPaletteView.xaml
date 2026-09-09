@@ -170,7 +170,33 @@
                 <TextBlock FontSize="11"
                            Foreground="{DynamicResource TextMutedBrush}"
                            HorizontalAlignment="Center">
-                    <Run Text="⏎" FontSize="13.5" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/><Run Text=" Run   •   "/><Run Text="Ctrl+" Foreground="{DynamicResource TextSecondaryBrush}"/><Run Text="⏎" FontSize="13.5" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/><Run Text=" Run as Admin   •   "/><Run Text="Shift+" Foreground="{DynamicResource TextSecondaryBrush}"/><Run Text="⏎" FontSize="13.5" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/><Run Text=" Reveal in Explorer   •   "/><Run Text="Alt+" Foreground="{DynamicResource TextSecondaryBrush}"/><Run Text="⏎" FontSize="13.5" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/><Run Text=" Open in Settings"/>
+                    <InlineUIContainer BaselineAlignment="Center">
+                        <Path Data="{StaticResource EnterKeyGeometry}" 
+                              Fill="{DynamicResource TextPrimaryBrush}" 
+                              Width="10.5" Height="10.5" Stretch="Uniform" Margin="0,0,2,0"/>
+                    </InlineUIContainer>
+                    <Run Text="Run   •   "/>
+                    <Run Text="Ctrl+" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <InlineUIContainer BaselineAlignment="Center">
+                        <Path Data="{StaticResource EnterKeyGeometry}" 
+                              Fill="{DynamicResource TextPrimaryBrush}" 
+                              Width="10.5" Height="10.5" Stretch="Uniform" Margin="0,0,2,0"/>
+                    </InlineUIContainer>
+                    <Run Text="Run as Admin   •   "/>
+                    <Run Text="Shift+" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <InlineUIContainer BaselineAlignment="Center">
+                        <Path Data="{StaticResource EnterKeyGeometry}" 
+                              Fill="{DynamicResource TextPrimaryBrush}" 
+                              Width="10.5" Height="10.5" Stretch="Uniform" Margin="0,0,2,0"/>
+                    </InlineUIContainer>
+                    <Run Text="Reveal in Explorer   •   "/>
+                    <Run Text="Alt+" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <InlineUIContainer BaselineAlignment="Center">
+                        <Path Data="{StaticResource EnterKeyGeometry}" 
+                              Fill="{DynamicResource TextPrimaryBrush}" 
+                              Width="10.5" Height="10.5" Stretch="Uniform" Margin="0,0,2,0"/>
+                    </InlineUIContainer>
+                    <Run Text="Open in Settings"/>
                 </TextBlock>
             </Border>
         </Grid>

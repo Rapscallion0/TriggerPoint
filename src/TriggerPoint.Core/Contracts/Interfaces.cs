@@ -46,11 +46,12 @@ public interface IShortcutListener : IDisposable
     IReadOnlyDictionary<Guid, HotkeyConflictStatus> CurrentConflicts { get; }
     event EventHandler<TriggerItem>? HotkeyTriggered;
     event EventHandler? ConflictsUpdated;
+    event EventHandler<bool>? SnoozeChanged;
 }
 
 public interface IActionExecutor
 {
-    Task ExecuteAsync(TriggerItem item, ExecutionOverride executionOverride = ExecutionOverride.Standard);
+    Task ExecuteAsync(TriggerItem item, ExecutionOverride executionOverride = ExecutionOverride.Standard, IntPtr? targetHwnd = null);
 }
 
 public interface ISnippetService
@@ -65,6 +66,7 @@ public interface IIconService
 
 public interface IContextFilterService
 {
+    IntPtr LastExternalForegroundHwnd { get; set; }
     IntPtr GetForegroundWindowHandle();
     string? GetForegroundProcessName();
     string? GetActiveBrowserUrl(IntPtr hWnd, string? processName = null);

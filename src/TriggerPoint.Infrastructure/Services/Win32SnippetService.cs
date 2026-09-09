@@ -38,11 +38,21 @@ public class Win32SnippetService : ISnippetService
             }
         }
 
-        // 2. Evaluate template tokens (static tokens + prompt responses)
+        // 2. Evaluate template tokens (static tokens + prompt responses + context)
+        string? activeWinTitle = null;
+        string? activeProcName = null;
+        if (targetHwnd != IntPtr.Zero)
+        {
+            activeWinTitle = NativeMethods.GetWindowTitle(targetHwnd);
+            activeProcName = NativeMethods.GetProcessNameForWindow(targetHwnd);
+        }
+
         var evaluatedText = await PlaceholderParser.EvaluateAsync(
             template,
             clipboardProvider: () => Task.FromResult(GetClipboardTextSafe()),
-            promptResponses: promptResponses).ConfigureAwait(false);
+            promptResponses: promptResponses,
+            activeWindowTitle: activeWinTitle,
+            activeProcessName: activeProcName).ConfigureAwait(false);
 
         // 3. Process {cursor} token to extract clean text and caret offset
         var (cleanText, caretOffset) = PlaceholderParser.ProcessCursorPosition(evaluatedText);
@@ -51,134 +61,217 @@ public class Win32SnippetService : ISnippetService
         // 4. Restore focus to target window
         if (targetHwnd != IntPtr.Zero)
         {
-            RestoreFocusToWindow(targetHwnd);
-            await Task.Delay(60).ConfigureAwait(false);
+            await RestoreFocusToWindowAsync(targetHwnd).ConfigureAwait(false);
         }
 
+        // Ensure no lingering modifier keys interfere with injection
+        ReleaseLingeringModifiers();
+
         // 5. Hybrid text injection
-        bool isSingleLine = !cleanText.Contains('\n') && !cleanText.Contains('\r');
-        if (isSingleLine && cleanText.Length <= 40)
+        // Text up to 250 characters can be typed directly and instantly without touching clipboard
+        if (cleanText.Length <= 250)
         {
-            _logger.Information("Injecting single-line snippet via SendInput Unicode.");
+            _logger.Information("Injecting snippet ({Length} chars) via SendInput Unicode.", cleanText.Length);
             SendUnicodeString(cleanText);
         }
         else
         {
-            _logger.Information("Injecting multi-line snippet via stashed clipboard sequencing.");
+            _logger.Information("Injecting large snippet ({Length} chars) via stashed clipboard sequencing.", cleanText.Length);
             await InjectViaClipboardSequencingAsync(cleanText).ConfigureAwait(false);
         }
 
         // 6. Reposition caret if {cursor} was present
         if (caretOffset > 0)
         {
-            await Task.Delay(30).ConfigureAwait(false);
+            await Task.Delay(40).ConfigureAwait(false);
             SendLeftArrowKeys(caretOffset);
         }
     }
 
-    private static void RestoreFocusToWindow(IntPtr hWnd)
+    private static async Task RestoreFocusToWindowAsync(IntPtr hWnd)
     {
+        if (hWnd == IntPtr.Zero) return;
+
+        NativeMethods.AllowSetForegroundWindow(NativeMethods.ASFW_ANY);
+
         uint targetThreadId = NativeMethods.GetWindowThreadProcessId(hWnd, out _);
         uint currentThreadId = NativeMethods.GetCurrentThreadId();
 
         if (targetThreadId != currentThreadId)
         {
             NativeMethods.AttachThreadInput(currentThreadId, targetThreadId, true);
+            NativeMethods.BringWindowToTop(hWnd);
             NativeMethods.SetForegroundWindow(hWnd);
             NativeMethods.AttachThreadInput(currentThreadId, targetThreadId, false);
         }
         else
         {
+            NativeMethods.BringWindowToTop(hWnd);
             NativeMethods.SetForegroundWindow(hWnd);
+        }
+
+        // Poll briefly until the target window becomes foreground or timeout
+        for (int i = 0; i < 6; i++)
+        {
+            if (NativeMethods.GetForegroundWindow() == hWnd)
+                break;
+            await Task.Delay(25).ConfigureAwait(false);
+        }
+
+        // Brief delay to let the target application stabilize focus
+        await Task.Delay(50).ConfigureAwait(false);
+    }
+
+    private void ReleaseLingeringModifiers()
+    {
+        var modifiers = new byte[] { NativeMethods.VK_CONTROL, NativeMethods.VK_SHIFT, NativeMethods.VK_MENU, NativeMethods.VK_LWIN, NativeMethods.VK_RWIN };
+        var inputs = new NativeMethods.INPUT[modifiers.Length];
+        for (int i = 0; i < modifiers.Length; i++)
+        {
+            inputs[i] = new NativeMethods.INPUT
+            {
+                type = NativeMethods.INPUT_KEYBOARD,
+                u = new NativeMethods.InputUnion
+                {
+                    ki = new NativeMethods.KEYBDINPUT
+                    {
+                        wVk = modifiers[i],
+                        dwFlags = NativeMethods.KEYEVENTF_KEYUP
+                    }
+                }
+            };
+        }
+        uint sent = NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
+        if (sent == 0)
+        {
+            int err = Marshal.GetLastWin32Error();
+            _logger.Warning("ReleaseLingeringModifiers SendInput failed with error {Err}", err);
         }
     }
 
-    private static void SendUnicodeString(string text)
+    private void SendUnicodeString(string text)
     {
-        var inputs = new NativeMethods.INPUT[text.Length * 2];
-        for (int i = 0; i < text.Length; i++)
+        var normalized = text.Replace("\r\n", "\n").Replace("\r", "\n");
+        var inputList = new List<NativeMethods.INPUT>();
+
+        for (int i = 0; i < normalized.Length; i++)
         {
-            char c = text[i];
-            inputs[i * 2] = new NativeMethods.INPUT
+            char c = normalized[i];
+            if (c == '\n')
             {
-                type = NativeMethods.INPUT_KEYBOARD,
-                u = new NativeMethods.InputUnion
+                // Send Enter key
+                inputList.Add(new NativeMethods.INPUT
                 {
-                    ki = new NativeMethods.KEYBDINPUT
+                    type = NativeMethods.INPUT_KEYBOARD,
+                    u = new NativeMethods.InputUnion
                     {
-                        wVk = 0,
-                        wScan = c,
-                        dwFlags = NativeMethods.KEYEVENTF_UNICODE
+                        ki = new NativeMethods.KEYBDINPUT { wVk = NativeMethods.VK_RETURN, dwFlags = 0 }
                     }
-                }
-            };
-            inputs[(i * 2) + 1] = new NativeMethods.INPUT
+                });
+                inputList.Add(new NativeMethods.INPUT
+                {
+                    type = NativeMethods.INPUT_KEYBOARD,
+                    u = new NativeMethods.InputUnion
+                    {
+                        ki = new NativeMethods.KEYBDINPUT { wVk = NativeMethods.VK_RETURN, dwFlags = NativeMethods.KEYEVENTF_KEYUP }
+                    }
+                });
+            }
+            else
             {
-                type = NativeMethods.INPUT_KEYBOARD,
-                u = new NativeMethods.InputUnion
+                inputList.Add(new NativeMethods.INPUT
                 {
-                    ki = new NativeMethods.KEYBDINPUT
+                    type = NativeMethods.INPUT_KEYBOARD,
+                    u = new NativeMethods.InputUnion
                     {
-                        wVk = 0,
-                        wScan = c,
-                        dwFlags = NativeMethods.KEYEVENTF_UNICODE | NativeMethods.KEYEVENTF_KEYUP
+                        ki = new NativeMethods.KEYBDINPUT { wVk = 0, wScan = c, dwFlags = NativeMethods.KEYEVENTF_UNICODE }
                     }
-                }
-            };
+                });
+                inputList.Add(new NativeMethods.INPUT
+                {
+                    type = NativeMethods.INPUT_KEYBOARD,
+                    u = new NativeMethods.InputUnion
+                    {
+                        ki = new NativeMethods.KEYBDINPUT { wVk = 0, wScan = c, dwFlags = NativeMethods.KEYEVENTF_UNICODE | NativeMethods.KEYEVENTF_KEYUP }
+                    }
+                });
+            }
         }
 
-        NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
+        var inputs = inputList.ToArray();
+        uint sent = NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
+        if (sent == 0)
+        {
+            int err = Marshal.GetLastWin32Error();
+            _logger.Error("SendUnicodeString SendInput failed with error code {ErrorCode} for {Count} input events.", err, inputs.Length);
+        }
+        else
+        {
+            _logger.Information("SendUnicodeString successfully emitted {SentCount} of {TotalCount} input events.", sent, inputs.Length);
+        }
     }
 
     private async Task InjectViaClipboardSequencingAsync(string text)
     {
         string? previousText = null;
 
-        // Backup existing clipboard text
-        await Application.Current.Dispatcher.InvokeAsync(() =>
+        // Backup existing clipboard text with retry
+        await Application.Current.Dispatcher.InvokeAsync(async () =>
         {
-            try
+            for (int attempt = 0; attempt < 3; attempt++)
             {
-                if (Clipboard.ContainsText())
+                try
                 {
-                    previousText = Clipboard.GetText();
+                    if (Clipboard.ContainsText())
+                    {
+                        previousText = Clipboard.GetText();
+                    }
+                    Clipboard.SetText(text);
+                    return;
                 }
-                Clipboard.SetText(text);
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning(ex, "Failed to write snippet text to clipboard.");
+                catch (Exception ex)
+                {
+                    if (attempt == 2)
+                    {
+                        _logger.Warning(ex, "Failed to write snippet text to clipboard after 3 attempts.");
+                    }
+                    await Task.Delay(25);
+                }
             }
         });
 
         // Simulate Ctrl + V
         SendPasteCommand();
 
-        // Wait for target application to process paste
-        await Task.Delay(75).ConfigureAwait(false);
+        // Allow target application sufficient time to process paste
+        await Task.Delay(500).ConfigureAwait(false);
 
-        // Restore original clipboard state
-        await Application.Current.Dispatcher.InvokeAsync(() =>
+        // Restore original clipboard state if there was one (do not clear if user had empty clipboard)
+        if (previousText != null)
         {
-            try
+            await Application.Current.Dispatcher.InvokeAsync(async () =>
             {
-                if (previousText != null)
+                for (int attempt = 0; attempt < 3; attempt++)
                 {
-                    Clipboard.SetText(previousText);
+                    try
+                    {
+                        Clipboard.SetText(previousText);
+                        return;
+                    }
+                    catch (Exception ex)
+                    {
+                        if (attempt == 2)
+                        {
+                            _logger.Warning(ex, "Failed to restore original clipboard contents after 3 attempts.");
+                        }
+                        await Task.Delay(25);
+                    }
                 }
-                else
-                {
-                    Clipboard.Clear();
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning(ex, "Failed to restore original clipboard contents.");
-            }
-        });
+            });
+        }
     }
 
-    private static void SendPasteCommand()
+    private void SendPasteCommand()
     {
         var inputs = new NativeMethods.INPUT[4];
 
@@ -207,10 +300,19 @@ public class Win32SnippetService : ISnippetService
             u = new NativeMethods.InputUnion { ki = new NativeMethods.KEYBDINPUT { wVk = NativeMethods.VK_CONTROL, dwFlags = NativeMethods.KEYEVENTF_KEYUP } }
         };
 
-        NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
+        uint sent = NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
+        if (sent == 0)
+        {
+            int err = Marshal.GetLastWin32Error();
+            _logger.Error("SendPasteCommand SendInput failed with error code {ErrorCode}", err);
+        }
+        else
+        {
+            _logger.Information("SendPasteCommand successfully sent {SentCount} inputs.", sent);
+        }
     }
 
-    private static void SendLeftArrowKeys(int count)
+    private void SendLeftArrowKeys(int count)
     {
         var inputs = new NativeMethods.INPUT[count * 2];
         for (int i = 0; i < count; i++)
@@ -227,7 +329,12 @@ public class Win32SnippetService : ISnippetService
             };
         }
 
-        NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
+        uint sent = NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
+        if (sent == 0)
+        {
+            int err = Marshal.GetLastWin32Error();
+            _logger.Warning("SendLeftArrowKeys SendInput failed with error code {ErrorCode}", err);
+        }
     }
 
     private static string GetClipboardTextSafe()

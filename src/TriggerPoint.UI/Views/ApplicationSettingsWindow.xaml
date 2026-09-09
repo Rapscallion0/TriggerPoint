@@ -4,39 +4,40 @@
         xmlns:controls="clr-namespace:TriggerPoint.UI.Controls"
         Title="TriggerPoint Application Settings"
         Icon="/Assets/TriggerPoint.ico"
-        Width="580" Height="620"
+        Width="600" Height="650"
         MinWidth="500" MinHeight="550"
-        WindowStartupLocation="CenterOwner"
+        WindowStartupLocation="Manual"
         WindowStyle="None"
-        AllowsTransparency="True"
-        Background="Transparent"
+        AllowsTransparency="False"
+        ResizeMode="CanResizeWithGrip"
+        BorderBrush="{DynamicResource BorderBrush}"
+        BorderThickness="1"
+        Background="{DynamicResource BgSecondaryBrush}"
         Topmost="False"
-        ShowInTaskbar="False"
+        ShowInTaskbar="True"
         KeyDown="Window_KeyDown">
 
-    <Border Background="{DynamicResource BgSecondaryBrush}"
-            BorderBrush="{DynamicResource BorderBrush}"
-            BorderThickness="1"
-            CornerRadius="10"
-            Margin="12">
-        <Border.Effect>
-            <DropShadowEffect BlurRadius="28" ShadowDepth="6" Opacity="0.45" Direction="270"/>
-        </Border.Effect>
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="64"
+                      ResizeBorderThickness="6"
+                      GlassFrameThickness="0"
+                      CornerRadius="0"/>
+    </WindowChrome.WindowChrome>
 
-        <Grid Margin="20">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
+    <Grid Margin="20,16,20,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
 
-            <!-- Custom Title Bar -->
-            <Grid Grid.Row="0" Margin="0,0,0,16">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0">
+        <!-- Custom Title Bar -->
+        <Grid Grid.Row="0" Margin="0,0,0,16" Background="Transparent" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <Image Source="/Assets/TriggerPoint.ico" 
                                Width="20" Height="20" 
@@ -58,6 +59,7 @@
                         Content="✕" 
                         Style="{StaticResource WindowControlButtonStyle}" 
                         Width="30" Height="30" 
+                        WindowChrome.IsHitTestVisibleInChrome="True"
                         Click="CancelBtn_Click"/>
             </Grid>
 
@@ -91,8 +93,10 @@
                                         Click="OpenLogsFolderBtn_Click"/>
                             </Grid>
 
+                            <Border Height="1" Background="{DynamicResource BorderSubtleBrush}" Margin="0,6,0,12" SnapsToDevicePixels="True"/>
+
                             <!-- Log Level ComboBox -->
-                            <TextBlock Text="Minimum Log Level" FontWeight="SemiBold" FontSize="12.5" Margin="0,10,0,4"/>
+                            <TextBlock Text="Minimum Log Level" FontWeight="SemiBold" FontSize="12.5" Margin="0,0,0,4"/>
                             <ComboBox x:Name="LogLevelCombo" 
                                       Height="34" 
                                       FontSize="13" 
@@ -126,6 +130,28 @@
                                 <ComboBoxItem Content="30 Days (One month)"/>
                                 <ComboBoxItem Content="90 Days (Quarterly)"/>
                             </ComboBox>
+
+                            <!-- Log File Split Threshold -->
+                            <Grid Margin="0,12,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Log File Split Threshold" FontWeight="SemiBold" FontSize="12.5" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" x:Name="LogSplitThresholdText" Text="100 MB" FontWeight="Bold" FontSize="12.5" Foreground="{DynamicResource AccentBrush}"/>
+                            </Grid>
+                            <ComboBox x:Name="LogSplitThresholdCombo" 
+                                      Height="34" 
+                                      FontSize="13"
+                                      SelectionChanged="LogSplitThresholdCombo_SelectionChanged"
+                                      ToolTip="Maximum size a single daily log file can reach before splitting into an indexed file">
+                                <ComboBoxItem Content="25 MB"/>
+                                <ComboBoxItem Content="50 MB"/>
+                                <ComboBoxItem Content="100 MB (Default)"/>
+                                <ComboBoxItem Content="250 MB"/>
+                                <ComboBoxItem Content="500 MB"/>
+                                <ComboBoxItem Content="1000 MB (1 GB)"/>
+                            </ComboBox>
                         </StackPanel>
                     </Border>
 
@@ -139,7 +165,9 @@
                         <StackPanel>
                             <TextBlock Text="Appearance &amp; Theme" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}"/>
                             <TextBlock Text="Select your visual preference or automatically sync with Windows" 
-                                       FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,10"/>
+                                       FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+
+                            <Border Height="1" Background="{DynamicResource BorderSubtleBrush}" Margin="0,8,0,12" SnapsToDevicePixels="True"/>
 
                             <ComboBox x:Name="ThemeCombo" 
                                       Height="34" 
@@ -162,7 +190,9 @@
                         <StackPanel>
                             <TextBlock Text="Global Application Shortcuts" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}"/>
                             <TextBlock Text="System-wide hotkeys to bring up TriggerPoint or the quick Command Palette" 
-                                       FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,12"/>
+                                       FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+
+                            <Border Height="1" Background="{DynamicResource BorderSubtleBrush}" Margin="0,8,0,12" SnapsToDevicePixels="True"/>
 
                             <!-- Shortcut Conflict Warning Banner -->
                             <Border x:Name="ShortcutConflictWarningBorder"
@@ -185,8 +215,8 @@
                                 </StackPanel>
                             </Border>
 
-                            <!-- Open TriggerPoint Window -->
-                            <TextBlock Text="Open TriggerPoint Window" FontWeight="SemiBold" FontSize="12.5" Margin="0,0,0,4"/>
+                            <!-- Open Action Manager -->
+                            <TextBlock Text="Open Action Manager" FontWeight="SemiBold" FontSize="12.5" Margin="0,0,0,4"/>
                             <controls:HotkeyRecorderControl x:Name="OpenSettingsHotkeyRecorder" Margin="0,0,0,12"/>
 
                             <!-- Command Palette -->
@@ -204,7 +234,9 @@
                         <StackPanel>
                             <TextBlock Text="System Integration" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}"/>
                             <TextBlock Text="Configure Windows startup and background launch behavior" 
-                                       FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,12"/>
+                                       FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+
+                            <Border Height="1" Background="{DynamicResource BorderSubtleBrush}" Margin="0,8,0,12" SnapsToDevicePixels="True"/>
 
                             <CheckBox x:Name="RunAtStartupCheck" 
                                       Content="Start TriggerPoint when you log in to Windows" 
@@ -228,7 +260,21 @@
                                       Content="Show toast notification on successful action execution" 
                                       FontSize="13" 
                                       Margin="0,0,0,10"
-                                      ToolTip="Displays a brief notification on the active screen confirming action execution"/>
+                                      ToolTip="Displays a brief notification confirming action execution"/>
+
+                            <!-- Toast Notification Monitor Placement -->
+                            <StackPanel x:Name="ToastPlacementPanel" Margin="24,0,0,12">
+                                <TextBlock Text="Notification Monitor Position" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                <TextBlock Text="Select which display to anchor toast notifications on" 
+                                           FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,1,0,6"/>
+                                <ComboBox x:Name="ToastPlacementCombo" 
+                                          Width="380" 
+                                          HorizontalAlignment="Left"
+                                          FontSize="12">
+                                    <ComboBoxItem Content="Primary Monitor (Recommended — Windows standard, above taskbar)"/>
+                                    <ComboBoxItem Content="Active Monitor (Follows mouse cursor)"/>
+                                </ComboBox>
+                            </StackPanel>
 
                             <CheckBox x:Name="ValidateOnStartupCheck" 
                                       Content="Validate shortcut file paths on startup" 
@@ -248,7 +294,9 @@
                         <StackPanel>
                             <TextBlock Text="Backup &amp; Data Management" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}"/>
                             <TextBlock Text="Export and import your TriggerPoint actions, folders, and application settings" 
-                                       FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,10"/>
+                                       FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+
+                            <Border Height="1" Background="{DynamicResource BorderSubtleBrush}" Margin="0,8,0,12" SnapsToDevicePixels="True"/>
 
                             <!-- Recycle Bin Retention Settings -->
                             <TextBlock Text="Recycle Bin &amp; Retention" FontWeight="SemiBold" FontSize="13" Margin="0,4,0,4" Foreground="{DynamicResource TextPrimaryBrush}"/>
@@ -416,5 +464,4 @@
                 </StackPanel>
             </Grid>
         </Grid>
-    </Border>
 </Window>

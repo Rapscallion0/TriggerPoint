@@ -41,7 +41,7 @@ public partial class App : Application
             list.Add(new TriggerItem
             {
                 Id = OpenSettingsActionId,
-                Name = "Open TriggerPoint Window",
+                Name = "Open Action Manager",
                 Hotkey = settings.OpenSettingsHotkey,
                 IsEnabled = true,
                 PresentationMode = PresentationMode.Direct
@@ -105,19 +105,23 @@ public partial class App : Application
             .WriteTo.File(
                 Path.Combine(logDir, "triggerpoint-.log"), 
                 rollingInterval: RollingInterval.Day,
+                fileSizeLimitBytes: (long)appSettings.LogSplitThresholdMb * 1024L * 1024L,
+                rollOnFileSizeLimit: true,
+                shared: true,
                 retainedFileCountLimit: appSettings.LogRetentionDays,
                 outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff}] [{Level:u3}] ({SourceContext}) {Message:lj}{NewLine}{Exception}")
             .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] ({SourceContext}) {Message:lj}{NewLine}{Exception}")
             .CreateLogger();
 
-        Log.Information("Starting TriggerPoint daemon (LogLevel: {LogLevel}, Retention: {Retention} days)...", 
-            appSettings.LogLevel, appSettings.LogRetentionDays);
+        Log.Information("Starting TriggerPoint daemon (LogLevel: {LogLevel}, Retention: {Retention} days, SplitThreshold: {SplitThreshold}MB)...", 
+            appSettings.LogLevel, appSettings.LogRetentionDays, appSettings.LogSplitThresholdMb);
 
         // 3. Single-Instance Enforcement
         _singleInstanceService = new SingleInstanceService();
         if (!_singleInstanceService.TryAcquire())
         {
             Log.Information("Secondary instance detected. Signaling primary instance and shutting down.");
+            NativeMethods.AllowSetForegroundWindow(NativeMethods.ASFW_ANY);
             await SingleInstanceService.SignalPrimaryInstanceAsync(string.Join(" ", e.Args));
             Shutdown();
             return;
@@ -213,7 +217,8 @@ public partial class App : Application
             },
             exitAction: () => Dispatcher.Invoke(ExitApplication),
             openAppSettingsAction: () => Dispatcher.Invoke(async () => await ShowApplicationSettingsWindowAsync()),
-            commandPaletteHotkeyText: appSettings.CommandPaletteHotkey?.DisplayText ?? "Alt+Space");
+            commandPaletteHotkeyText: appSettings.CommandPaletteHotkey?.DisplayText ?? "Alt+Space",
+            openSettingsHotkeyText: appSettings.OpenSettingsHotkey?.DisplayText ?? "Ctrl+Alt+T");
 
         // If explicitly requested with --settings, show action settings window
         if (e.Args.Contains("--settings", StringComparer.OrdinalIgnoreCase))
@@ -239,6 +244,17 @@ public partial class App : Application
 
     private void ShortcutListener_HotkeyTriggered(object? sender, TriggerItem item)
     {
+        // Capture active foreground window BEFORE TriggerPoint displays any UI
+        var targetHwnd = NativeMethods.GetForegroundWindow();
+        if (_serviceProvider != null)
+        {
+            var filterService = _serviceProvider.GetService<IContextFilterService>();
+            if (filterService != null && targetHwnd != IntPtr.Zero)
+            {
+                filterService.LastExternalForegroundHwnd = targetHwnd;
+            }
+        }
+
         Dispatcher.Invoke(async () =>
         {
             if (item.Id == OpenSettingsActionId)
@@ -249,7 +265,7 @@ public partial class App : Application
 
             if (item.Id == CommandPaletteActionId)
             {
-                OpenCommandPalette();
+                OpenCommandPalette(targetHwnd: targetHwnd);
                 return;
             }
 
@@ -258,22 +274,22 @@ public partial class App : Application
                 case PresentationMode.Direct:
                     if (_executor != null)
                     {
-                        await _executor.ExecuteAsync(item);
+                        await _executor.ExecuteAsync(item, ExecutionOverride.Standard, targetHwnd);
                     }
                     break;
 
                 case PresentationMode.CursorMenu:
-                    OpenCursorMenu(item);
+                    OpenCursorMenu(item, targetHwnd);
                     break;
 
                 case PresentationMode.CommandPalette:
-                    OpenCommandPalette(item);
+                    OpenCommandPalette(item, targetHwnd);
                     break;
             }
         });
     }
 
-    private void OpenCursorMenu(TriggerItem triggerItem)
+    private void OpenCursorMenu(TriggerItem triggerItem, IntPtr targetHwnd = default)
     {
         if (_repository == null || _executor == null) return;
 
@@ -283,7 +299,7 @@ public partial class App : Application
 
             await Dispatcher.InvokeAsync(() =>
             {
-                var menu = new CursorContextMenuView(allItems, _executor, triggerItem);
+                var menu = new CursorContextMenuView(allItems, _executor, triggerItem, targetHwnd);
                 menu.Show();
                 menu.Activate();
                 try
@@ -296,7 +312,7 @@ public partial class App : Application
         });
     }
 
-    private void OpenCommandPalette(TriggerItem? triggerItem = null)
+    private void OpenCommandPalette(TriggerItem? triggerItem = null, IntPtr targetHwnd = default)
     {
         if (_repository == null || _executor == null) return;
 
@@ -314,7 +330,7 @@ public partial class App : Application
 
             await Dispatcher.InvokeAsync(() =>
             {
-                var palette = new CommandPaletteView(allItems, _executor, scopeId, scopeName);
+                var palette = new CommandPaletteView(allItems, _executor, scopeId, scopeName, targetHwnd);
                 palette.Show();
                 palette.Activate();
                 try
@@ -331,10 +347,47 @@ public partial class App : Application
     {
         if (_settingsWindow == null) return;
 
+        if (_settingsWindow.WindowState == WindowState.Minimized)
+        {
+            _settingsWindow.WindowState = WindowState.Normal;
+        }
+
         _settingsWindow.Show();
         _settingsWindow.WindowState = WindowState.Normal;
         _settingsWindow.Activate();
         _settingsWindow.Focus();
+
+        try
+        {
+            var handle = new System.Windows.Interop.WindowInteropHelper(_settingsWindow).EnsureHandle();
+            uint currentThreadId = NativeMethods.GetCurrentThreadId();
+            IntPtr foregroundHwnd = NativeMethods.GetForegroundWindow();
+            uint foregroundThreadId = NativeMethods.GetWindowThreadProcessId(foregroundHwnd, out _);
+
+            bool attached = false;
+            if (currentThreadId != foregroundThreadId && foregroundThreadId != 0)
+            {
+                attached = NativeMethods.AttachThreadInput(currentThreadId, foregroundThreadId, true);
+            }
+
+            try
+            {
+                NativeMethods.BringWindowToTop(handle);
+                NativeMethods.SetForegroundWindow(handle);
+            }
+            finally
+            {
+                if (attached)
+                {
+                    NativeMethods.AttachThreadInput(currentThreadId, foregroundThreadId, false);
+                }
+            }
+
+            // Temporarily toggle Topmost to pop in front of other active windows (e.g. Explorer)
+            _settingsWindow.Topmost = true;
+            _settingsWindow.Topmost = false;
+        }
+        catch { }
 
         if (focusedItem != null)
         {
@@ -347,10 +400,6 @@ public partial class App : Application
         if (_repository == null || _logManagerService == null) return;
 
         var appSettingsWin = new ApplicationSettingsWindow(_repository, _logManagerService);
-        if (_settingsWindow != null && _settingsWindow.IsVisible)
-        {
-            appSettingsWin.Owner = _settingsWindow;
-        }
         appSettingsWin.ShowDialog();
 
         await ReloadApplicationSettingsAndHotkeysAsync();
@@ -372,6 +421,7 @@ public partial class App : Application
             allItems.AddRange(CreateVirtualApplicationItems(settings));
             _shortcutListener.RegisterAll(allItems);
             _trayIconService?.UpdateCommandPaletteHotkey(settings.CommandPaletteHotkey?.DisplayText);
+            _trayIconService?.UpdateOpenSettingsHotkey(settings.OpenSettingsHotkey?.DisplayText);
         }
         catch (Exception ex)
         {

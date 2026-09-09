@@ -20,7 +20,7 @@
 [CmdletBinding()]
 param(
     [string]$Configuration = "Release",
-    [string]$AppVersion = "2.0.0",
+    [string]$AppVersion = "2.0.1",
     [string]$PublishDir = "",
     [string]$ArtifactsDir = "",
     [switch]$SkipPublish
