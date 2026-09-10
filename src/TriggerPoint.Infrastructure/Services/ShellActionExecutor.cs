@@ -14,6 +14,8 @@ public class ShellActionExecutor : IActionExecutor
     private readonly ISnippetService _snippetService;
     private readonly ITelemetryService _telemetryService;
     private readonly IContextFilterService _contextFilterService;
+    private readonly IPromptDialogService? _promptDialogService;
+    private readonly IWorkflowExecutor? _workflowExecutor;
 
     public event Action<TriggerItem>? OpenSettingsRequested;
     public event Action<TriggerItem, string>? ExecutionSucceeded;
@@ -22,11 +24,15 @@ public class ShellActionExecutor : IActionExecutor
     public ShellActionExecutor(
         ISnippetService snippetService,
         ITelemetryService telemetryService,
-        IContextFilterService contextFilterService)
+        IContextFilterService contextFilterService,
+        IPromptDialogService? promptDialogService = null,
+        IWorkflowExecutor? workflowExecutor = null)
     {
         _snippetService = snippetService;
         _telemetryService = telemetryService;
         _contextFilterService = contextFilterService;
+        _promptDialogService = promptDialogService;
+        _workflowExecutor = workflowExecutor;
     }
 
     public async Task ExecuteAsync(TriggerItem item, ExecutionOverride executionOverride = ExecutionOverride.Standard, IntPtr? targetHwnd = null)
@@ -49,6 +55,20 @@ public class ShellActionExecutor : IActionExecutor
 
         // Record telemetry
         _ = _telemetryService.RecordExecutionAsync(item.Id);
+
+        if (item.ActionType == ActionType.Workflow)
+        {
+            if (_workflowExecutor != null)
+            {
+                await _workflowExecutor.ExecuteWorkflowAsync(item, executionOverride, targetHwnd);
+            }
+            else
+            {
+                _logger.Warning("Workflow executor is not configured for action '{Name}'", item.Name);
+                ExecutionFailed?.Invoke(item, "Workflow engine service not available.");
+            }
+            return;
+        }
 
         if (item.ActionType == ActionType.Snippet)
         {
@@ -78,13 +98,41 @@ public class ShellActionExecutor : IActionExecutor
 
         if (item.ActionType == ActionType.Shell)
         {
-            ExecuteShellAction(item, executionOverride);
+            await ExecuteShellActionAsync(item, executionOverride);
         }
     }
 
-    private void ExecuteShellAction(TriggerItem item, ExecutionOverride executionOverride)
+    private async Task ExecuteShellActionAsync(TriggerItem item, ExecutionOverride executionOverride)
     {
-        var command = item.Payload.Command?.Trim() ?? string.Empty;
+        var rawCommand = item.Payload.Command?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(rawCommand))
+        {
+            _logger.Warning("Cannot execute shell action '{Name}': command is empty.", item.Name);
+            ExecutionFailed?.Invoke(item, "Application / Command path is empty.");
+            return;
+        }
+
+        var rawArguments = item.Payload.Arguments ?? string.Empty;
+        var rawWorkingDir = item.Payload.WorkingDirectory ?? string.Empty;
+
+        // Universal Prompt Token evaluation across Command, Arguments, and WorkingDirectory
+        var combinedText = $"{rawCommand} {rawArguments} {rawWorkingDir}";
+        var promptTokens = Core.Services.PlaceholderParser.ExtractPromptTokens(combinedText);
+        Dictionary<string, string>? promptResponses = null;
+
+        if (promptTokens.Count > 0 && _promptDialogService != null)
+        {
+            promptResponses = await _promptDialogService.ShowPromptDialogAsync(promptTokens).ConfigureAwait(true);
+            if (promptResponses == null)
+            {
+                _logger.Information("Shell action '{Name}' cancelled by user during prompt dialog.", item.Name);
+                return;
+            }
+        }
+
+        var command = await Core.Services.PlaceholderParser.EvaluateAsync(rawCommand, promptResponses: promptResponses).ConfigureAwait(false);
+        var arguments = await Core.Services.PlaceholderParser.EvaluateAsync(rawArguments, promptResponses: promptResponses).ConfigureAwait(false);
+        var workingDirectory = await Core.Services.PlaceholderParser.EvaluateAsync(rawWorkingDir, promptResponses: promptResponses).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(command))
         {
             _logger.Warning("Cannot execute shell action '{Name}': command is empty.", item.Name);
@@ -126,17 +174,17 @@ public class ShellActionExecutor : IActionExecutor
                 UseShellExecute = true
             };
 
-            // Arguments
-            if (!string.IsNullOrWhiteSpace(item.Payload.Arguments))
-            {
-                psi.Arguments = Environment.ExpandEnvironmentVariables(item.Payload.Arguments);
-            }
+        // Arguments
+        if (!string.IsNullOrWhiteSpace(arguments))
+        {
+            psi.Arguments = Environment.ExpandEnvironmentVariables(arguments);
+        }
 
-            // Working directory
-            if (!string.IsNullOrWhiteSpace(item.Payload.WorkingDirectory))
-            {
-                psi.WorkingDirectory = Environment.ExpandEnvironmentVariables(item.Payload.WorkingDirectory);
-            }
+        // Working directory
+        if (!string.IsNullOrWhiteSpace(workingDirectory))
+        {
+            psi.WorkingDirectory = Environment.ExpandEnvironmentVariables(workingDirectory);
+        }
             else
             {
                 // Fallback: parent directory if command is a file path
@@ -159,7 +207,29 @@ public class ShellActionExecutor : IActionExecutor
             }
 
             _logger.Information("Launching process '{FileName}' with args '{Args}'", psi.FileName, psi.Arguments);
-            Process.Start(psi);
+            var proc = Process.Start(psi);
+            if (proc != null && !string.IsNullOrWhiteSpace(item.Payload.TargetDisplay) && !item.Payload.TargetDisplay.Equals("default", StringComparison.OrdinalIgnoreCase))
+            {
+                var targetDisp = item.Payload.TargetDisplay;
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        for (int i = 0; i < 25; i++)
+                        {
+                            await Task.Delay(100);
+                            proc.Refresh();
+                            if (proc.HasExited) break;
+                            if (proc.MainWindowHandle != IntPtr.Zero)
+                            {
+                                Win32.NativeMethods.MoveWindowToTargetDisplay(proc.MainWindowHandle, targetDisp);
+                                break;
+                            }
+                        }
+                    }
+                    catch { }
+                });
+            }
             ExecutionSucceeded?.Invoke(item, $"Launched: {item.Name}");
         }
         catch (System.ComponentModel.Win32Exception win32Ex)

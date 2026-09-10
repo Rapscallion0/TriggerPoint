@@ -106,6 +106,8 @@ public static class ThemeManager
             res["ShellSubtleBrush"] = new SolidColorBrush(Color.FromArgb(35, 56, 189, 248));
             res["SnippetBrush"] = new SolidColorBrush(Color.FromRgb(52, 211, 153));      // #34D399 Mint Emerald
             res["SnippetSubtleBrush"] = new SolidColorBrush(Color.FromArgb(35, 52, 211, 153));
+            res["WorkflowBrush"] = new SolidColorBrush(Color.FromRgb(168, 85, 247));     // #A855F7 Purple
+            res["WorkflowSubtleBrush"] = new SolidColorBrush(Color.FromArgb(35, 168, 85, 247));
 
             // Snippet Token Categories
             res["TokenDateBrush"] = new SolidColorBrush(Color.FromRgb(56, 189, 248));
@@ -151,6 +153,8 @@ public static class ThemeManager
             res["ShellSubtleBrush"] = new SolidColorBrush(Color.FromArgb(30, 2, 132, 199));
             res["SnippetBrush"] = new SolidColorBrush(Color.FromRgb(5, 150, 105));       // #059669 Emerald Dark
             res["SnippetSubtleBrush"] = new SolidColorBrush(Color.FromArgb(30, 5, 150, 105));
+            res["WorkflowBrush"] = new SolidColorBrush(Color.FromRgb(147, 51, 234));     // #9333EA Purple Dark
+            res["WorkflowSubtleBrush"] = new SolidColorBrush(Color.FromArgb(30, 147, 51, 234));
 
             // Snippet Token Categories
             res["TokenDateBrush"] = new SolidColorBrush(Color.FromRgb(2, 132, 199));

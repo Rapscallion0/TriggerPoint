@@ -4,10 +4,12 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Win32;
@@ -122,11 +124,23 @@ public class TriggerTreeItemViewModel : INotifyPropertyChanged
         ActionType.Folder => "📁",
         ActionType.Snippet => "📝",
         ActionType.Shell => "⚡",
+        ActionType.Workflow => "🔀",
         _ => "▶"
     };
 
+    public static bool ShowShortcuts { get; set; } = true;
+
     public string HotkeyDisplay => (IsRecycleBinRoot || IsRecycledItem) ? string.Empty : (Item.Hotkey?.DisplayText ?? string.Empty);
-    public Visibility HasHotkey => !string.IsNullOrWhiteSpace(HotkeyDisplay) ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility HasHotkey => (ShowShortcuts && !string.IsNullOrWhiteSpace(HotkeyDisplay)) ? Visibility.Visible : Visibility.Collapsed;
+
+    public void NotifyShortcutVisibilityChanged()
+    {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasHotkey)));
+        foreach (var child in Children)
+        {
+            child.NotifyShortcutVisibilityChanged();
+        }
+    }
 
     // Only show conflict if item actually has a non-empty hotkey AND a conflict status
     public Visibility HasConflictVisibility => 
@@ -176,6 +190,7 @@ public class TriggerTreeItemViewModel : INotifyPropertyChanged
                 ActionType.Folder => "FolderBrush",
                 ActionType.Shell => "ShellBrush",
                 ActionType.Snippet => "SnippetBrush",
+                ActionType.Workflow => "WorkflowBrush",
                 _ => "TextSecondaryBrush"
             };
             return Application.Current.TryFindResource(key) as Brush ?? Brushes.Gray;
@@ -185,8 +200,9 @@ public class TriggerTreeItemViewModel : INotifyPropertyChanged
     public string TypeBadgeText => IsRecycleBinRoot ? "BIN" : IsRecycledItem ? "DELETED" : Item.ActionType switch
     {
         ActionType.Folder => "FOLDER",
-        ActionType.Shell => "SHELL",
+        ActionType.Shell => "APP & COMMAND",
         ActionType.Snippet => "SNIPPET",
+        ActionType.Workflow => "WORKFLOW",
         _ => "ACTION"
     };
 
@@ -203,6 +219,7 @@ public class TriggerTreeItemViewModel : INotifyPropertyChanged
                 ActionType.Folder => "FolderBrush",
                 ActionType.Shell => "ShellBrush",
                 ActionType.Snippet => "SnippetBrush",
+                ActionType.Workflow => "WorkflowBrush",
                 _ => "TextSecondaryBrush"
             };
             return Application.Current.TryFindResource(key) as Brush ?? Brushes.Gray;
@@ -222,6 +239,7 @@ public class TriggerTreeItemViewModel : INotifyPropertyChanged
                 ActionType.Folder => "FolderSubtleBrush",
                 ActionType.Shell => "ShellSubtleBrush",
                 ActionType.Snippet => "SnippetSubtleBrush",
+                ActionType.Workflow => "WorkflowSubtleBrush",
                 _ => "BgTertiaryBrush"
             };
             return Application.Current.TryFindResource(key) as Brush ?? Brushes.Transparent;
@@ -311,6 +329,7 @@ public partial class SettingsWindow : Window
     private bool _isDataLoaded;
     private bool _isUpdatingForm;
     private bool _isItemDirty;
+    private Guid? _newUnsavedItemId;
     private bool _isRevertingTreeSelection;
     private bool _isRebuildingTree;
     private readonly DispatcherTimer _snippetPreviewDebounceTimer;
@@ -346,6 +365,8 @@ public partial class SettingsWindow : Window
     private string _windowTargetMode = "Shell";
     private readonly IContextFilterService? _contextFilterService;
     private readonly ILogManagerService? _logManagerService;
+    private readonly IWorkflowExecutor? _workflowExecutor;
+    private readonly IBrowserDetectionService? _browserDetectionService;
 
     public bool IsExiting { get; set; }
 
@@ -354,7 +375,9 @@ public partial class SettingsWindow : Window
         IShortcutListener shortcutListener,
         IActionExecutor executor,
         IContextFilterService? contextFilterService = null,
-        ILogManagerService? logManagerService = null)
+        ILogManagerService? logManagerService = null,
+        IWorkflowExecutor? workflowExecutor = null,
+        IBrowserDetectionService? browserDetectionService = null)
     {
         InitializeComponent();
         _repository = repository;
@@ -362,6 +385,8 @@ public partial class SettingsWindow : Window
         _executor = executor;
         _contextFilterService = contextFilterService;
         _logManagerService = logManagerService;
+        _workflowExecutor = workflowExecutor;
+        _browserDetectionService = browserDetectionService;
 
         HotkeyRecorder.BindingRecorded += HotkeyRecorder_BindingRecorded;
         _shortcutListener.ConflictsUpdated += (s, e) => Dispatcher.Invoke(RefreshTreeConflictStates);
@@ -413,6 +438,10 @@ public partial class SettingsWindow : Window
         ShellArgsBox.TextChanged += (s, e) => OnFormEdited();
         ShellWorkDirBox.TextChanged += (s, e) => OnFormEdited();
         ShellRunAsAdminCheck.Click += (s, e) => OnFormEdited();
+        if (WorkflowScriptEditor != null)
+        {
+            WorkflowScriptEditor.TextChanged += WorkflowScriptEditor_TextChanged;
+        }
         
         _snippetPreviewDebounceTimer = new DispatcherTimer
         {
@@ -456,14 +485,29 @@ public partial class SettingsWindow : Window
             UpdateContextualTokenAssistant();
             QueueSnippetLivePreviewUpdate();
         };
-        AcceleratorBox.TextChanged += (s, e) => OnFormEdited();
-        PresentationModeCombo.SelectionChanged += (s, e) => OnFormEdited();
+        PresentationModeCombo.SelectionChanged += (s, e) =>
+        {
+            OnFormEdited();
+            if (_selectedItem != null)
+            {
+                UpdateFormVisibility(_selectedItem.ActionType);
+            }
+        };
+
+        LocationChanged += (s, e) => RecordWindowBounds();
+        SizeChanged += (s, e) => RecordWindowBounds();
 
         StateChanged += (s, e) =>
         {
             if (MaximizeBtn != null)
             {
                 MaximizeBtn.Content = WindowState == WindowState.Maximized ? "❐" : "▢";
+            }
+            if (_appSettings != null && _isDataLoaded)
+            {
+                _appSettings.WindowMaximized = (WindowState == WindowState.Maximized);
+                _appSettingsSaveTimer?.Stop();
+                _appSettingsSaveTimer?.Start();
             }
         };
 
@@ -535,6 +579,181 @@ public partial class SettingsWindow : Window
         }
     }
 
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        var source = PresentationSource.FromVisual(this) as HwndSource;
+        source?.AddHook(WndProc);
+    }
+
+    private const int WM_MOUSEHWHEEL = 0x020E;
+
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (msg == WM_MOUSEHWHEEL)
+        {
+            short delta = (short)((wParam.ToInt64() >> 16) & 0xFFFF);
+            if (delta != 0)
+            {
+                var pos = Mouse.GetPosition(this);
+                var hit = InputHitTest(pos) as DependencyObject;
+                var scrollViewer = FindAncestor<ScrollViewer>(hit) ?? FindVisualChild<ScrollViewer>(ItemsTreeView);
+                if (scrollViewer != null)
+                {
+                    double scrollAmount = delta > 0 ? 48 : -48;
+                    scrollViewer.ScrollToHorizontalOffset(scrollViewer.HorizontalOffset + scrollAmount);
+                    handled = true;
+                }
+            }
+        }
+        return IntPtr.Zero;
+    }
+
+    private void ItemsTreeView_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if ((Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Shift) == System.Windows.Input.ModifierKeys.Shift)
+        {
+            var sv = FindVisualChild<ScrollViewer>(ItemsTreeView);
+            if (sv != null)
+            {
+                double scrollAmount = e.Delta > 0 ? -48 : 48;
+                sv.ScrollToHorizontalOffset(sv.HorizontalOffset + scrollAmount);
+                e.Handled = true;
+            }
+        }
+    }
+
+    private static T? FindAncestor<T>(DependencyObject? current) where T : DependencyObject
+    {
+        while (current != null)
+        {
+            if (current is T match) return match;
+            current = VisualTreeHelper.GetParent(current);
+        }
+        return null;
+    }
+
+    protected override void OnPreviewKeyDown(KeyEventArgs e)
+    {
+        base.OnPreviewKeyDown(e);
+
+        if (e.Key == Key.S && (Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Control) == System.Windows.Input.ModifierKeys.Control)
+        {
+            if (HotkeyRecorder != null && HotkeyRecorder.IsRecording)
+            {
+                return; // Let HotkeyRecorder capture Ctrl+S as recorded keybinding
+            }
+
+            e.Handled = true;
+            _ = SaveConfigurationCoreAsync();
+        }
+    }
+
+    private void RecordWindowBounds()
+    {
+        if (!_isDataLoaded || _appSettings == null || WindowState != WindowState.Normal) return;
+
+        _appSettings.WindowLeft = Left;
+        _appSettings.WindowTop = Top;
+        _appSettings.WindowWidth = Width;
+        _appSettings.WindowHeight = Height;
+        _appSettingsSaveTimer?.Stop();
+        _appSettingsSaveTimer?.Start();
+    }
+
+    public void ApplyWindowPlacement()
+    {
+        if (_appSettings == null) return;
+
+        double dpiScale = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
+
+        switch (_appSettings.WindowPlacement)
+        {
+            case WindowStartupPlacement.RememberLast:
+                if (_appSettings.WindowWidth.HasValue && _appSettings.WindowWidth.Value >= 400)
+                    Width = _appSettings.WindowWidth.Value;
+                if (_appSettings.WindowHeight.HasValue && _appSettings.WindowHeight.Value >= 300)
+                    Height = _appSettings.WindowHeight.Value;
+
+                if (_appSettings.WindowLeft.HasValue && _appSettings.WindowTop.HasValue)
+                {
+                    double targetLeft = _appSettings.WindowLeft.Value;
+                    double targetTop = _appSettings.WindowTop.Value;
+
+                    var rect = new NativeMethods.RECT
+                    {
+                        Left = (int)(targetLeft * dpiScale),
+                        Top = (int)(targetTop * dpiScale),
+                        Right = (int)((targetLeft + Width) * dpiScale),
+                        Bottom = (int)((targetTop + Height) * dpiScale)
+                    };
+
+                    IntPtr hMon = NativeMethods.MonitorFromRect(ref rect, NativeMethods.MONITOR_DEFAULTTONULL);
+                    if (hMon != IntPtr.Zero)
+                    {
+                        Left = targetLeft;
+                        Top = targetTop;
+                    }
+                    else
+                    {
+                        CenterOnCursorDisplay(dpiScale);
+                    }
+                }
+                else
+                {
+                    CenterOnCursorDisplay(dpiScale);
+                }
+
+                if (_appSettings.WindowMaximized)
+                {
+                    WindowState = WindowState.Maximized;
+                }
+                break;
+
+            case WindowStartupPlacement.PrimaryDisplay:
+                CenterOnPrimaryDisplay(dpiScale);
+                break;
+
+            case WindowStartupPlacement.CursorDisplay:
+                CenterOnCursorDisplay(dpiScale);
+                break;
+        }
+    }
+
+    private void CenterOnPrimaryDisplay(double dpiScale)
+    {
+        var workArea = SystemParameters.WorkArea;
+        double winWidth = Width > 0 ? Width : 960;
+        double winHeight = Height > 0 ? Height : 650;
+
+        Left = workArea.Left + Math.Max(0, (workArea.Width - winWidth) / 2.0);
+        Top = workArea.Top + Math.Max(0, (workArea.Height - winHeight) / 2.0);
+    }
+
+    private void CenterOnCursorDisplay(double dpiScale)
+    {
+        if (NativeMethods.GetCursorPos(out var pt))
+        {
+            var hMon = NativeMethods.MonitorFromPoint(pt, NativeMethods.MONITOR_DEFAULTTONEAREST);
+            var mi = new NativeMethods.MONITORINFO { cbSize = Marshal.SizeOf<NativeMethods.MONITORINFO>() };
+            if (NativeMethods.GetMonitorInfo(hMon, ref mi))
+            {
+                double workLeft = mi.rcWork.Left / dpiScale;
+                double workTop = mi.rcWork.Top / dpiScale;
+                double workWidth = (mi.rcWork.Right - mi.rcWork.Left) / dpiScale;
+                double workHeight = (mi.rcWork.Bottom - mi.rcWork.Top) / dpiScale;
+
+                double winWidth = Width > 0 ? Width : 960;
+                double winHeight = Height > 0 ? Height : 650;
+
+                Left = workLeft + Math.Max(0, (workWidth - winWidth) / 2.0);
+                Top = workTop + Math.Max(0, (workHeight - winHeight) / 2.0);
+                return;
+            }
+        }
+        CenterOnPrimaryDisplay(dpiScale);
+    }
+
     private void OnFormEdited()
     {
         if (_isUpdatingForm || _selectedItem == null) return;
@@ -558,6 +777,9 @@ public partial class SettingsWindow : Window
         target.Payload.WorkingDirectory = snapshot.Payload.WorkingDirectory;
         target.Payload.RunAsAdmin = snapshot.Payload.RunAsAdmin;
         target.Payload.SnippetTemplate = snapshot.Payload.SnippetTemplate;
+        target.Payload.WorkflowMode = snapshot.Payload.WorkflowMode;
+        target.Payload.ScriptSource = snapshot.Payload.ScriptSource;
+        target.Payload.WorkflowSteps = snapshot.Payload.WorkflowSteps.Select(s => s.Clone()).ToList();
         target.ContextFilter.AllowedProcesses = [.. snapshot.ContextFilter.AllowedProcesses];
         target.ContextFilter.ExcludedProcesses = [.. snapshot.ContextFilter.ExcludedProcesses];
         target.ContextFilter.AllowedUrls = [.. snapshot.ContextFilter.AllowedUrls];
@@ -576,6 +798,21 @@ public partial class SettingsWindow : Window
         }
         else if (choice == SavePromptChoice.Discard)
         {
+            if (_newUnsavedItemId == _selectedItem.Id)
+            {
+                var itemToRemove = _selectedItem;
+                _newUnsavedItemId = null;
+                _items.Remove(itemToRemove);
+                SetDirty(false);
+                RebuildTree();
+                var fallback = _items.FirstOrDefault();
+                if (fallback != null)
+                {
+                    SelectTreeItem(fallback);
+                }
+                return true;
+            }
+
             if (_originalItemSnapshot != null)
             {
                 RestoreItemFromSnapshot(_selectedItem, _originalItemSnapshot);
@@ -615,6 +852,9 @@ public partial class SettingsWindow : Window
         {
             _appSettings = new AppSettings();
         }
+        TriggerTreeItemViewModel.ShowShortcuts = _appSettings.ShowShortcutsInTree;
+        UpdateToggleShortcutsButtonUi();
+        ApplyWindowPlacement();
         _isDataLoaded = true;
         RegisterShortcuts();
         RebuildTree();
@@ -761,7 +1001,10 @@ public partial class SettingsWindow : Window
         var vm = FindViewModel(item);
         PopulateForm(item, vm);
         SetViewModelSelected(_treeRoots, item.Id);
-        SetDirty(false);
+        if (_newUnsavedItemId != item.Id)
+        {
+            SetDirty(false);
+        }
     }
 
     private bool SetViewModelSelected(IEnumerable<TriggerTreeItemViewModel> vms, Guid targetId)
@@ -822,7 +1065,10 @@ public partial class SettingsWindow : Window
             _selectedItem = vm.Item;
             _originalItemSnapshot = vm.Item.Clone();
             PopulateForm(vm.Item, vm);
-            SetDirty(false);
+            if (_newUnsavedItemId != vm.Item.Id)
+            {
+                SetDirty(false);
+            }
         }
     }
 
@@ -910,7 +1156,7 @@ public partial class SettingsWindow : Window
 
             ItemNameBox.Text = item.Name;
             ItemDescBox.Text = item.Description;
-            ActionTypeCombo.SelectedIndex = (int)item.ActionType;
+            UpdateEditorTypeBadge(item.ActionType);
             PresentationModeCombo.SelectedIndex = (int)item.PresentationMode;
             HotkeyRecorder.Binding = item.Hotkey;
             AcceleratorBox.Text = item.AcceleratorKey ?? string.Empty;
@@ -920,10 +1166,31 @@ public partial class SettingsWindow : Window
             ShellArgsBox.Text = item.Payload.Arguments;
             ShellWorkDirBox.Text = item.Payload.WorkingDirectory;
             ShellRunAsAdminCheck.IsChecked = item.Payload.RunAsAdmin;
+            if (ShellDisplayTargetCombo != null)
+            {
+                PopulateDisplayTargetComboBox(ShellDisplayTargetCombo, item.Payload.TargetDisplay);
+            }
             UpdateCommandValidationStatus(item.Payload.Command);
 
             // Snippet payload
             SnippetTemplateBox.Text = item.Payload.SnippetTemplate;
+
+            // Workflow payload
+            if (WorkflowModeCombo != null)
+            {
+                WorkflowModeCombo.SelectedIndex = item.Payload.WorkflowMode == WorkflowMode.Script ? 1 : 0;
+            }
+            if (WorkflowVisualContainer != null && WorkflowScriptContainer != null)
+            {
+                bool isScript = item.Payload.WorkflowMode == WorkflowMode.Script;
+                WorkflowVisualContainer.Visibility = isScript ? Visibility.Collapsed : Visibility.Visible;
+                WorkflowScriptContainer.Visibility = isScript ? Visibility.Visible : Visibility.Collapsed;
+            }
+            if (WorkflowScriptEditor != null)
+            {
+                WorkflowScriptEditor.Text = item.Payload.ScriptSource ?? string.Empty;
+            }
+            RebuildWorkflowStepCards();
 
             // Context filter
             AllowedProcessesTagInput.SetTags(item.ContextFilter.AllowedProcesses);
@@ -949,38 +1216,60 @@ public partial class SettingsWindow : Window
 
     private void UpdateEditorTypeBadge(ActionType actionType)
     {
-        if (EditorTypeBadge == null || EditorTypeBadgeText == null) return;
-        EditorTypeBadge.Visibility = Visibility.Visible;
-        EditorTypeBadgeText.Text = actionType switch
+        if (EditorTypeBadge != null && EditorTypeBadgeText != null)
         {
-            ActionType.Folder => "📁 FOLDER",
-            ActionType.Shell => "⚡ SHELL",
-            ActionType.Snippet => "📝 SNIPPET",
-            _ => actionType.ToString().ToUpperInvariant()
-        };
-        string textKey = actionType switch
-        {
-            ActionType.Folder => "FolderBrush",
-            ActionType.Shell => "ShellBrush",
-            ActionType.Snippet => "SnippetBrush",
-            _ => "TextPrimaryBrush"
-        };
-        string bgKey = actionType switch
-        {
-            ActionType.Folder => "FolderSubtleBrush",
-            ActionType.Shell => "ShellSubtleBrush",
-            ActionType.Snippet => "SnippetSubtleBrush",
-            _ => "BgTertiaryBrush"
-        };
-        EditorTypeBadgeText.Foreground = Application.Current.TryFindResource(textKey) as Brush ?? Brushes.Gray;
-        EditorTypeBadge.Background = Application.Current.TryFindResource(bgKey) as Brush ?? Brushes.Transparent;
+            EditorTypeBadge.Visibility = Visibility.Visible;
+            EditorTypeBadgeText.Text = actionType switch
+            {
+                ActionType.Folder => "📁 FOLDER",
+                ActionType.Shell => "⚡ APP & COMMAND",
+                ActionType.Snippet => "📝 SNIPPET",
+                ActionType.Workflow => "🔀 WORKFLOW",
+                _ => actionType.ToString().ToUpperInvariant()
+            };
+            string textKey = actionType switch
+            {
+                ActionType.Folder => "FolderBrush",
+                ActionType.Shell => "ShellBrush",
+                ActionType.Snippet => "SnippetBrush",
+                ActionType.Workflow => "WorkflowBrush",
+                _ => "TextPrimaryBrush"
+            };
+            string bgKey = actionType switch
+            {
+                ActionType.Folder => "FolderSubtleBrush",
+                ActionType.Shell => "ShellSubtleBrush",
+                ActionType.Snippet => "SnippetSubtleBrush",
+                ActionType.Workflow => "WorkflowSubtleBrush",
+                _ => "BgTertiaryBrush"
+            };
+            EditorTypeBadgeText.Foreground = Application.Current.TryFindResource(textKey) as Brush ?? Brushes.Gray;
+            EditorTypeBadge.Background = Application.Current.TryFindResource(bgKey) as Brush ?? Brushes.Transparent;
+        }
     }
 
     private void UpdateFormVisibility(ActionType actionType)
     {
+        if (ContextProcessFilterGroup != null)
+        {
+            bool isOrgFolder = actionType == ActionType.Folder &&
+                (PresentationModeCombo == null || PresentationModeCombo.SelectedIndex == (int)PresentationMode.Direct);
+            ContextProcessFilterGroup.Visibility = isOrgFolder ? Visibility.Collapsed : Visibility.Visible;
+        }
+
         if (TestActionBtn != null)
         {
             TestActionBtn.Visibility = actionType == ActionType.Folder ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        if (PresentationModeGroup != null)
+        {
+            bool isFolder = actionType == ActionType.Folder;
+            PresentationModeGroup.Visibility = isFolder ? Visibility.Visible : Visibility.Collapsed;
+            if (!isFolder && PresentationModeCombo != null)
+            {
+                PresentationModeCombo.SelectedIndex = (int)PresentationMode.Direct;
+            }
         }
 
         if (PresentationDirectItem != null)
@@ -1003,16 +1292,25 @@ public partial class SettingsWindow : Window
         {
             ShellSettingsGroup.Visibility = Visibility.Visible;
             SnippetSettingsGroup.Visibility = Visibility.Collapsed;
+            if (WorkflowSettingsGroup != null) WorkflowSettingsGroup.Visibility = Visibility.Collapsed;
         }
         else if (actionType == ActionType.Snippet)
         {
             ShellSettingsGroup.Visibility = Visibility.Collapsed;
             SnippetSettingsGroup.Visibility = Visibility.Visible;
+            if (WorkflowSettingsGroup != null) WorkflowSettingsGroup.Visibility = Visibility.Collapsed;
+        }
+        else if (actionType == ActionType.Workflow)
+        {
+            ShellSettingsGroup.Visibility = Visibility.Collapsed;
+            SnippetSettingsGroup.Visibility = Visibility.Collapsed;
+            if (WorkflowSettingsGroup != null) WorkflowSettingsGroup.Visibility = Visibility.Visible;
         }
         else // Folder
         {
             ShellSettingsGroup.Visibility = Visibility.Collapsed;
             SnippetSettingsGroup.Visibility = Visibility.Collapsed;
+            if (WorkflowSettingsGroup != null) WorkflowSettingsGroup.Visibility = Visibility.Collapsed;
         }
     }
 
@@ -1025,10 +1323,21 @@ public partial class SettingsWindow : Window
                 ? "⚠ Internal Conflict Detected"
                 : "⚠ System Hotkey Conflict";
             ConflictBannerMessage.Text = item.ConflictStatus.SystemMessage ?? "Conflict detected.";
+
+            if (HotkeyInlineConflictText != null)
+            {
+                HotkeyInlineConflictText.Text = item.ConflictStatus.SystemMessage ?? "⚠ Hotkey is already in use.";
+                HotkeyInlineConflictText.Visibility = Visibility.Visible;
+            }
         }
         else
         {
             ConflictBanner.Visibility = Visibility.Collapsed;
+            if (HotkeyInlineConflictText != null)
+            {
+                HotkeyInlineConflictText.Text = string.Empty;
+                HotkeyInlineConflictText.Visibility = Visibility.Collapsed;
+            }
         }
     }
 
@@ -1038,8 +1347,10 @@ public partial class SettingsWindow : Window
 
         _selectedItem.Name = ItemNameBox.Text.Trim();
         _selectedItem.Description = ItemDescBox.Text.Trim();
-        _selectedItem.ActionType = (ActionType)ActionTypeCombo.SelectedIndex;
-        _selectedItem.PresentationMode = (PresentationMode)PresentationModeCombo.SelectedIndex;
+        // ActionType is immutable once created
+        _selectedItem.PresentationMode = _selectedItem.ActionType == ActionType.Folder
+            ? (PresentationMode)PresentationModeCombo.SelectedIndex
+            : PresentationMode.Direct;
         _selectedItem.Hotkey = HotkeyRecorder.Binding;
         _selectedItem.AcceleratorKey = AcceleratorBox.Text.Trim();
 
@@ -1047,8 +1358,26 @@ public partial class SettingsWindow : Window
         _selectedItem.Payload.Arguments = ShellArgsBox.Text.Trim();
         _selectedItem.Payload.WorkingDirectory = ShellWorkDirBox.Text.Trim();
         _selectedItem.Payload.RunAsAdmin = ShellRunAsAdminCheck.IsChecked == true;
+        if (ShellDisplayTargetCombo?.SelectedItem is ComboBoxItem dispItem)
+        {
+            string? tagStr = dispItem.Tag?.ToString();
+            _selectedItem.Payload.TargetDisplay = string.IsNullOrWhiteSpace(tagStr) ? null : tagStr;
+        }
 
         _selectedItem.Payload.SnippetTemplate = SnippetTemplateBox.Text;
+
+        if (WorkflowModeCombo != null && WorkflowModeCombo.SelectedIndex == 1)
+        {
+            _selectedItem.Payload.WorkflowMode = WorkflowMode.Script;
+        }
+        else
+        {
+            _selectedItem.Payload.WorkflowMode = WorkflowMode.Visual;
+        }
+        if (WorkflowScriptEditor != null)
+        {
+            _selectedItem.Payload.ScriptSource = WorkflowScriptEditor.Text;
+        }
 
         _selectedItem.ContextFilter.AllowedProcesses = AllowedProcessesTagInput.GetTags();
         _selectedItem.ContextFilter.ExcludedProcesses = ExcludedProcessesTagInput.GetTags();
@@ -1081,22 +1410,6 @@ public partial class SettingsWindow : Window
         UpdateBrokenFilterChipCount();
     }
 
-    private void ActionTypeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (!_isUpdatingForm && ActionTypeCombo.SelectedIndex >= 0)
-        {
-            var newType = (ActionType)ActionTypeCombo.SelectedIndex;
-            UpdateFormVisibility(newType);
-            if (_selectedItem != null)
-            {
-                _selectedItem.ActionType = newType;
-                UpdateEditorTypeBadge(newType);
-                FindViewModel(_selectedItem)?.NotifyUpdated();
-            }
-            UpdateCommandValidationStatus(ShellCommandBox.Text);
-        }
-    }
-
     private void HotkeyRecorder_BindingRecorded(object? sender, ShortcutBinding? newBinding)
     {
         if (_selectedItem == null) return;
@@ -1108,11 +1421,12 @@ public partial class SettingsWindow : Window
         else
         {
             // Check for immediate potential conflict
-            var conflict = HotkeyRegistryValidator.CheckPotentialConflict(_selectedItem, newBinding, _items);
+            var conflict = HotkeyRegistryValidator.CheckPotentialConflict(_selectedItem, newBinding, _items, _appSettings);
             _selectedItem.ConflictStatus = conflict ?? HotkeyConflictStatus.None;
         }
 
         UpdateConflictBanner(_selectedItem);
+        FindViewModel(_selectedItem)?.NotifyUpdated();
         OnFormEdited();
     }
 
@@ -1547,6 +1861,67 @@ public partial class SettingsWindow : Window
         }
     }
 
+    private void ShellDisplayTargetCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isUpdatingForm || _selectedItem == null) return;
+        if (ShellDisplayTargetCombo.SelectedItem is ComboBoxItem dispItem)
+        {
+            string? tagStr = dispItem.Tag?.ToString();
+            _selectedItem.Payload.TargetDisplay = string.IsNullOrWhiteSpace(tagStr) ? null : tagStr;
+            OnFormEdited();
+        }
+    }
+
+    private static void PopulateDisplayTargetComboBox(ComboBox combo, string? currentTarget)
+    {
+        combo.Items.Clear();
+        combo.Items.Add(new ComboBoxItem { Content = "🖥 (System Default)", Tag = "" });
+        combo.Items.Add(new ComboBoxItem { Content = "🎯 Active Monitor (Cursor)", Tag = "cursor" });
+        combo.Items.Add(new ComboBoxItem { Content = "⭐ Primary Monitor", Tag = "primary" });
+
+        var screens = System.Windows.Forms.Screen.AllScreens;
+        for (int i = 0; i < screens.Length; i++)
+        {
+            var s = screens[i];
+            string label = $"🖥 Display {i + 1} ({s.Bounds.Width}x{s.Bounds.Height}{(s.Primary ? " - Primary" : "")})";
+            combo.Items.Add(new ComboBoxItem { Content = label, Tag = $"display:{i + 1}" });
+        }
+
+        int selectedIdx = 0;
+        if (!string.IsNullOrWhiteSpace(currentTarget))
+        {
+            for (int i = 0; i < combo.Items.Count; i++)
+            {
+                if (combo.Items[i] is ComboBoxItem item && string.Equals(item.Tag?.ToString(), currentTarget, StringComparison.OrdinalIgnoreCase))
+                {
+                    selectedIdx = i;
+                    break;
+                }
+            }
+        }
+        combo.SelectedIndex = selectedIdx;
+    }
+
+    private ComboBox CreateDisplayTargetComboBox(string? currentTarget, Action<string?> onChanged)
+    {
+        var combo = new ComboBox
+        {
+            Height = 32,
+            FontSize = 12,
+            VerticalContentAlignment = VerticalAlignment.Center
+        };
+        PopulateDisplayTargetComboBox(combo, currentTarget);
+        combo.SelectionChanged += (s, e) =>
+        {
+            if (combo.SelectedItem is ComboBoxItem item)
+            {
+                string? val = item.Tag?.ToString();
+                onChanged(string.IsNullOrWhiteSpace(val) ? null : val);
+            }
+        };
+        return combo;
+    }
+
     private async Task<bool> SaveConfigurationCoreAsync()
     {
         CommitCurrentFormChanges();
@@ -1562,6 +1937,7 @@ public partial class SettingsWindow : Window
             {
                 _originalItemSnapshot = _selectedItem.Clone();
             }
+            _newUnsavedItemId = null;
             SetDirty(false);
             return true;
         }
@@ -1580,7 +1956,25 @@ public partial class SettingsWindow : Window
 
     private void RevertItemBtn_Click(object sender, RoutedEventArgs e)
     {
-        if (_selectedItem == null || _originalItemSnapshot == null) return;
+        if (_selectedItem == null) return;
+
+        if (_newUnsavedItemId == _selectedItem.Id)
+        {
+            var itemToRemove = _selectedItem;
+            _newUnsavedItemId = null;
+            _items.Remove(itemToRemove);
+            SetDirty(false);
+            RebuildTree();
+            var fallback = _items.FirstOrDefault();
+            if (fallback != null)
+            {
+                SelectTreeItem(fallback);
+            }
+            StatusText.Text = $"Discarded new '{itemToRemove.Name}'.";
+            return;
+        }
+
+        if (_originalItemSnapshot == null) return;
 
         RestoreItemFromSnapshot(_selectedItem, _originalItemSnapshot);
         PopulateForm(_selectedItem);
@@ -1602,6 +1996,8 @@ public partial class SettingsWindow : Window
         try
         {
             _appSettings = await _repository.LoadSettingsAsync();
+            TriggerTreeItemViewModel.ShowShortcuts = _appSettings.ShowShortcutsInTree;
+            UpdateToggleShortcutsButtonUi();
             RegisterShortcuts();
             if (Application.Current is App app)
             {
@@ -1621,13 +2017,13 @@ public partial class SettingsWindow : Window
 
     private TriggerTreeItemViewModel? _rightClickedTreeVm;
 
-    private void AddActionBtn_Click(object sender, RoutedEventArgs e)
+    private void CreateNewItem(ActionType actionType, bool isContextMenuTrigger = false)
     {
         if (!PromptSaveIfDirty()) return;
         CommitCurrentFormChanges();
 
         Guid? parentId = null;
-        if (sender == ContextAddActionItem && _rightClickedTreeVm == null)
+        if (isContextMenuTrigger && _rightClickedTreeVm == null)
         {
             // Right-clicked in blank space -> add at root
             parentId = null;
@@ -1641,21 +2037,69 @@ public partial class SettingsWindow : Window
             parentId = _selectedItem.ActionType == ActionType.Folder ? _selectedItem.Id : _selectedItem.ParentId;
         }
 
+        string defaultName = actionType switch
+        {
+            ActionType.Shell => "New App & Command",
+            ActionType.Snippet => "New Snippet",
+            ActionType.Workflow => "New Workflow",
+            ActionType.Folder => "New Folder",
+            _ => "New Item"
+        };
+
         var newItem = new TriggerItem
         {
             Id = Guid.NewGuid(),
             ParentId = parentId,
-            Name = "New Action",
-            ActionType = ActionType.Shell,
+            Name = defaultName,
+            ActionType = actionType,
             PresentationMode = PresentationMode.Direct,
             OrderIndex = _items.Count
         };
 
+        if (actionType == ActionType.Workflow)
+        {
+            newItem.Payload.WorkflowSteps = [];
+        }
+
+        _newUnsavedItemId = newItem.Id;
         _items.Add(newItem);
         RebuildTree();
         SelectTreeItem(newItem);
         _ = RestoreTreeFocus(newItem);
         SetDirty(true);
+    }
+
+    private void AddShellActionBtn_Click(object sender, RoutedEventArgs e)
+    {
+        CreateNewItem(ActionType.Shell, sender == ContextAddShellItem);
+    }
+
+    private void AddSnippetActionBtn_Click(object sender, RoutedEventArgs e)
+    {
+        CreateNewItem(ActionType.Snippet, sender == ContextAddSnippetItem);
+    }
+
+    private void AddWorkflowActionBtn_Click(object sender, RoutedEventArgs e)
+    {
+        CreateNewItem(ActionType.Workflow, sender == ContextAddWorkflowItem);
+    }
+
+    private void AddActionBtn_Click(object sender, RoutedEventArgs e)
+    {
+        CreateNewItem(ActionType.Shell, sender == ContextAddShellItem);
+    }
+
+    private void ContextAddMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (e.OriginalSource == ContextAddMenu || e.Source == ContextAddMenu)
+        {
+            ContextAddMenu.IsSubmenuOpen = true;
+        }
+    }
+
+    private void ContextAddMenu_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        ContextAddMenu.IsSubmenuOpen = true;
     }
 
     private async void DuplicateItemBtn_Click(object sender, RoutedEventArgs e)
@@ -1751,8 +2195,7 @@ public partial class SettingsWindow : Window
         {
             if (_rightClickedTreeVm.IsRecycleBinRoot)
             {
-                ContextAddActionItem.Visibility = Visibility.Collapsed;
-                ContextAddFolderItem.Visibility = Visibility.Collapsed;
+                ContextAddMenu.Visibility = Visibility.Collapsed;
                 ContextDuplicateItem.Visibility = Visibility.Collapsed;
                 ContextRenameItem.Visibility = Visibility.Collapsed;
                 ContextDeleteItem.Visibility = Visibility.Collapsed;
@@ -1769,8 +2212,7 @@ public partial class SettingsWindow : Window
 
             if (_rightClickedTreeVm.IsRecycledItem)
             {
-                ContextAddActionItem.Visibility = Visibility.Collapsed;
-                ContextAddFolderItem.Visibility = Visibility.Collapsed;
+                ContextAddMenu.Visibility = Visibility.Collapsed;
                 ContextDuplicateItem.Visibility = Visibility.Collapsed;
                 ContextRenameItem.Visibility = Visibility.Collapsed;
                 ContextDeleteItem.Visibility = Visibility.Collapsed;
@@ -1787,8 +2229,7 @@ public partial class SettingsWindow : Window
             }
 
             // Normal tree item
-            ContextAddActionItem.Visibility = Visibility.Visible;
-            ContextAddFolderItem.Visibility = Visibility.Visible;
+            ContextAddMenu.Visibility = Visibility.Visible;
             ContextExportItem.Visibility = Visibility.Visible;
             ContextImportItem.Visibility = Visibility.Visible;
             if (ContextExportSeparator != null) ContextExportSeparator.Visibility = Visibility.Visible;
@@ -1803,8 +2244,8 @@ public partial class SettingsWindow : Window
 
             if (_rightClickedTreeVm.Item.ActionType == ActionType.Folder)
             {
-                ContextAddActionItem.Header = $"New Action in '{_rightClickedTreeVm.Name}'";
-                ContextAddFolderItem.Header = $"New Subfolder in '{_rightClickedTreeVm.Name}'";
+                ContextAddMenu.Header = $"New in '{_rightClickedTreeVm.Name}'";
+                ContextAddFolderItem.Header = "New Subfolder";
             }
             else
             {
@@ -1813,13 +2254,13 @@ public partial class SettingsWindow : Window
                     : null;
                 if (parentFolder != null)
                 {
-                    ContextAddActionItem.Header = $"New Action in '{parentFolder.Name}'";
-                    ContextAddFolderItem.Header = $"New Subfolder in '{parentFolder.Name}'";
+                    ContextAddMenu.Header = $"New in '{parentFolder.Name}'";
+                    ContextAddFolderItem.Header = "New Subfolder";
                 }
                 else
                 {
-                    ContextAddActionItem.Header = "New Action at Root";
-                    ContextAddFolderItem.Header = "New Folder at Root";
+                    ContextAddMenu.Header = "New at Root";
+                    ContextAddFolderItem.Header = "New Folder";
                 }
             }
 
@@ -1859,8 +2300,7 @@ public partial class SettingsWindow : Window
         }
         else
         {
-            ContextAddActionItem.Visibility = Visibility.Visible;
-            ContextAddFolderItem.Visibility = Visibility.Visible;
+            ContextAddMenu.Visibility = Visibility.Visible;
             ContextExportItem.Visibility = Visibility.Visible;
             ContextImportItem.Visibility = Visibility.Visible;
             if (ContextExportSeparator != null) ContextExportSeparator.Visibility = Visibility.Visible;
@@ -1873,8 +2313,8 @@ public partial class SettingsWindow : Window
             ContextDuplicateItem.Visibility = Visibility.Collapsed;
             ContextRenameItem.Visibility = Visibility.Collapsed;
 
-            ContextAddActionItem.Header = "New Action at Root";
-            ContextAddFolderItem.Header = "New Folder at Root";
+            ContextAddMenu.Header = "New at Root";
+            ContextAddFolderItem.Header = "New Folder";
 
             int totalFolders = _items.Count(x => x.ActionType == ActionType.Folder);
             int totalActions = _items.Count(x => x.ActionType != ActionType.Folder);
@@ -2083,39 +2523,7 @@ public partial class SettingsWindow : Window
 
     private void AddFolderBtn_Click(object sender, RoutedEventArgs e)
     {
-        if (!PromptSaveIfDirty()) return;
-        CommitCurrentFormChanges();
-
-        Guid? parentId = null;
-        if (sender == ContextAddFolderItem && _rightClickedTreeVm == null)
-        {
-            // Right-clicked in blank space -> add at root
-            parentId = null;
-        }
-        else if (_rightClickedTreeVm != null)
-        {
-            parentId = _rightClickedTreeVm.Item.ActionType == ActionType.Folder ? _rightClickedTreeVm.Item.Id : _rightClickedTreeVm.Item.ParentId;
-        }
-        else if (_selectedItem != null)
-        {
-            parentId = _selectedItem.ActionType == ActionType.Folder ? _selectedItem.Id : _selectedItem.ParentId;
-        }
-
-        var newFolder = new TriggerItem
-        {
-            Id = Guid.NewGuid(),
-            ParentId = parentId,
-            Name = "New Folder",
-            ActionType = ActionType.Folder,
-            PresentationMode = PresentationMode.Direct,
-            OrderIndex = _items.Count
-        };
-
-        _items.Add(newFolder);
-        RebuildTree();
-        SelectTreeItem(newFolder);
-        _ = RestoreTreeFocus(newFolder);
-        SetDirty(true);
+        CreateNewItem(ActionType.Folder, sender == ContextAddFolderItem);
     }
 
     private TriggerItem? FindPostDeleteFocusCandidate(TriggerItem itemToDelete)
@@ -2210,7 +2618,7 @@ public partial class SettingsWindow : Window
 
             ItemNameBox.Text = string.Empty;
             ItemDescBox.Text = string.Empty;
-            ActionTypeCombo.SelectedIndex = 0;
+            UpdateEditorTypeBadge(ActionType.Shell);
             PresentationModeCombo.SelectedIndex = 0;
             HotkeyRecorder.Binding = null;
             AcceleratorBox.Text = string.Empty;
@@ -2559,7 +2967,7 @@ public partial class SettingsWindow : Window
     {
         if (CommandValidationStatusText == null) return;
 
-        if (ActionTypeCombo == null || ActionTypeCombo.SelectedIndex != 0) // Not Shell
+        if (_selectedItem == null || _selectedItem.ActionType != ActionType.Shell)
         {
             CommandValidationStatusText.Visibility = Visibility.Collapsed;
             return;
@@ -2747,6 +3155,46 @@ public partial class SettingsWindow : Window
         }
     }
 
+    private void TreeViewItem_RequestBringIntoView(object sender, RequestBringIntoViewEventArgs e)
+    {
+        // Suppress horizontal scroll jump on item focus/selection so left side is never cut off
+        e.Handled = true;
+    }
+
+    private void ToggleShortcutsBadgeBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_appSettings == null) return;
+        _appSettings.ShowShortcutsInTree = !_appSettings.ShowShortcutsInTree;
+        TriggerTreeItemViewModel.ShowShortcuts = _appSettings.ShowShortcutsInTree;
+        UpdateToggleShortcutsButtonUi();
+
+        foreach (var vm in _treeRoots)
+        {
+            vm.NotifyShortcutVisibilityChanged();
+        }
+
+        _ = _repository.SaveSettingsAsync(_appSettings);
+    }
+
+    private void UpdateToggleShortcutsButtonUi()
+    {
+        if (ToggleShortcutsBadgeBtn == null) return;
+        bool show = _appSettings?.ShowShortcutsInTree ?? true;
+        ToggleShortcutsBadgeBtn.ToolTip = show ? "Hide shortcut badges in tree" : "Show shortcut badges in tree";
+        if (show)
+        {
+            ToggleShortcutsBadgeBtn.Background = Application.Current.TryFindResource("AccentSubtleBrush") as Brush ?? Brushes.DarkSlateBlue;
+            ToggleShortcutsBadgeBtn.BorderBrush = Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.DodgerBlue;
+            ToggleShortcutsBadgeBtn.Foreground = Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.DodgerBlue;
+        }
+        else
+        {
+            ToggleShortcutsBadgeBtn.Background = Application.Current.TryFindResource("BgSecondaryBrush") as Brush ?? Brushes.DarkSlateGray;
+            ToggleShortcutsBadgeBtn.BorderBrush = Application.Current.TryFindResource("BorderBrush") as Brush ?? Brushes.Gray;
+            ToggleShortcutsBadgeBtn.Foreground = Application.Current.TryFindResource("TextSecondaryBrush") as Brush ?? Brushes.Gray;
+        }
+    }
+
     private void ToggleExpandAllBtn_Click(object sender, RoutedEventArgs e)
     {
         var folders = _items.Where(x => x.ActionType == ActionType.Folder).ToList();
@@ -2884,8 +3332,12 @@ public partial class SettingsWindow : Window
             workDir = Path.GetDirectoryName(target) ?? string.Empty;
         }
 
-        // Switch to Shell action type
-        ActionTypeCombo.SelectedIndex = (int)ActionType.Shell;
+        if (_selectedItem != null)
+        {
+            _selectedItem.ActionType = ActionType.Shell;
+            UpdateEditorTypeBadge(ActionType.Shell);
+            UpdateFormVisibility(ActionType.Shell);
+        }
         ShellCommandBox.Text = target;
         ShellArgsBox.Text = args;
         ShellWorkDirBox.Text = workDir;
@@ -3705,7 +4157,12 @@ public partial class SettingsWindow : Window
                     AddActionBtn_Click(this, new RoutedEventArgs());
                 }
 
-                ActionTypeCombo.SelectedIndex = (int)ActionType.Shell;
+                if (_selectedItem != null)
+                {
+                    _selectedItem.ActionType = ActionType.Shell;
+                    UpdateEditorTypeBadge(ActionType.Shell);
+                    UpdateFormVisibility(ActionType.Shell);
+                }
                 ShellCommandBox.Text = exePath;
                 ShellWorkDirBox.Text = Path.GetDirectoryName(exePath) ?? string.Empty;
 

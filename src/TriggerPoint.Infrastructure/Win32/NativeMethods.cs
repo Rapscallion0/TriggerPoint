@@ -194,6 +194,14 @@ public static class NativeMethods
     [DllImport("user32.dll")]
     public static extern IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
 
+    [DllImport("user32.dll")]
+    public static extern IntPtr MonitorFromRect([In] ref RECT lprc, uint dwFlags);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+
+    public const uint MONITOR_DEFAULTTONULL = 0;
+    public const uint MONITOR_DEFAULTTOPRIMARY = 1;
     public const uint MONITOR_DEFAULTTONEAREST = 2;
 
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
@@ -347,4 +355,86 @@ public static class NativeMethods
     [Guid("00021401-0000-0000-C000-000000000046")]
     [ClassInterface(ClassInterfaceType.None)]
     public class ShellLink { }
+
+    public const uint SWP_NOSIZE = 0x0001;
+    public const uint SWP_NOMOVE = 0x0002;
+    public const uint SWP_NOZORDER = 0x0004;
+    public const uint SWP_NOACTIVATE = 0x0010;
+    public const uint SWP_SHOWWINDOW = 0x0040;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsWindow(IntPtr hWnd);
+
+    public static bool MoveWindowToTargetDisplay(IntPtr hwnd, string? targetDisplay)
+    {
+        if (hwnd == IntPtr.Zero || !IsWindow(hwnd)) return false;
+        if (string.IsNullOrWhiteSpace(targetDisplay) || targetDisplay.Equals("default", StringComparison.OrdinalIgnoreCase)) return true;
+
+        try
+        {
+            var screens = System.Windows.Forms.Screen.AllScreens;
+            if (screens.Length == 0) return false;
+
+            System.Windows.Forms.Screen? targetScreen = null;
+
+            if (targetDisplay.Equals("cursor", StringComparison.OrdinalIgnoreCase))
+            {
+                if (GetCursorPos(out var pt))
+                {
+                    targetScreen = System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point(pt.X, pt.Y));
+                }
+            }
+            else if (targetDisplay.Equals("primary", StringComparison.OrdinalIgnoreCase))
+            {
+                targetScreen = System.Windows.Forms.Screen.PrimaryScreen;
+            }
+            else
+            {
+                // Match by device name e.g. "\\.\DISPLAY1"
+                targetScreen = Array.Find(screens, s => s.DeviceName.Equals(targetDisplay, StringComparison.OrdinalIgnoreCase));
+
+                // Or match by index e.g. "display:1" (1-based) or "display:0" (0-based)
+                if (targetScreen == null && int.TryParse(targetDisplay.Replace("display:", "", StringComparison.OrdinalIgnoreCase).Trim(), out int idx))
+                {
+                    if (idx >= 1 && idx <= screens.Length)
+                    {
+                        targetScreen = screens[idx - 1];
+                    }
+                    else if (idx >= 0 && idx < screens.Length)
+                    {
+                        targetScreen = screens[idx];
+                    }
+                }
+            }
+
+            // SAFETY: If the target monitor is disconnected or unavailable, fallback to primary screen so it is never placed off-screen!
+            targetScreen ??= System.Windows.Forms.Screen.PrimaryScreen ?? screens[0];
+
+            if (!GetWindowRect(hwnd, out var currentRect)) return false;
+
+            int currentWidth = currentRect.Right - currentRect.Left;
+            int currentHeight = currentRect.Bottom - currentRect.Top;
+
+            var workArea = targetScreen.WorkingArea;
+
+            // Clamp width and height if larger than work area
+            int targetWidth = Math.Min(currentWidth, workArea.Width);
+            int targetHeight = Math.Min(currentHeight, workArea.Height);
+
+            // Center in target screen working area
+            int newX = workArea.Left + Math.Max(0, (workArea.Width - targetWidth) / 2);
+            int newY = workArea.Top + Math.Max(0, (workArea.Height - targetHeight) / 2);
+
+            return SetWindowPos(hwnd, IntPtr.Zero, newX, newY, targetWidth, targetHeight, SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+        catch
+        {
+            return false;
+        }
+    }
 }

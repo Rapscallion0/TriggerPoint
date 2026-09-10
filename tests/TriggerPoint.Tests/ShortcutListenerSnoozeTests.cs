@@ -41,4 +41,21 @@ public class ShortcutListenerSnoozeTests
         Assert.False(eventReceivedValue);
         Assert.Equal(2, eventCount);
     }
+
+    [Fact]
+    public void Win32HotkeyListener_SuspendAndResume_TracksSuspensionCorrectly()
+    {
+        using var listener = new Win32HotkeyListener();
+
+        // Single suspend and resume
+        listener.Suspend();
+        // Should not throw or crash when resuming
+        listener.Resume();
+
+        // Nested re-entrant suspend and resume
+        listener.Suspend();
+        listener.Suspend();
+        listener.Resume();
+        listener.Resume();
+    }
 }

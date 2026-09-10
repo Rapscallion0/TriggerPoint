@@ -10,6 +10,7 @@ using TriggerPoint.Core.Services;
 using TriggerPoint.Infrastructure.Persistence;
 using TriggerPoint.Infrastructure.Services;
 using TriggerPoint.Infrastructure.Win32;
+using TriggerPoint.UI.Controls;
 using TriggerPoint.UI.Services;
 using TriggerPoint.UI.Theme;
 using TriggerPoint.UI.Views;
@@ -168,7 +169,53 @@ public partial class App : Application
 
         // 7. Setup Settings Window
         var contextFilterService = _serviceProvider.GetRequiredService<IContextFilterService>();
-        _settingsWindow = new SettingsWindow(_repository, _shortcutListener, _executor, contextFilterService, _logManagerService);
+        var workflowExecutor = _serviceProvider.GetRequiredService<IWorkflowExecutor>();
+        var browserDetectionService = _serviceProvider.GetRequiredService<IBrowserDetectionService>();
+
+        async Task<bool> ExecuteItemOrFolderAsync(TriggerItem targetItem, IntPtr? hwnd)
+        {
+            if (targetItem.ActionType == ActionType.Folder)
+            {
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    if (targetItem.PresentationMode == PresentationMode.CursorMenu)
+                    {
+                        OpenCursorMenu(targetItem, hwnd ?? IntPtr.Zero);
+                    }
+                    else
+                    {
+                        OpenCommandPalette(targetItem, hwnd ?? IntPtr.Zero);
+                    }
+                });
+                return true;
+            }
+
+            await _executor.ExecuteAsync(targetItem, ExecutionOverride.Standard, hwnd);
+            return true;
+        }
+
+        workflowExecutor.ActionExecutionHandler = async (targetId, hwnd) =>
+        {
+            if (_repository == null || _executor == null) return false;
+            var allItems = await _repository.LoadAsync();
+            var targetItem = allItems.FirstOrDefault(x => x.Id == targetId);
+            if (targetItem == null) return false;
+            return await ExecuteItemOrFolderAsync(targetItem, hwnd);
+        };
+
+        var scriptEngineService = _serviceProvider.GetRequiredService<IScriptEngineService>();
+        scriptEngineService.ActionExecutionHandler = async (idOrName, hwnd) =>
+        {
+            if (_repository == null || _executor == null) return false;
+            var allItems = await _repository.LoadAsync();
+            var targetItem = allItems.FirstOrDefault(x =>
+                x.Id.ToString().Equals(idOrName, StringComparison.OrdinalIgnoreCase) ||
+                x.Name.Equals(idOrName, StringComparison.OrdinalIgnoreCase));
+            if (targetItem == null) return false;
+            return await ExecuteItemOrFolderAsync(targetItem, hwnd);
+        };
+
+        _settingsWindow = new SettingsWindow(_repository, _shortcutListener, _executor, contextFilterService, _logManagerService, workflowExecutor, browserDetectionService);
         MainWindow = _settingsWindow;
 
         // 8. Startup Recycle Bin Purge
@@ -186,6 +233,10 @@ public partial class App : Application
         var allItems = new List<TriggerItem>(items);
         allItems.AddRange(CreateVirtualApplicationItems(appSettings));
         _shortcutListener.RegisterAll(allItems);
+
+        // Suspend global hotkeys while user records a shortcut so keys pass cleanly to UI
+        HotkeyRecorderControl.RecordingStarted += (s, e) => _shortcutListener.Suspend();
+        HotkeyRecorderControl.RecordingStopped += (s, e) => _shortcutListener.Resume();
 
         // Optional startup shortcut health check
         if (appSettings.ValidateShortcutsOnStartup)
@@ -233,11 +284,15 @@ public partial class App : Application
     {
         services.AddSingleton<IConfigRepository, JsonConfigRepository>();
         services.AddSingleton<IPromptDialogService, InteractivePromptDialog>();
+        services.AddSingleton<IConfirmationDialogService, ConfirmationDialog>();
         services.AddSingleton<ISnippetService, Win32SnippetService>();
         services.AddSingleton<IContextFilterService, ContextFilterService>();
         services.AddSingleton<IIconService, Win32IconService>();
         services.AddSingleton<ITelemetryService, TelemetryService>();
         services.AddSingleton<IShortcutListener, Win32HotkeyListener>();
+        services.AddSingleton<IBrowserDetectionService, BrowserDetectionService>();
+        services.AddSingleton<IScriptEngineService, JintScriptEngineService>();
+        services.AddSingleton<IWorkflowExecutor, WorkflowExecutor>();
         services.AddSingleton<IActionExecutor, ShellActionExecutor>();
         services.AddSingleton<IToastNotificationService, ToastNotificationService>();
     }
@@ -267,6 +322,15 @@ public partial class App : Application
             {
                 OpenCommandPalette(targetHwnd: targetHwnd);
                 return;
+            }
+
+            if (item.PresentationMode == PresentationMode.CursorMenu || item.PresentationMode == PresentationMode.CommandPalette)
+            {
+                var filterService = _serviceProvider?.GetService<IContextFilterService>();
+                if (filterService != null && !filterService.ShouldExecute(item))
+                {
+                    return;
+                }
             }
 
             switch (item.PresentationMode)
@@ -347,9 +411,15 @@ public partial class App : Application
     {
         if (_settingsWindow == null) return;
 
+        bool wasHidden = !_settingsWindow.IsVisible || _settingsWindow.WindowState == WindowState.Minimized;
         if (_settingsWindow.WindowState == WindowState.Minimized)
         {
             _settingsWindow.WindowState = WindowState.Normal;
+        }
+
+        if (wasHidden)
+        {
+            _settingsWindow.ApplyWindowPlacement();
         }
 
         _settingsWindow.Show();

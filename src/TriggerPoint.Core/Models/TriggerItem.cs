@@ -48,7 +48,12 @@ public sealed class TriggerItem
                 Arguments = Payload.Arguments,
                 WorkingDirectory = Payload.WorkingDirectory,
                 RunAsAdmin = Payload.RunAsAdmin,
-                SnippetTemplate = Payload.SnippetTemplate
+                TargetDisplay = Payload.TargetDisplay,
+                OpenInNewWindow = Payload.OpenInNewWindow,
+                SnippetTemplate = Payload.SnippetTemplate,
+                WorkflowMode = Payload.WorkflowMode,
+                WorkflowSteps = Payload.WorkflowSteps?.ConvertAll(s => s.Clone()) ?? [],
+                ScriptSource = Payload.ScriptSource
             },
             ContextFilter = new ContextFilter
             {

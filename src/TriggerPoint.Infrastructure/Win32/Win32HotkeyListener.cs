@@ -22,6 +22,8 @@ public class Win32HotkeyListener : IShortcutListener
     private readonly Dictionary<int, TriggerItem> _registeredById = [];
     private readonly Dictionary<Guid, int> _idByItemId = [];
     private readonly Dictionary<Guid, HotkeyConflictStatus> _currentConflicts = [];
+    private readonly List<TriggerItem> _lastItems = [];
+    private int _suspendCount;
     private int _nextId = 1000;
 
     public bool IsSnoozed
@@ -43,6 +45,29 @@ public class Win32HotkeyListener : IShortcutListener
     public event EventHandler<TriggerItem>? HotkeyTriggered;
     public event EventHandler? ConflictsUpdated;
     public event EventHandler<bool>? SnoozeChanged;
+
+    public void Suspend()
+    {
+        if (System.Threading.Interlocked.Increment(ref _suspendCount) == 1)
+        {
+            UnregisterAll();
+            _logger.Information("Win32HotkeyListener suspended (OS hotkeys temporarily unregistered).");
+        }
+    }
+
+    public void Resume()
+    {
+        int count = System.Threading.Interlocked.Decrement(ref _suspendCount);
+        if (count <= 0)
+        {
+            System.Threading.Interlocked.Exchange(ref _suspendCount, 0);
+            _logger.Information("Win32HotkeyListener resumed (restoring OS hotkeys).");
+            if (_lastItems.Count > 0)
+            {
+                RegisterAll(_lastItems);
+            }
+        }
+    }
 
     public void Start(IntPtr windowHandle)
     {
@@ -90,10 +115,18 @@ public class Win32HotkeyListener : IShortcutListener
 
     public void RegisterAll(IEnumerable<TriggerItem> items)
     {
+        var itemsList = items.ToList();
+        _lastItems.Clear();
+        _lastItems.AddRange(itemsList);
+
+        if (_suspendCount > 0)
+        {
+            _logger.Information("Win32HotkeyListener is currently suspended. Items cached but not registered with OS.");
+            return;
+        }
+
         UnregisterAll();
         _currentConflicts.Clear();
-
-        var itemsList = items.ToList();
 
         // Tier 1: Internal TriggerPoint Registry Validation
         var tier1Conflicts = HotkeyRegistryValidator.ValidateTier1Conflicts(itemsList);
@@ -205,6 +238,13 @@ public class Win32HotkeyListener : IShortcutListener
     {
         if (msg == NativeMethods.WM_HOTKEY)
         {
+            if (_suspendCount > 0)
+            {
+                _logger.Debug("WM_HOTKEY ignored because listener is suspended.");
+                handled = true;
+                return IntPtr.Zero;
+            }
+
             int hotkeyId = wParam.ToInt32();
             if (_registeredById.TryGetValue(hotkeyId, out var item))
             {

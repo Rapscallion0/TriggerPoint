@@ -25,6 +25,13 @@ public enum ToastMonitorPlacement
     ActiveMonitor
 }
 
+public enum WindowStartupPlacement
+{
+    RememberLast,
+    PrimaryDisplay,
+    CursorDisplay
+}
+
 public class AppSettings
 {
     public LogLevelOption LogLevel { get; set; } = LogLevelOption.Information;
@@ -41,6 +48,13 @@ public class AppSettings
     public bool ValidateShortcutsOnStartup { get; set; } = true;
     public int LogSplitThresholdMb { get; set; } = 100;
     public bool IsRecycleBinExpanded { get; set; } = false;
+    public bool ShowShortcutsInTree { get; set; } = true;
+    public WindowStartupPlacement WindowPlacement { get; set; } = WindowStartupPlacement.RememberLast;
+    public double? WindowLeft { get; set; }
+    public double? WindowTop { get; set; }
+    public double? WindowWidth { get; set; }
+    public double? WindowHeight { get; set; }
+    public bool WindowMaximized { get; set; }
 
     public void Normalize()
     {

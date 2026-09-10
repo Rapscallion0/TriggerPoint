@@ -42,6 +42,8 @@ public interface IShortcutListener : IDisposable
     void Start(IntPtr windowHandle);
     void Stop();
     void RegisterAll(IEnumerable<TriggerItem> items);
+    void Suspend();
+    void Resume();
     bool IsSnoozed { get; set; }
     IReadOnlyDictionary<Guid, HotkeyConflictStatus> CurrentConflicts { get; }
     event EventHandler<TriggerItem>? HotkeyTriggered;
@@ -80,7 +82,13 @@ public interface ITelemetryService
 
 public interface IPromptDialogService
 {
-    Task<Dictionary<string, string>?> ShowPromptDialogAsync(IReadOnlyList<PromptToken> promptTokens);
+    Task<Dictionary<string, string>?> ShowPromptDialogAsync(
+        IReadOnlyList<PromptToken> promptTokens,
+        string? title = null,
+        string? subtitle = null);
+
+    Task<Dictionary<string, string>?> ShowPromptDialogAsync(IReadOnlyList<PromptToken> promptTokens)
+        => ShowPromptDialogAsync(promptTokens, null, null);
 }
 
 public interface IToastNotificationService
@@ -88,4 +96,54 @@ public interface IToastNotificationService
     void ShowSuccess(string title, string message);
     void ShowError(string title, string message);
     void ShowWarning(string title, string message);
+}
+
+public interface IConfirmationDialogService
+{
+    Task<bool> ShowConfirmationAsync(
+        string message, 
+        string title = "TriggerPoint Confirmation", 
+        string confirmButtonText = "Confirm", 
+        string cancelButtonText = "Cancel");
+}
+
+public sealed record ScriptExecutionResult(
+    bool Success, 
+    string? ErrorMessage, 
+    IReadOnlyDictionary<string, string> Variables);
+
+public interface IScriptEngineService
+{
+    Func<string, IntPtr?, Task<bool>>? ActionExecutionHandler { get; set; }
+
+    Task<ScriptExecutionResult> ExecuteAsync(
+        string script, 
+        IDictionary<string, string>? initialVariables = null, 
+        bool isElevated = false,
+        IntPtr? targetHwnd = null,
+        System.Threading.CancellationToken cancellationToken = default);
+}
+
+public interface IWorkflowExecutor
+{
+    Func<Guid, IntPtr?, Task<bool>>? ActionExecutionHandler { get; set; }
+
+    Task ExecuteWorkflowAsync(
+        TriggerItem item, 
+        ExecutionOverride executionOverride = ExecutionOverride.Standard, 
+        IntPtr? targetHwnd = null, 
+        System.Threading.CancellationToken cancellationToken = default);
+
+    Task<bool> ExecuteSingleStepAsync(
+        WorkflowStep step, 
+        TriggerItem parentItem, 
+        IntPtr? targetHwnd = null, 
+        System.Threading.CancellationToken cancellationToken = default);
+}
+
+public interface IBrowserDetectionService
+{
+    IReadOnlyList<BrowserInfo> GetInstalledBrowsers();
+    IReadOnlyList<BrowserProfileInfo> GetProfiles(string browserId);
+    bool LaunchUrl(string url, string? browserId = null, string? profileId = null, bool newWindow = false);
 }

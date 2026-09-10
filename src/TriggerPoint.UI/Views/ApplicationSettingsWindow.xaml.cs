@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -10,6 +11,7 @@ using TriggerPoint.Core.Contracts;
 using TriggerPoint.Core.Models;
 using TriggerPoint.Core.Services;
 using TriggerPoint.Infrastructure.Services;
+using TriggerPoint.Infrastructure.Win32;
 using TriggerPoint.UI.Theme;
 
 namespace TriggerPoint.UI.Views;
@@ -39,17 +41,81 @@ public partial class ApplicationSettingsWindow : Window
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
-        CenterOnPrimaryDisplay();
+        CenterOnOwnerOrActiveMonitor();
     }
 
-    private void CenterOnPrimaryDisplay()
+    private void CenterOnOwnerOrActiveMonitor()
     {
-        var workArea = SystemParameters.WorkArea;
+        double dpiScale = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
         double winWidth = Width > 0 ? Width : 600;
         double winHeight = Height > 0 ? Height : 650;
 
+        // 1. If Owner is set and visible, center over Owner
+        if (Owner != null && Owner.IsVisible)
+        {
+            CenterOverWindow(Owner, winWidth, winHeight, dpiScale);
+            return;
+        }
+
+        // 2. If main window exists in App and is visible, center over it
+        if (Application.Current is App app && app.MainWindow != null && app.MainWindow.IsVisible)
+        {
+            CenterOverWindow(app.MainWindow, winWidth, winHeight, dpiScale);
+            return;
+        }
+
+        // 3. Otherwise center on the monitor where the cursor currently is (e.g. tray click)
+        if (NativeMethods.GetCursorPos(out var pt))
+        {
+            var hMon = NativeMethods.MonitorFromPoint(pt, NativeMethods.MONITOR_DEFAULTTONEAREST);
+            var mi = new NativeMethods.MONITORINFO { cbSize = Marshal.SizeOf<NativeMethods.MONITORINFO>() };
+            if (NativeMethods.GetMonitorInfo(hMon, ref mi))
+            {
+                double workLeft = mi.rcWork.Left / dpiScale;
+                double workTop = mi.rcWork.Top / dpiScale;
+                double workWidth = (mi.rcWork.Right - mi.rcWork.Left) / dpiScale;
+                double workHeight = (mi.rcWork.Bottom - mi.rcWork.Top) / dpiScale;
+
+                Left = workLeft + Math.Max(0, (workWidth - winWidth) / 2.0);
+                Top = workTop + Math.Max(0, (workHeight - winHeight) / 2.0);
+                return;
+            }
+        }
+
+        // Fallback: Primary Display
+        var workArea = SystemParameters.WorkArea;
         Left = workArea.Left + Math.Max(0, (workArea.Width - winWidth) / 2.0);
         Top = workArea.Top + Math.Max(0, (workArea.Height - winHeight) / 2.0);
+    }
+
+    private void CenterOverWindow(Window target, double winWidth, double winHeight, double dpiScale)
+    {
+        var targetHandle = new System.Windows.Interop.WindowInteropHelper(target).Handle;
+        if (targetHandle != IntPtr.Zero)
+        {
+            var hMon = NativeMethods.MonitorFromWindow(targetHandle, NativeMethods.MONITOR_DEFAULTTONEAREST);
+            var mi = new NativeMethods.MONITORINFO { cbSize = Marshal.SizeOf<NativeMethods.MONITORINFO>() };
+            if (NativeMethods.GetMonitorInfo(hMon, ref mi))
+            {
+                double workLeft = mi.rcWork.Left / dpiScale;
+                double workTop = mi.rcWork.Top / dpiScale;
+                double workWidth = (mi.rcWork.Right - mi.rcWork.Left) / dpiScale;
+                double workHeight = (mi.rcWork.Bottom - mi.rcWork.Top) / dpiScale;
+
+                double targetCenterX = target.Left + (target.ActualWidth > 0 ? target.ActualWidth : target.Width) / 2.0;
+                double targetCenterY = target.Top + (target.ActualHeight > 0 ? target.ActualHeight : target.Height) / 2.0;
+
+                double l = targetCenterX - winWidth / 2.0;
+                double t = targetCenterY - winHeight / 2.0;
+
+                Left = Math.Clamp(l, workLeft, workLeft + Math.Max(0, workWidth - winWidth));
+                Top = Math.Clamp(t, workTop, workTop + Math.Max(0, workHeight - winHeight));
+                return;
+            }
+        }
+
+        Left = target.Left + Math.Max(0, (target.Width - winWidth) / 2.0);
+        Top = target.Top + Math.Max(0, (target.Height - winHeight) / 2.0);
     }
 
     private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -123,6 +189,15 @@ public partial class ApplicationSettingsWindow : Window
             ToastPlacementPanel.IsEnabled = _currentSettings.ShowSuccessToasts;
             ShowSuccessToastsCheck.Checked += (s, e) => ToastPlacementPanel.IsEnabled = true;
             ShowSuccessToastsCheck.Unchecked += (s, e) => ToastPlacementPanel.IsEnabled = false;
+
+            WindowPlacementCombo.SelectedIndex = _currentSettings.WindowPlacement switch
+            {
+                WindowStartupPlacement.RememberLast => 0,
+                WindowStartupPlacement.PrimaryDisplay => 1,
+                WindowStartupPlacement.CursorDisplay => 2,
+                _ => 0
+            };
+
             ValidateOnStartupCheck.IsChecked = _currentSettings.ValidateShortcutsOnStartup;
 
             // Populate Global Shortcuts
@@ -335,6 +410,13 @@ public partial class ApplicationSettingsWindow : Window
             _currentSettings.ToastPlacement = ToastPlacementCombo.SelectedIndex == 1 
                 ? ToastMonitorPlacement.ActiveMonitor 
                 : ToastMonitorPlacement.PrimaryMonitor;
+            _currentSettings.WindowPlacement = WindowPlacementCombo.SelectedIndex switch
+            {
+                0 => WindowStartupPlacement.RememberLast,
+                1 => WindowStartupPlacement.PrimaryDisplay,
+                2 => WindowStartupPlacement.CursorDisplay,
+                _ => WindowStartupPlacement.RememberLast
+            };
             _currentSettings.ValidateShortcutsOnStartup = ValidateOnStartupCheck.IsChecked == true;
             _currentSettings.OpenSettingsHotkey = openSettingsHotkey;
             _currentSettings.CommandPaletteHotkey = cmdPaletteHotkey;

@@ -25,8 +25,11 @@ public partial class HotkeyRecorderControl : UserControl
     }
 
     public event EventHandler<ShortcutBinding?>? BindingRecorded;
+    public static event EventHandler? RecordingStarted;
+    public static event EventHandler? RecordingStopped;
 
     private bool _isRecording;
+    public bool IsRecording => _isRecording;
 
     public HotkeyRecorderControl()
     {
@@ -87,7 +90,9 @@ public partial class HotkeyRecorderControl : UserControl
 
     public void StartRecording()
     {
+        if (_isRecording) return;
         _isRecording = true;
+        RecordingStarted?.Invoke(this, EventArgs.Empty);
         PromptText.Text = "Recording... Press keys";
         PromptText.Visibility = Visibility.Visible;
         KeyBadge.Visibility = Visibility.Collapsed;
@@ -96,7 +101,9 @@ public partial class HotkeyRecorderControl : UserControl
 
     public void StopRecording(bool cancelled)
     {
+        if (!_isRecording) return;
         _isRecording = false;
+        RecordingStopped?.Invoke(this, EventArgs.Empty);
         UpdateUi();
     }
 

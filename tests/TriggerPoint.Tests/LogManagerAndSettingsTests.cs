@@ -123,4 +123,50 @@ public class LogManagerAndSettingsTests : IDisposable
 
         Assert.Equal(ToastMonitorPlacement.ActiveMonitor, loaded.ToastPlacement);
     }
+
+    [Fact]
+    public async Task JsonConfigRepository_PersistsShowShortcutsInTree()
+    {
+        var defaultSettings = new AppSettings();
+        Assert.True(defaultSettings.ShowShortcutsInTree);
+
+        var repo = new JsonConfigRepository(_testDir);
+        var settings = new AppSettings
+        {
+            ShowShortcutsInTree = false
+        };
+
+        await repo.SaveSettingsAsync(settings);
+        var loaded = await repo.LoadSettingsAsync();
+
+        Assert.False(loaded.ShowShortcutsInTree);
+    }
+
+    [Fact]
+    public async Task JsonConfigRepository_PersistsWindowPlacementAndBounds()
+    {
+        var defaultSettings = new AppSettings();
+        Assert.Equal(WindowStartupPlacement.RememberLast, defaultSettings.WindowPlacement);
+
+        var repo = new JsonConfigRepository(_testDir);
+        var settings = new AppSettings
+        {
+            WindowPlacement = WindowStartupPlacement.CursorDisplay,
+            WindowLeft = 150.5,
+            WindowTop = 200.5,
+            WindowWidth = 1100,
+            WindowHeight = 750,
+            WindowMaximized = true
+        };
+
+        await repo.SaveSettingsAsync(settings);
+        var loaded = await repo.LoadSettingsAsync();
+
+        Assert.Equal(WindowStartupPlacement.CursorDisplay, loaded.WindowPlacement);
+        Assert.Equal(150.5, loaded.WindowLeft);
+        Assert.Equal(200.5, loaded.WindowTop);
+        Assert.Equal(1100, loaded.WindowWidth);
+        Assert.Equal(750, loaded.WindowHeight);
+        Assert.True(loaded.WindowMaximized);
+    }
 }

@@ -1,0 +1,217 @@
+using System;
+using System.Collections.Generic;
+using TriggerPoint.Core.Models;
+using TriggerPoint.Core.Services;
+using Xunit;
+
+namespace TriggerPoint.Tests;
+
+public class WorkflowStepCompilerTests
+{
+    [Fact]
+    public void CompileToJavaScript_GeneratesScriptForPromptAndUrl()
+    {
+        var steps = new List<WorkflowStep>
+        {
+            new()
+            {
+                StepType = WorkflowStepType.Prompt,
+                Name = "Prompt Ticket",
+                VariableName = "ticket",
+                PromptLabel = "Ticket Number",
+                PromptDefaultValue = "123",
+                OnError = StepErrorPolicy.StopWorkflow
+            },
+            new()
+            {
+                StepType = WorkflowStepType.OpenUrl,
+                Name = "Open Zendesk",
+                Url = "https://example.com/tickets/{ticket}",
+                OnError = StepErrorPolicy.StopWorkflow
+            }
+        };
+
+        var js = WorkflowStepCompiler.CompileToJavaScript(steps);
+
+        Assert.Contains("const ticket = await tp.prompt(\"Ticket Number\", { default: \"123\" });", js);
+        Assert.Contains("tp.vars.ticket = ticket;", js);
+        Assert.Contains("if (!ticket) return;", js);
+        Assert.Contains("tp.openUrl(`https://example.com/tickets/${tp.vars.ticket ?? '{ticket}'}`);", js);
+    }
+
+    [Fact]
+    public void CompileToJavaScript_GeneratesDirectoryCheckWithConfirmation()
+    {
+        var steps = new List<WorkflowStep>
+        {
+            new()
+            {
+                StepType = WorkflowStepType.EnsureDirectory,
+                Name = "Ensure Folder",
+                DirectoryPath = @"D:\Tickets\{ticket}",
+                DirectoryMissingPolicy = DirectoryMissingPolicy.PromptToCreate,
+                OpenInExplorer = true,
+                OnError = StepErrorPolicy.StopWorkflow
+            }
+        };
+
+        var js = WorkflowStepCompiler.CompileToJavaScript(steps);
+
+        Assert.Contains("tp.fs.exists(", js);
+        Assert.Contains("await tp.confirm(", js);
+        Assert.Contains("tp.fs.createDirectory(", js);
+        Assert.Contains("tp.fs.openInExplorer(", js);
+    }
+
+    [Fact]
+    public void CompileToJavaScript_GeneratesLaunchAppAndSnippet()
+    {
+        var steps = new List<WorkflowStep>
+        {
+            new()
+            {
+                StepType = WorkflowStepType.LaunchApp,
+                Name = "Launch Sublime",
+                Command = "subl.exe",
+                Arguments = "D:\\Tickets\\{ticket}",
+                RunAsAdmin = true,
+                OnError = StepErrorPolicy.Continue
+            },
+            new()
+            {
+                StepType = WorkflowStepType.InjectSnippet,
+                Name = "Inject Notes",
+                SnippetTemplate = "Working on ticket #{ticket}",
+                OnError = StepErrorPolicy.Continue
+            }
+        };
+
+        var js = WorkflowStepCompiler.CompileToJavaScript(steps);
+
+        Assert.Contains("tp.launch(`subl.exe`, `D:\\\\Tickets\\\\${tp.vars.ticket ?? '{ticket}'}`, ``, true);", js);
+        Assert.Contains("await tp.injectSnippet(`Working on ticket #${tp.vars.ticket ?? '{ticket}'}`);", js);
+    }
+
+    [Fact]
+    public void CompileToJavaScript_AllBuiltInPresetsCompileSuccessfully()
+    {
+        var presets = WorkflowPresets.GetAll();
+        Assert.NotEmpty(presets);
+
+        foreach (var preset in presets)
+        {
+            var js = WorkflowStepCompiler.CompileToJavaScript(preset.Steps);
+            Assert.False(string.IsNullOrWhiteSpace(js), $"Preset '{preset.Title}' failed to compile.");
+            Assert.Contains("// TriggerPoint Automated Workflow Script", js);
+        }
+    }
+
+    [Fact]
+    public void CompileToJavaScript_GeneratesExecuteAction()
+    {
+        var targetId = Guid.NewGuid();
+        var steps = new List<WorkflowStep>
+        {
+            new()
+            {
+                StepType = WorkflowStepType.ExecuteAction,
+                Name = "Call Another Action",
+                TargetItemId = targetId
+            }
+        };
+
+        var js = WorkflowStepCompiler.CompileToJavaScript(steps);
+        Assert.Contains($"await tp.executeAction(\"{targetId}\");", js);
+    }
+
+    [Fact]
+    public void CompileToJavaScript_GeneratesScriptForPromptNumberAndDatePicker()
+    {
+        var steps = new List<WorkflowStep>
+        {
+            new()
+            {
+                StepType = WorkflowStepType.Prompt,
+                Name = "Input Details",
+                PromptFields =
+                [
+                    new WorkflowPromptField
+                    {
+                        VariableName = "count",
+                        Label = "Quantity",
+                        Type = TokenType.PromptNumber,
+                        MinNumber = 1,
+                        MaxNumber = 100,
+                        DefaultValue = "5"
+                    },
+                    new WorkflowPromptField
+                    {
+                        VariableName = "startDate",
+                        Label = "Start Date",
+                        Type = TokenType.PromptDatePicker,
+                        DateFormat = "MM/dd/yyyy",
+                        DefaultValue = "01/01/2026"
+                    }
+                ]
+            }
+        };
+
+        var js = WorkflowStepCompiler.CompileToJavaScript(steps);
+        Assert.Contains("const count = await tp.prompt(\"Quantity\", { type: \"number\", min: 1, max: 100, default: \"5\" });", js);
+        Assert.Contains("const startDate = await tp.prompt(\"Start Date\", { type: \"date\", dateFormat: \"MM/dd/yyyy\", default: \"01/01/2026\" });", js);
+        Assert.Contains("tp.vars.count = count;", js);
+        Assert.Contains("tp.vars.startDate = startDate;", js);
+    }
+
+    [Fact]
+    public void CompileToJavaScript_GeneratesOpenUrl_WithNewWindow()
+    {
+        var steps = new List<WorkflowStep>
+        {
+            new()
+            {
+                StepType = WorkflowStepType.OpenUrl,
+                Url = "https://example.com",
+                OpenInNewWindow = true
+            }
+        };
+
+        var js = WorkflowStepCompiler.CompileToJavaScript(steps);
+        Assert.Contains("tp.openUrl(`https://example.com`, \"\", \"\", true);", js);
+    }
+
+    [Fact]
+    public void CompileToJavaScript_GeneratesLaunchApp_WithTargetDisplay()
+    {
+        var steps = new List<WorkflowStep>
+        {
+            new()
+            {
+                StepType = WorkflowStepType.LaunchApp,
+                Command = "notepad.exe",
+                Arguments = "file.txt",
+                TargetDisplay = "display:2"
+            }
+        };
+
+        var js = WorkflowStepCompiler.CompileToJavaScript(steps);
+        Assert.Contains("tp.launch(`notepad.exe`, `file.txt`, ``, false, \"display:2\");", js);
+    }
+
+    [Fact]
+    public void WorkflowStep_Clone_PreservesNewProperties()
+    {
+        var original = new WorkflowStep
+        {
+            StepType = WorkflowStepType.LaunchApp,
+            Command = "calc.exe",
+            TargetDisplay = "cursor",
+            OpenInNewWindow = true
+        };
+
+        var clone = original.Clone();
+
+        Assert.Equal(original.TargetDisplay, clone.TargetDisplay);
+        Assert.Equal(original.OpenInNewWindow, clone.OpenInNewWindow);
+    }
+}

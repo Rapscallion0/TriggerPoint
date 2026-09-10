@@ -23,7 +23,39 @@ public enum ActionType
 {
     Shell = 0,
     Snippet = 1,
-    Folder = 2
+    Folder = 2,
+    Workflow = 3
+}
+
+public enum WorkflowMode
+{
+    Visual = 0,
+    Script = 1
+}
+
+public enum WorkflowStepType
+{
+    Prompt = 0,
+    OpenUrl = 1,
+    LaunchApp = 2,
+    EnsureDirectory = 3,
+    InjectSnippet = 4,
+    Delay = 5,
+    RunScript = 6,
+    ExecuteAction = 7
+}
+
+public enum StepErrorPolicy
+{
+    StopWorkflow = 0,
+    Continue = 1
+}
+
+public enum DirectoryMissingPolicy
+{
+    PromptToCreate = 0,
+    CreateSilently = 1,
+    Fail = 2
 }
 
 public enum HotkeyConflictType

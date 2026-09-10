@@ -276,6 +276,21 @@
                                 </ComboBox>
                             </StackPanel>
 
+                            <!-- Window Startup & Open Placement -->
+                            <StackPanel Margin="0,4,0,14">
+                                <TextBlock Text="Window Startup &amp; Open Location" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                <TextBlock Text="Choose where TriggerPoint manager windows appear when launched" 
+                                           FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,1,0,6"/>
+                                <ComboBox x:Name="WindowPlacementCombo" 
+                                          Width="380" 
+                                          HorizontalAlignment="Left"
+                                          FontSize="12">
+                                    <ComboBoxItem Content="Remember Last Position (Default — Restores exact coordinates)"/>
+                                    <ComboBoxItem Content="Primary Display (Centered)"/>
+                                    <ComboBoxItem Content="Active Display at Mouse Pointer (Centered)"/>
+                                </ComboBox>
+                            </StackPanel>
+
                             <CheckBox x:Name="ValidateOnStartupCheck" 
                                       Content="Validate shortcut file paths on startup" 
                                       FontSize="13" 

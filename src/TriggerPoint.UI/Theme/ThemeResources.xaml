@@ -56,16 +56,18 @@
         <Setter Property="OverridesDefaultStyle" Value="True"/>
         <Setter Property="IsTabStop" Value="False"/>
         <Setter Property="Focusable" Value="False"/>
+        <Setter Property="MinHeight" Value="24"/>
+        <Setter Property="MinWidth" Value="24"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Thumb">
-                    <Border CornerRadius="4" 
+                    <Border CornerRadius="5" 
                             Background="{DynamicResource BorderBrush}" 
-                            Margin="2" 
-                            Opacity="0.6"/>
+                            Margin="1.5" 
+                            Opacity="0.65"/>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter Property="Opacity" Value="0.9"/>
+                            <Setter Property="Opacity" Value="0.95"/>
                         </Trigger>
                         <Trigger Property="IsDragging" Value="True">
                             <Setter Property="Opacity" Value="1.0"/>
@@ -81,7 +83,7 @@
         <Setter Property="OverridesDefaultStyle" Value="True"/>
         <Style.Triggers>
             <Trigger Property="Orientation" Value="Vertical">
-                <Setter Property="Width" Value="8"/>
+                <Setter Property="Width" Value="12"/>
                 <Setter Property="Height" Value="Auto"/>
                 <Setter Property="Template">
                     <Setter.Value>
@@ -98,7 +100,7 @@
                 </Setter>
             </Trigger>
             <Trigger Property="Orientation" Value="Horizontal">
-                <Setter Property="Height" Value="8"/>
+                <Setter Property="Height" Value="12"/>
                 <Setter Property="Width" Value="Auto"/>
                 <Setter Property="Template">
                     <Setter.Value>
@@ -123,7 +125,8 @@
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="Padding" Value="10,7"/>
+        <Setter Property="Padding" Value="10,4"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
         <Setter Property="FontSize" Value="13"/>
         <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
         <Setter Property="CaretBrush" Value="{DynamicResource AccentBrush}"/>
@@ -773,36 +776,71 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="MenuItem">
-                    <Border x:Name="itemBorder"
-                            Background="Transparent"
-                            CornerRadius="5"
-                            Padding="{TemplateBinding Padding}"
-                            Margin="1">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" SharedSizeGroup="MenuIconCol"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto" SharedSizeGroup="MenuGestureCol"/>
-                            </Grid.ColumnDefinitions>
+                    <Grid>
+                        <Border x:Name="itemBorder"
+                                Background="Transparent"
+                                CornerRadius="5"
+                                Padding="{TemplateBinding Padding}"
+                                Margin="1">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="MenuIconCol"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="MenuGestureCol"/>
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="MenuArrowCol"/>
+                                </Grid.ColumnDefinitions>
 
-                            <ContentPresenter Grid.Column="0" 
-                                              ContentSource="Icon" 
-                                              Margin="0,0,8,0" 
-                                              VerticalAlignment="Center"/>
-                            <TextBlock Grid.Column="1" 
-                                       Text="{TemplateBinding Header}" 
-                                       Foreground="{TemplateBinding Foreground}" 
-                                       VerticalAlignment="Center"/>
-                            <TextBlock x:Name="gestureText"
-                                       Grid.Column="2" 
-                                       Text="{TemplateBinding InputGestureText}" 
-                                       Foreground="{DynamicResource TextMutedBrush}" 
-                                       FontSize="11" 
-                                       Margin="16,0,0,0" 
-                                       VerticalAlignment="Center"/>
-                        </Grid>
-                    </Border>
+                                <ContentPresenter Grid.Column="0" 
+                                                  ContentSource="Icon" 
+                                                  Margin="0,0,8,0" 
+                                                  VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" 
+                                           Text="{TemplateBinding Header}" 
+                                           Foreground="{TemplateBinding Foreground}" 
+                                           VerticalAlignment="Center"/>
+                                <TextBlock x:Name="gestureText"
+                                           Grid.Column="2" 
+                                           Text="{TemplateBinding InputGestureText}" 
+                                           Foreground="{DynamicResource TextMutedBrush}" 
+                                           FontSize="11" 
+                                           Margin="16,0,0,0" 
+                                           VerticalAlignment="Center"/>
+                                <TextBlock x:Name="arrowGlyph"
+                                           Grid.Column="3" 
+                                           Text="▸" 
+                                           Foreground="{DynamicResource TextMutedBrush}" 
+                                           FontSize="11" 
+                                           Margin="12,0,2,0" 
+                                           VerticalAlignment="Center"
+                                           Visibility="Collapsed"/>
+                            </Grid>
+                        </Border>
+
+                        <Popup x:Name="PART_Popup"
+                               AllowsTransparency="True"
+                               Placement="Right"
+                               VerticalOffset="-4"
+                               HorizontalOffset="1"
+                               IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
+                               Focusable="False"
+                               PopupAnimation="Fade">
+                            <Border Background="{DynamicResource BgSecondaryBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="5"
+                                    MinWidth="180">
+                                <Border.Effect>
+                                    <DropShadowEffect BlurRadius="20" ShadowDepth="4" Opacity="0.45" Direction="270"/>
+                                </Border.Effect>
+                                <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                            </Border>
+                        </Popup>
+                    </Grid>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="HasItems" Value="True">
+                            <Setter TargetName="arrowGlyph" Property="Visibility" Value="Visible"/>
+                        </Trigger>
                         <Trigger Property="InputGestureText" Value="">
                             <Setter TargetName="gestureText" Property="Visibility" Value="Collapsed"/>
                         </Trigger>
@@ -810,6 +848,10 @@
                             <Setter TargetName="gestureText" Property="Visibility" Value="Collapsed"/>
                         </Trigger>
                         <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="itemBorder" Property="Background" Value="{DynamicResource ItemHoverBrush}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsSubmenuOpen" Value="True">
                             <Setter TargetName="itemBorder" Property="Background" Value="{DynamicResource ItemHoverBrush}"/>
                             <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
                         </Trigger>

@@ -76,4 +76,40 @@ public class HotkeyConflictTests
         Assert.Equal("Calculator", conflict.ConflictingActionName);
         Assert.Equal("Tools", conflict.ConflictingFolderName);
     }
+
+    [Fact]
+    public void CheckPotentialConflict_DetectsConflictWithAppSettings()
+    {
+        var appSettings = new AppSettings
+        {
+            OpenSettingsHotkey = new ShortcutBinding(ModifierKeys.Control | ModifierKeys.Alt, 84, "T"),
+            CommandPaletteHotkey = new ShortcutBinding(ModifierKeys.Alt, 32, "Space")
+        };
+
+        var candidate = new TriggerItem { Id = Guid.NewGuid(), Name = "My Action" };
+
+        // Test conflict against Open Settings
+        var conflict1 = HotkeyRegistryValidator.CheckPotentialConflict(
+            candidate, 
+            new ShortcutBinding(ModifierKeys.Control | ModifierKeys.Alt, 84, "T"), 
+            [], 
+            appSettings);
+
+        Assert.NotNull(conflict1);
+        Assert.Equal(HotkeyConflictType.Internal, conflict1.ConflictType);
+        Assert.Equal("Open Action Manager", conflict1.ConflictingActionName);
+        Assert.Equal("Application Settings", conflict1.ConflictingFolderName);
+
+        // Test conflict against Command Palette
+        var conflict2 = HotkeyRegistryValidator.CheckPotentialConflict(
+            candidate, 
+            new ShortcutBinding(ModifierKeys.Alt, 32, "Space"), 
+            [], 
+            appSettings);
+
+        Assert.NotNull(conflict2);
+        Assert.Equal(HotkeyConflictType.Internal, conflict2.ConflictType);
+        Assert.Equal("Command Palette", conflict2.ConflictingActionName);
+        Assert.Equal("Application Settings", conflict2.ConflictingFolderName);
+    }
 }

@@ -13,6 +13,7 @@ namespace TriggerPoint.UI.Views;
 public partial class InteractivePromptDialog : Window, IPromptDialogService
 {
     private readonly Dictionary<string, Func<string>> _valueExtractors = [];
+    private readonly List<Func<string?>> _validators = [];
     public Dictionary<string, string>? Results { get; private set; }
 
     public InteractivePromptDialog()
@@ -20,8 +21,16 @@ public partial class InteractivePromptDialog : Window, IPromptDialogService
         InitializeComponent();
     }
 
-    public InteractivePromptDialog(IReadOnlyList<PromptToken> tokens) : this()
+    public InteractivePromptDialog(IReadOnlyList<PromptToken> tokens, string? title = null, string? subtitle = null) : this()
     {
+        if (!string.IsNullOrWhiteSpace(title))
+        {
+            PromptTitleText.Text = title;
+        }
+        if (!string.IsNullOrWhiteSpace(subtitle))
+        {
+            PromptSubtitleText.Text = subtitle;
+        }
         BuildForm(tokens);
     }
 
@@ -56,6 +65,7 @@ public partial class InteractivePromptDialog : Window, IPromptDialogService
     {
         FieldsContainer.Children.Clear();
         _valueExtractors.Clear();
+        _validators.Clear();
 
         UIElement? firstInputControl = null;
 
@@ -108,6 +118,19 @@ public partial class InteractivePromptDialog : Window, IPromptDialogService
                     break;
 
                 case TokenType.PromptNumber:
+                    if (token.MinNumber.HasValue && token.MaxNumber.HasValue)
+                    {
+                        labelText.Text = $"{token.Label} (Range: {token.MinNumber.Value} – {token.MaxNumber.Value})";
+                    }
+                    else if (token.MinNumber.HasValue)
+                    {
+                        labelText.Text = $"{token.Label} (Min: {token.MinNumber.Value})";
+                    }
+                    else if (token.MaxNumber.HasValue)
+                    {
+                        labelText.Text = $"{token.Label} (Max: {token.MaxNumber.Value})";
+                    }
+
                     var numBox = new TextBox
                     {
                         Style = (Style)Application.Current.FindResource("ModernTextBoxStyle"),
@@ -119,13 +142,45 @@ public partial class InteractivePromptDialog : Window, IPromptDialogService
                     }
                     else if (token.MinNumber.HasValue)
                     {
-                        numBox.Text = token.MinNumber.Value.ToString();
+                        numBox.Text = token.MinNumber.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
                     }
                     numBox.PreviewTextInput += (s, e) =>
                     {
                         e.Handled = !double.TryParse(e.Text, out _) && e.Text != "-" && e.Text != ".";
                     };
                     _valueExtractors[token.RawTag] = () => numBox.Text.Trim();
+
+                    _validators.Add(() =>
+                    {
+                        var valText = numBox.Text.Trim();
+                        if (!string.IsNullOrEmpty(valText))
+                        {
+                            if (double.TryParse(valText, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var n) ||
+                                double.TryParse(valText, out n))
+                            {
+                                if (token.MinNumber.HasValue && n < token.MinNumber.Value)
+                                {
+                                    numBox.Focus();
+                                    numBox.SelectAll();
+                                    return $"'{token.Label}' must be at least {token.MinNumber.Value}.";
+                                }
+                                if (token.MaxNumber.HasValue && n > token.MaxNumber.Value)
+                                {
+                                    numBox.Focus();
+                                    numBox.SelectAll();
+                                    return $"'{token.Label}' cannot exceed {token.MaxNumber.Value}.";
+                                }
+                            }
+                            else
+                            {
+                                numBox.Focus();
+                                numBox.SelectAll();
+                                return $"'{token.Label}' must be a valid number.";
+                            }
+                        }
+                        return null;
+                    });
+
                     fieldWrapper.Children.Add(numBox);
                     firstInputControl ??= numBox;
                     break;
@@ -263,6 +318,16 @@ public partial class InteractivePromptDialog : Window, IPromptDialogService
 
     private void Submit()
     {
+        foreach (var validator in _validators)
+        {
+            var err = validator();
+            if (err != null)
+            {
+                MessageBox.Show(this, err, "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+        }
+
         var dict = new Dictionary<string, string>();
         foreach (var (tag, extractor) in _valueExtractors)
         {
@@ -273,11 +338,14 @@ public partial class InteractivePromptDialog : Window, IPromptDialogService
         Close();
     }
 
-    public async System.Threading.Tasks.Task<Dictionary<string, string>?> ShowPromptDialogAsync(IReadOnlyList<PromptToken> promptTokens)
+    public async System.Threading.Tasks.Task<Dictionary<string, string>?> ShowPromptDialogAsync(
+        IReadOnlyList<PromptToken> promptTokens,
+        string? title = null,
+        string? subtitle = null)
     {
         return await Dispatcher.InvokeAsync(() =>
         {
-            var dlg = new InteractivePromptDialog(promptTokens);
+            var dlg = new InteractivePromptDialog(promptTokens, title, subtitle);
             var result = dlg.ShowDialog();
             return result == true ? dlg.Results : null;
         });

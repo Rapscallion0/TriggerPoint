@@ -10,9 +10,138 @@ public sealed class ActionPayload
     public string Arguments { get; set; } = string.Empty;
     public string WorkingDirectory { get; set; } = string.Empty;
     public bool RunAsAdmin { get; set; } = false;
+    public string? TargetDisplay { get; set; }
+    public bool OpenInNewWindow { get; set; } = false;
 
     // Snippet execution properties
     public string SnippetTemplate { get; set; } = string.Empty;
+
+    // Workflow execution properties
+    public WorkflowMode WorkflowMode { get; set; } = WorkflowMode.Visual;
+    public List<WorkflowStep> WorkflowSteps { get; set; } = [];
+    public string ScriptSource { get; set; } = string.Empty;
+}
+
+public sealed class WorkflowPromptField
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string VariableName { get; set; } = "input";
+    public string Label { get; set; } = "Enter value";
+    public string DefaultValue { get; set; } = string.Empty;
+    public TokenType Type { get; set; } = TokenType.PromptText;
+    public string Choices { get; set; } = string.Empty;
+    public double? MinNumber { get; set; }
+    public double? MaxNumber { get; set; }
+    public string DateFormat { get; set; } = "yyyy-MM-dd";
+
+    public WorkflowPromptField Clone()
+    {
+        return new WorkflowPromptField
+        {
+            Id = Guid.NewGuid(),
+            VariableName = VariableName,
+            Label = Label,
+            DefaultValue = DefaultValue,
+            Type = Type,
+            Choices = Choices,
+            MinNumber = MinNumber,
+            MaxNumber = MaxNumber,
+            DateFormat = DateFormat
+        };
+    }
+}
+
+public sealed class WorkflowStep
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public WorkflowStepType StepType { get; set; } = WorkflowStepType.Prompt;
+    public string Name { get; set; } = string.Empty;
+    public bool IsEnabled { get; set; } = true;
+    public bool IsCollapsed { get; set; } = false;
+    public StepErrorPolicy OnError { get; set; } = StepErrorPolicy.StopWorkflow;
+
+    // Prompt properties
+    public string PromptTitle { get; set; } = string.Empty;
+    public string PromptSubtitle { get; set; } = string.Empty;
+    public List<WorkflowPromptField> PromptFields { get; set; } = [];
+    public string VariableName { get; set; } = string.Empty;
+    public string PromptLabel { get; set; } = string.Empty;
+    public string PromptDefaultValue { get; set; } = string.Empty;
+    public TokenType PromptType { get; set; } = TokenType.PromptText;
+    public string PromptChoices { get; set; } = string.Empty;
+    public double? PromptMinNumber { get; set; }
+    public double? PromptMaxNumber { get; set; }
+    public string PromptDateFormat { get; set; } = "yyyy-MM-dd";
+
+    // OpenUrl properties
+    public string Url { get; set; } = string.Empty;
+    public string? BrowserTarget { get; set; }
+    public string? BrowserProfile { get; set; }
+    public bool OpenInNewWindow { get; set; } = false;
+
+    // LaunchApp properties
+    public string Command { get; set; } = string.Empty;
+    public string Arguments { get; set; } = string.Empty;
+    public string WorkingDirectory { get; set; } = string.Empty;
+    public bool RunAsAdmin { get; set; } = false;
+    public string? TargetDisplay { get; set; }
+
+    // EnsureDirectory properties
+    public string DirectoryPath { get; set; } = string.Empty;
+    public DirectoryMissingPolicy DirectoryMissingPolicy { get; set; } = DirectoryMissingPolicy.PromptToCreate;
+    public bool OpenInExplorer { get; set; } = false;
+
+    // InjectSnippet properties
+    public string SnippetTemplate { get; set; } = string.Empty;
+
+    // Delay properties
+    public int DelayMs { get; set; } = 500;
+
+    // RunScript properties
+    public string InlineScript { get; set; } = string.Empty;
+
+    // ExecuteAction properties
+    public Guid? TargetItemId { get; set; }
+
+    public WorkflowStep Clone()
+    {
+        return new WorkflowStep
+        {
+            Id = Guid.NewGuid(),
+            StepType = StepType,
+            Name = Name,
+            IsEnabled = IsEnabled,
+            IsCollapsed = IsCollapsed,
+            OnError = OnError,
+            PromptTitle = PromptTitle,
+            PromptSubtitle = PromptSubtitle,
+            PromptFields = PromptFields.Select(f => f.Clone()).ToList(),
+            VariableName = VariableName,
+            PromptLabel = PromptLabel,
+            PromptDefaultValue = PromptDefaultValue,
+            PromptType = PromptType,
+            PromptChoices = PromptChoices,
+            PromptMinNumber = PromptMinNumber,
+            PromptMaxNumber = PromptMaxNumber,
+            PromptDateFormat = PromptDateFormat,
+            Url = Url,
+            BrowserTarget = BrowserTarget,
+            BrowserProfile = BrowserProfile,
+            OpenInNewWindow = OpenInNewWindow,
+            Command = Command,
+            Arguments = Arguments,
+            WorkingDirectory = WorkingDirectory,
+            RunAsAdmin = RunAsAdmin,
+            TargetDisplay = TargetDisplay,
+            DirectoryPath = DirectoryPath,
+            DirectoryMissingPolicy = DirectoryMissingPolicy,
+            OpenInExplorer = OpenInExplorer,
+            SnippetTemplate = SnippetTemplate,
+            DelayMs = DelayMs,
+            InlineScript = InlineScript,
+            TargetItemId = TargetItemId
+        };
+    }
 }
 
 public sealed class ContextFilter
