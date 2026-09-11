@@ -19,6 +19,13 @@ public enum PresentationMode
     CommandPalette = 2
 }
 
+public enum FolderAutoNumberMode
+{
+    Off = 0,
+    SmartFill = 1,
+    StrictPositional = 2
+}
+
 public enum ActionType
 {
     Shell = 0,

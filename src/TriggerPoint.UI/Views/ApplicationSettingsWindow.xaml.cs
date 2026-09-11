@@ -36,12 +36,18 @@ public partial class ApplicationSettingsWindow : Window
         _logManagerService = logManagerService ?? throw new ArgumentNullException(nameof(logManagerService));
 
         Loaded += async (s, e) => await LoadCurrentSettingsAsync();
+
+        ThemeManager.ThemeChanged += (s, theme) =>
+        {
+            ThemeManager.ApplyWindowIcons(this);
+        };
     }
 
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
         CenterOnOwnerOrActiveMonitor();
+        ThemeManager.ApplyWindowIcons(this);
     }
 
     private void CenterOnOwnerOrActiveMonitor()

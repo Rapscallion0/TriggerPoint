@@ -11,6 +11,7 @@ using System.Windows.Media.Effects;
 using Microsoft.Win32;
 using TriggerPoint.Core.Models;
 using TriggerPoint.Core.Services;
+using TriggerPoint.UI.Theme;
 
 namespace TriggerPoint.UI.Views;
 
@@ -113,18 +114,11 @@ public partial class SettingsWindow
 
     private void UpdateToggleAllExpandButtonUi()
     {
-        if (WorkflowToggleAllIcon == null || WorkflowToggleAllText == null) return;
+        if (WorkflowToggleAllIcon == null || WorkflowToggleAllText == null || WorkflowToggleAllExpandBtn == null) return;
         bool anyExpanded = _selectedItem?.Payload.WorkflowSteps?.Any(s => !s.IsCollapsed) == true;
-        if (anyExpanded)
-        {
-            WorkflowToggleAllIcon.Text = "▼";
-            WorkflowToggleAllText.Text = "Collapse All";
-        }
-        else
-        {
-            WorkflowToggleAllIcon.Text = "▶";
-            WorkflowToggleAllText.Text = "Expand All";
-        }
+        WorkflowToggleAllIcon.Data = anyExpanded ? CollapseAllGeometry : ExpandAllGeometry;
+        WorkflowToggleAllText.Text = anyExpanded ? "Collapse All" : "Expand All";
+        WorkflowToggleAllExpandBtn.ToolTip = anyExpanded ? "Collapse all step cards" : "Expand all step cards";
     }
 
     private void SetActiveWorkflowStep(Guid stepId, bool focusFirstInput = false)
@@ -178,9 +172,9 @@ public partial class SettingsWindow
             }
             else
             {
-                card.BorderBrush = Application.Current.TryFindResource("BorderBrush") as Brush ?? Brushes.Gray;
+                card.BorderBrush = Application.Current.TryFindResource("CardBorderBrush") as Brush ?? Brushes.Gray;
                 card.BorderThickness = new Thickness(1);
-                card.Background = Application.Current.TryFindResource("BgTertiaryBrush") as Brush ?? Brushes.DarkSlateGray;
+                card.Background = Application.Current.TryFindResource("CardBgBrush") as Brush ?? Brushes.DarkSlateGray;
             }
 
             // Update insertion pills on this step wrapper
@@ -486,13 +480,25 @@ public partial class SettingsWindow
     {
         var card = new Border
         {
-            Background = Application.Current.TryFindResource("BgTertiaryBrush") as Brush ?? Brushes.DarkSlateGray,
-            BorderBrush = Application.Current.TryFindResource("BorderBrush") as Brush ?? Brushes.Gray,
+            Background = Application.Current.TryFindResource("CardBgBrush") as Brush ?? Brushes.DarkSlateGray,
+            BorderBrush = Application.Current.TryFindResource("CardBorderBrush") as Brush ?? Brushes.Gray,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(7),
             Padding = new Thickness(12, 10, 12, 10),
             Margin = new Thickness(0, 2, 0, 2)
         };
+
+        if (ThemeManager.CurrentTheme == AppTheme.Light)
+        {
+            card.Effect = new System.Windows.Media.Effects.DropShadowEffect
+            {
+                BlurRadius = 8,
+                ShadowDepth = 1.5,
+                Opacity = 0.08,
+                Direction = 270,
+                Color = Colors.Black
+            };
+        }
 
         card.PreviewMouseDown += (s, e) => SetActiveWorkflowStep(step.Id);
         card.GotFocus += (s, e) => SetActiveWorkflowStep(step.Id);
@@ -765,8 +771,8 @@ public partial class SettingsWindow
                 // Dialog Header Configuration (Title & Subtitle)
                 var headerCard = new Border
                 {
-                    Background = Application.Current.TryFindResource("BgSecondaryBrush") as Brush ?? Brushes.Transparent,
-                    BorderBrush = Application.Current.TryFindResource("BorderSubtleBrush") as Brush ?? Brushes.Gray,
+                    Background = Application.Current.TryFindResource("CardHeaderBgBrush") as Brush ?? Brushes.Transparent,
+                    BorderBrush = Application.Current.TryFindResource("CardBorderBrush") as Brush ?? Brushes.Gray,
                     BorderThickness = new Thickness(1),
                     CornerRadius = new CornerRadius(6),
                     Padding = new Thickness(10, 8, 10, 8),

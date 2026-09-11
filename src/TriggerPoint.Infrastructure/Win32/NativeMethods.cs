@@ -437,4 +437,20 @@ public static class NativeMethods
             return false;
         }
     }
+
+    // Icon Window Messages & System Metrics
+    public const uint WM_SETICON = 0x0080;
+    public const int ICON_SMALL = 0;
+    public const int ICON_BIG = 1;
+
+    public const int SM_CXICON = 11;
+    public const int SM_CYICON = 12;
+    public const int SM_CXSMICON = 49;
+    public const int SM_CYSMICON = 50;
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    public static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    public static extern int GetSystemMetrics(int nIndex);
 }

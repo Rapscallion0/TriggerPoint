@@ -210,7 +210,7 @@
                                 Padding="4"
                                 Margin="2,0"
                                 VerticalAlignment="Center">
-                            <Image Source="/Assets/TriggerPoint.ico" 
+                            <Image Source="{DynamicResource AppIconSource}" 
                                    Width="16" Height="16" RenderOptions.BitmapScalingMode="HighQuality"/>
                         </Button>
 
@@ -224,7 +224,10 @@
                                 Padding="4"
                                 Margin="2,0"
                                 VerticalAlignment="Center">
-                            <TextBlock Text="⚙️" FontSize="13" VerticalAlignment="Center"/>
+                            <Path Width="14" Height="14" 
+                                  Stretch="Uniform" 
+                                  Fill="{DynamicResource TextPrimaryBrush}"
+                                  Data="{DynamicResource SettingsGearGeometry}"/>
                         </Button>
 
                         <!-- Shortcut & Help Cheat-Sheet Button -->

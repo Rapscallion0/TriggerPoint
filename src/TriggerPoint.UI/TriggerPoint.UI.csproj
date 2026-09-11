@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <Resource Include="Assets\TriggerPoint.ico" />
+    <Resource Include="Assets\TriggerPoint.Light.ico" />
   </ItemGroup>
 
   <ItemGroup>

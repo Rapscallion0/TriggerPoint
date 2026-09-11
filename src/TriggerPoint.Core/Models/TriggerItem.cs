@@ -14,6 +14,7 @@ public sealed class TriggerItem
     public string? AcceleratorKey { get; set; } // e.g. "1" - "9", "A" - "Z" for cursor menu
     public ShortcutBinding? Hotkey { get; set; }
     public PresentationMode PresentationMode { get; set; } = PresentationMode.Direct;
+    public FolderAutoNumberMode AutoNumberMode { get; set; } = FolderAutoNumberMode.Off;
     public ActionType ActionType { get; set; } = ActionType.Shell;
     public ActionPayload Payload { get; set; } = new();
     public ContextFilter ContextFilter { get; set; } = new();
@@ -40,6 +41,7 @@ public sealed class TriggerItem
             AcceleratorKey = AcceleratorKey,
             Hotkey = Hotkey != null ? new ShortcutBinding(Hotkey.Modifiers, Hotkey.VirtualKey, Hotkey.KeyName) : null,
             PresentationMode = PresentationMode,
+            AutoNumberMode = AutoNumberMode,
             ActionType = ActionType,
             IsExpanded = IsExpanded,
             Payload = new ActionPayload

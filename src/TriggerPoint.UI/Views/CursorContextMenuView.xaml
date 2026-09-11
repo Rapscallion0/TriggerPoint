@@ -123,15 +123,27 @@
 
                             <!-- Accelerator badge or Item Type Icon -->
                             <Grid Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center">
+                                <!-- Explicit Manual Quick-Key Badge -->
                                 <Border Style="{StaticResource AccentKeyBadgeStyle}"
                                         Width="22" Height="22"
-                                        Visibility="{Binding HasAccelerator, Converter={x:Null}}">
+                                        Visibility="{Binding HasManualAccelerator, Converter={x:Null}}">
                                     <TextBlock Text="{Binding AcceleratorKey}" 
                                                FontSize="11" 
                                                FontWeight="Bold" 
                                                HorizontalAlignment="Center" 
                                                VerticalAlignment="Center"
                                                Foreground="{DynamicResource AccentBrush}"/>
+                                </Border>
+                                <!-- Auto-Assigned Quick-Key Badge -->
+                                <Border Style="{StaticResource AutoKeyBadgeStyle}"
+                                        Width="22" Height="22"
+                                        Visibility="{Binding HasAutoAccelerator, Converter={x:Null}}">
+                                    <TextBlock Text="{Binding AcceleratorKey}" 
+                                               FontSize="11" 
+                                               FontWeight="Bold" 
+                                               HorizontalAlignment="Center" 
+                                               VerticalAlignment="Center"
+                                               Foreground="{DynamicResource TextSecondaryBrush}"/>
                                 </Border>
                                 <TextBlock Text="{Binding IconSymbol}"
                                            FontSize="13"

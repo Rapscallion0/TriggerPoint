@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Input;
 using TriggerPoint.Core.Contracts;
 using TriggerPoint.Core.Models;
+using TriggerPoint.Core.Services;
 using TriggerPoint.Infrastructure.Win32;
 
 namespace TriggerPoint.UI.Views;
@@ -16,7 +17,10 @@ public class CursorMenuItemViewModel
     public string Name => Item.Name;
     public string Description => Item.Description;
     public bool HasDescription => !string.IsNullOrWhiteSpace(Description);
-    public string? AcceleratorKey => Item.AcceleratorKey;
+    public string? AcceleratorKey { get; }
+    public bool IsAutoAssigned { get; }
+    public Visibility HasManualAccelerator => (!string.IsNullOrWhiteSpace(AcceleratorKey) && !IsAutoAssigned) ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility HasAutoAccelerator => (!string.IsNullOrWhiteSpace(AcceleratorKey) && IsAutoAssigned) ? Visibility.Visible : Visibility.Collapsed;
     public Visibility HasAccelerator => !string.IsNullOrWhiteSpace(AcceleratorKey) ? Visibility.Visible : Visibility.Collapsed;
     public Visibility HasNoAccelerator => !string.IsNullOrWhiteSpace(AcceleratorKey) ? Visibility.Collapsed : Visibility.Visible;
     public bool IsFolder => Item.ActionType == ActionType.Folder;
@@ -34,9 +38,11 @@ public class CursorMenuItemViewModel
         _ => "⚡"
     };
 
-    public CursorMenuItemViewModel(TriggerItem item)
+    public CursorMenuItemViewModel(TriggerItem item, string? effectiveKey = null, bool isAutoAssigned = false)
     {
         Item = item;
+        AcceleratorKey = effectiveKey ?? item.AcceleratorKey;
+        IsAutoAssigned = isAutoAssigned;
     }
 }
 
@@ -94,7 +100,10 @@ public partial class CursorContextMenuView : Window
                 .ToList();
         }
 
-        _displayedItems = children.Select(x => new CursorMenuItemViewModel(x)).ToList();
+        var autoMode = _currentFolder?.AutoNumberMode ?? FolderAutoNumberMode.Off;
+        var resolvedKeys = MenuQuickKeyResolver.ResolveKeys(children, autoMode);
+
+        _displayedItems = resolvedKeys.Select(r => new CursorMenuItemViewModel(r.Item, r.Key, r.IsAutoAssigned)).ToList();
         ItemsListBox.ItemsSource = _displayedItems;
 
         if (_displayedItems.Count == 0)
@@ -329,33 +338,40 @@ public partial class CursorContextMenuView : Window
             return;
         }
 
-        // Accelerator keys: 1-9, A-Z
-        var keyStr = key.ToString();
-        if (key >= Key.D0 && key <= Key.D9)
+        // Accelerator keys: 1-9, A-Z (excluding 0)
+        string? keyStr = null;
+        if (key >= Key.D1 && key <= Key.D9)
         {
             keyStr = ((int)key - (int)Key.D0).ToString();
         }
-        else if (key >= Key.NumPad0 && key <= Key.NumPad9)
+        else if (key >= Key.NumPad1 && key <= Key.NumPad9)
         {
             keyStr = ((int)key - (int)Key.NumPad0).ToString();
         }
-
-        var accelMatch = _displayedItems.FirstOrDefault(x => 
-            !string.IsNullOrWhiteSpace(x.AcceleratorKey) && 
-            string.Equals(x.AcceleratorKey, keyStr, StringComparison.OrdinalIgnoreCase));
-
-        if (accelMatch != null)
+        else if (key >= Key.A && key <= Key.Z)
         {
-            if (accelMatch.IsFolder)
+            keyStr = key.ToString();
+        }
+
+        if (!string.IsNullOrEmpty(keyStr))
+        {
+            var accelMatch = _displayedItems.FirstOrDefault(x => 
+                !string.IsNullOrWhiteSpace(x.AcceleratorKey) && 
+                string.Equals(x.AcceleratorKey, keyStr, StringComparison.OrdinalIgnoreCase));
+
+            if (accelMatch != null)
             {
-                DrillDown(accelMatch.Item);
+                if (accelMatch.IsFolder)
+                {
+                    DrillDown(accelMatch.Item);
+                }
+                else
+                {
+                    ExecuteItem(accelMatch.Item, DetermineOverride());
+                }
+                e.Handled = true;
+                return;
             }
-            else
-            {
-                ExecuteItem(accelMatch.Item, DetermineOverride());
-            }
-            e.Handled = true;
-            return;
         }
 
         if (key == Key.Enter)

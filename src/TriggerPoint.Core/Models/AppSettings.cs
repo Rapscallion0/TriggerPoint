@@ -56,6 +56,7 @@ public class AppSettings
     public double? WindowHeight { get; set; }
     public bool WindowMaximized { get; set; }
     public CommandPaletteSortMode CommandPaletteSortMode { get; set; } = CommandPaletteSortMode.Smart;
+    public bool CompactTreeDensity { get; set; } = false;
 
     public void Normalize()
     {

@@ -19,6 +19,7 @@ using TriggerPoint.Core.Models;
 using TriggerPoint.Core.Services;
 using TriggerPoint.Infrastructure.Services;
 using TriggerPoint.Infrastructure.Win32;
+using TriggerPoint.UI.Theme;
 
 namespace TriggerPoint.UI.Views;
 
@@ -316,6 +317,15 @@ public class TriggerTreeItemViewModel : INotifyPropertyChanged
 
 public partial class SettingsWindow : Window
 {
+    public static readonly Geometry CollapseAllGeometry = Geometry.Parse("M 2,3.5 L 8.5,3.5 M 4,8 L 8.5,8 M 6,12.5 L 8.5,12.5 M 13,12.5 L 13,4 M 10.5,6.5 L 13,4 L 15.5,6.5");
+    public static readonly Geometry ExpandAllGeometry = Geometry.Parse("M 2,3.5 L 8.5,3.5 M 4,8 L 8.5,8 M 6,12.5 L 8.5,12.5 M 13,3.5 L 13,12 M 10.5,9.5 L 13,12 L 15.5,9.5");
+
+    static SettingsWindow()
+    {
+        CollapseAllGeometry.Freeze();
+        ExpandAllGeometry.Freeze();
+    }
+
     private readonly ILogger _logger = Log.ForContext<SettingsWindow>();
     private readonly IConfigRepository _repository;
     private readonly IShortcutListener _shortcutListener;
@@ -511,6 +521,11 @@ public partial class SettingsWindow : Window
             }
         };
 
+        ThemeManager.ThemeChanged += (s, theme) =>
+        {
+            ThemeManager.ApplyWindowIcons(this);
+        };
+
         var assembly = System.Reflection.Assembly.GetExecutingAssembly();
         var version = assembly.GetName().Version;
         if (AppVersionText != null && version != null)
@@ -584,6 +599,7 @@ public partial class SettingsWindow : Window
         base.OnSourceInitialized(e);
         var source = PresentationSource.FromVisual(this) as HwndSource;
         source?.AddHook(WndProc);
+        ThemeManager.ApplyWindowIcons(this);
     }
 
     private const int WM_MOUSEHWHEEL = 0x020E;
@@ -854,6 +870,7 @@ public partial class SettingsWindow : Window
         }
         TriggerTreeItemViewModel.ShowShortcuts = _appSettings.ShowShortcutsInTree;
         UpdateToggleShortcutsButtonUi();
+        ThemeManager.ApplyTreeDensity(_appSettings.CompactTreeDensity);
         ApplyWindowPlacement();
         _isDataLoaded = true;
         RegisterShortcuts();
@@ -1158,6 +1175,14 @@ public partial class SettingsWindow : Window
             ItemDescBox.Text = item.Description;
             UpdateEditorTypeBadge(item.ActionType);
             PresentationModeCombo.SelectedIndex = (int)item.PresentationMode;
+            if (AutoNumberModeCombo != null)
+            {
+                AutoNumberModeCombo.SelectedIndex = (int)item.AutoNumberMode;
+            }
+            if (AutoNumberInfoCard != null)
+            {
+                AutoNumberInfoCard.Visibility = Visibility.Collapsed;
+            }
             HotkeyRecorder.Binding = item.Hotkey;
             AcceleratorBox.Text = item.AcceleratorKey ?? string.Empty;
 
@@ -1279,13 +1304,45 @@ public partial class SettingsWindow : Window
                 : "Direct (Run immediately, no UI)";
         }
 
+        if (AutoNumberGroup != null)
+        {
+            bool showAutoNumber = actionType == ActionType.Folder &&
+                PresentationModeCombo != null &&
+                PresentationModeCombo.SelectedIndex != (int)PresentationMode.Direct;
+            AutoNumberGroup.Visibility = showAutoNumber ? Visibility.Visible : Visibility.Collapsed;
+        }
+
         if (AcceleratorGroup != null)
         {
-            // Allow quick-key on actions, subfolders (which can be drilled into), or menu containers
-            bool allowQuickKey = actionType != ActionType.Folder || (_selectedItem != null && (_selectedItem.ParentId.HasValue || _selectedItem.PresentationMode == PresentationMode.CursorMenu));
-            AcceleratorGroup.Visibility = allowQuickKey
-                ? Visibility.Visible
-                : Visibility.Collapsed;
+            // Root folders are top-level triggers, not items in a popup menu, so quick-keys are not applicable
+            bool isRootFolder = actionType == ActionType.Folder && (!_selectedItem?.ParentId.HasValue ?? true);
+            if (isRootFolder)
+            {
+                AcceleratorGroup.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                AcceleratorGroup.Visibility = Visibility.Visible;
+
+                // Check if parent folder enforces StrictPositional auto-numbering
+                var parentFolder = _selectedItem?.ParentId.HasValue == true
+                    ? _items.FirstOrDefault(x => x.Id == _selectedItem.ParentId.Value)
+                    : null;
+                bool isStrictPositional = parentFolder != null && parentFolder.AutoNumberMode == FolderAutoNumberMode.StrictPositional;
+
+                if (isStrictPositional)
+                {
+                    AcceleratorBox.IsEnabled = false;
+                    AcceleratorHintText.Text = "Managed by folder (Strict Positional 1-9, A-Z)";
+                    AcceleratorHintText.Foreground = Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.DodgerBlue;
+                }
+                else
+                {
+                    AcceleratorBox.IsEnabled = true;
+                    AcceleratorHintText.Text = "Popup menus only";
+                    AcceleratorHintText.Foreground = Application.Current.TryFindResource("TextMutedBrush") as Brush ?? Brushes.Gray;
+                }
+            }
         }
 
         if (actionType == ActionType.Shell)
@@ -1351,6 +1408,10 @@ public partial class SettingsWindow : Window
         _selectedItem.PresentationMode = _selectedItem.ActionType == ActionType.Folder
             ? (PresentationMode)PresentationModeCombo.SelectedIndex
             : PresentationMode.Direct;
+        if (_selectedItem.ActionType == ActionType.Folder && AutoNumberModeCombo != null)
+        {
+            _selectedItem.AutoNumberMode = (FolderAutoNumberMode)Math.Max(0, AutoNumberModeCombo.SelectedIndex);
+        }
         _selectedItem.Hotkey = HotkeyRecorder.Binding;
         _selectedItem.AcceleratorKey = AcceleratorBox.Text.Trim();
 
@@ -2236,6 +2297,11 @@ public partial class SettingsWindow : Window
         _treeDragStartPoint = null;
         _draggedTreeVm = null;
 
+        if (ContextToggleCompactDensity != null)
+        {
+            ContextToggleCompactDensity.IsChecked = _appSettings?.CompactTreeDensity ?? false;
+        }
+
         if (_rightClickedTreeVm != null)
         {
             if (_rightClickedTreeVm.IsRecycleBinRoot)
@@ -2366,6 +2432,38 @@ public partial class SettingsWindow : Window
             ContextExportItem.Header = $"Export All ({totalFolders} folder(s), {totalActions} action(s))...";
             ContextImportItem.Header = "Import Actions & Folders at Root...";
         }
+    }
+
+    private void ContextToggleCompactDensity_Click(object sender, RoutedEventArgs e)
+    {
+        if (_appSettings == null) return;
+        _appSettings.CompactTreeDensity = !_appSettings.CompactTreeDensity;
+        ThemeManager.ApplyTreeDensity(_appSettings.CompactTreeDensity);
+        ContextToggleCompactDensity.IsChecked = _appSettings.CompactTreeDensity;
+        ScheduleAppSettingsSave();
+    }
+
+    private void AutoNumberInfoBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (AutoNumberInfoCard != null)
+        {
+            AutoNumberInfoCard.Visibility = AutoNumberInfoCard.Visibility == Visibility.Visible
+                ? Visibility.Collapsed
+                : Visibility.Visible;
+        }
+    }
+
+    private void CloseAutoNumberInfoCard_Click(object sender, RoutedEventArgs e)
+    {
+        if (AutoNumberInfoCard != null)
+        {
+            AutoNumberInfoCard.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private void AutoNumberModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        OnFormEdited();
     }
 
     private void ContextRenameItem_Click(object sender, RoutedEventArgs e)
@@ -2665,6 +2763,8 @@ public partial class SettingsWindow : Window
             ItemDescBox.Text = string.Empty;
             UpdateEditorTypeBadge(ActionType.Shell);
             PresentationModeCombo.SelectedIndex = 0;
+            if (AutoNumberModeCombo != null) AutoNumberModeCombo.SelectedIndex = 0;
+            if (AutoNumberInfoCard != null) AutoNumberInfoCard.Visibility = Visibility.Collapsed;
             HotkeyRecorder.Binding = null;
             AcceleratorBox.Text = string.Empty;
             ShellCommandBox.Text = string.Empty;
@@ -3285,10 +3385,10 @@ public partial class SettingsWindow : Window
 
     private void UpdateExpandAllButtonGlyph()
     {
-        if (ToggleExpandAllBtn == null) return;
+        if (ToggleExpandAllBtn == null || TreeExpandAllIcon == null) return;
         var folders = _items.Where(x => x.ActionType == ActionType.Folder).ToList();
         bool anyExpanded = folders.Any(f => f.IsExpanded);
-        ToggleExpandAllBtn.Content = anyExpanded ? "⊟" : "⊞";
+        TreeExpandAllIcon.Data = anyExpanded ? CollapseAllGeometry : ExpandAllGeometry;
         ToggleExpandAllBtn.ToolTip = anyExpanded ? "Collapse All Folders" : "Expand All Folders";
     }
 

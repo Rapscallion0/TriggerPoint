@@ -19,6 +19,22 @@ public class CommandPaletteViewTests
         public System.Threading.Tasks.Task ExecuteAsync(TriggerItem item, ExecutionOverride executionOverride = ExecutionOverride.Standard, IntPtr? targetHwnd = null) => System.Threading.Tasks.Task.CompletedTask;
     }
 
+    private static void EnsureApplicationAndThemeResources()
+    {
+        if (Application.Current == null)
+        {
+            new Application();
+        }
+
+        if (!Application.Current!.Resources.MergedDictionaries.Any(d => d.Source?.OriginalString?.Contains("ThemeResources.xaml") == true))
+        {
+            Application.Current!.Resources.MergedDictionaries.Add(new ResourceDictionary
+            {
+                Source = new Uri("pack://application:,,,/TriggerPoint;component/Theme/ThemeResources.xaml", UriKind.Absolute)
+            });
+        }
+    }
+
     [Fact]
     public void CommandPaletteView_InstantiatesAndInitializesComponentWithoutException()
     {
@@ -27,11 +43,7 @@ public class CommandPaletteViewTests
         {
             try
             {
-                // Ensure Application exists
-                if (Application.Current == null)
-                {
-                    new Application();
-                }
+                EnsureApplicationAndThemeResources();
 
                 var items = new List<TriggerItem>
                 {
@@ -105,10 +117,7 @@ public class CommandPaletteViewTests
         {
             try
             {
-                if (Application.Current == null)
-                {
-                    new Application();
-                }
+                EnsureApplicationAndThemeResources();
 
                 var items = new List<TriggerItem>
                 {

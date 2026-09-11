@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:TriggerPoint.UI.Controls"
         Title="TriggerPoint Application Settings"
-        Icon="/Assets/TriggerPoint.ico"
+        Icon="{DynamicResource AppIconSource}"
         Width="600" Height="650"
         MinWidth="500" MinHeight="550"
         WindowStartupLocation="Manual"
@@ -39,8 +39,8 @@
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <Image Source="/Assets/TriggerPoint.ico" 
-                               Width="20" Height="20" 
+                        <Image Source="{DynamicResource AppIconSource}" 
+                               Width="16" Height="16" 
                                Margin="0,0,8,0" 
                                VerticalAlignment="Center" 
                                RenderOptions.BitmapScalingMode="HighQuality"/>
