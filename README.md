@@ -5,54 +5,77 @@
 
 [![.NET](https://img.shields.io/badge/.NET-9.0--windows-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011%20x64-0078D6?logo=windows)](https://microsoft.com/windows)
-[![Version](https://img.shields.io/badge/Version-v2.0.6-blue.svg)]()
+[![Version](https://img.shields.io/badge/Version-v2.0.6-blue.svg)](https://github.com/Rapscallion0/TriggerPoint/releases/tag/v2.0.6)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-123%20Passed%20(100%25)-brightgreen)]()
+[![Tests](https://img.shields.io/badge/Tests-186%20Passed%20(100%25)-brightgreen)]()
 
 ---
 
 ## Overview
 
-**TriggerPoint** is a fast, lightweight Windows productivity tool that puts your most frequent actions at your fingertips. Launch apps, run scripts, paste dynamic snippets, and open custom menus anywhere on your screen using simple system-wide shortcuts.
+**TriggerPoint** is a fast, lightweight Windows productivity tool that puts your most frequent actions at your fingertips. Launch apps, run scripts, execute multi-step workflows, paste dynamic snippets, and open custom menus anywhere on your screen using simple system-wide shortcuts.
 
-Designed to stay out of your way, TriggerPoint runs quietly in your system tray with near-zero memory footprint and lightning-fast response times.
+Designed to stay out of your way, TriggerPoint runs quietly in your system tray with near-zero memory footprint, zero telemetry, and lightning-fast response times.
 
 ---
 
-## What's New in v2.0.0 🚀
+## What's New in v2.0.6 🚀
 
-- **Visual Precision Drag-and-Drop & Ghost Preview**: 3-zone drop targeting with visual guide indicators (Insert Above line, Move Into folder highlight, Insert Below line) and a floating preview badge that follows the mouse cursor during drags.
-- **Spring-Loaded Folders**: Pausing over a collapsed folder during a drag operation automatically springs it open (~650ms) for precise placement into nested hierarchies.
-- **Persistent Folder Collapse/Expand States**: Tree folder states are remembered across application launches and restarts. Dropping items preserves individual folder states rather than expanding the entire tree.
-- **Inconspicuous Collapse/Expand All Toggle**: A subtle 32x32 button (`⊟` / `⊞`) in the tree header toggles all folders between collapsed and expanded in a single click.
-- **Tree Menu Inline Name Editing (`<F2>`)**: Rename any folder or action directly within the tree view using `<F2>` or right-click context menu. Automatically commits on `<Enter>` or clicking outside, with full keystroke isolation.
-- **Active-Screen Toast Notifications**: Non-activating, auto-dismissing toast popups appear on the monitor currently containing the mouse cursor. Provides instant feedback for execution success or friendly diagnostics for missing executables.
-- **Shortcut & Target Validation Engine**: Validates executables, URLs, custom URI protocols, system `PATH` binaries, and environment variable paths (`%WINDIR%`, `%APPDATA%`). Shows error badges (`✕`), live path diagnostics in the editor, and a one-click filter chip (`[✕ X Broken]`).
-- **Recursive Folder Duplication (`Ctrl+D`)**: Deep-clones entire folder trees arbitrarily deep, retaining nested hierarchy while resetting hotkeys to prevent global shortcut conflicts.
-- **Command Palette Context Fallbacks**: When an action has no description, the palette displays its folder breadcrumbs (`📁 Tools › Development`), command target path, or snippet preview so entries are never blank.
-- **Recycle Bin & Safe Deletion**: Deleted items are moved to a pinned Recycle Bin with customizable retention policies, one-click restoration, or permanent purging.
-- **Modular Backup & Export**: Export entire action configurations or isolated subfolder branches to standalone `.json` packages for sharing or backup.
+- **Visual Step Builder & JavaScript Workflows**:
+  - Build chained automation workflows combining interactive dialogs, application launches, URL navigation, directory checks, keystroke injections, delays, and action executions.
+  - **Full-Powered JavaScript Engine**: Powered by Jint with native `tp` runtime APIs (`tp.prompt()`, `tp.openUrl()`, `tp.launch()`, `tp.fs`, `tp.delay()`, `tp.injectSnippet()`, `tp.executeAction()`, `tp.vars`).
+  - **Contextual Mode Navigation**: Seamlessly switch between the Visual Step Builder and Script Editor with safe 3-option re-compilation modals ("Re-compile from Steps", "Keep My Script", or "Cancel") to guarantee your custom scripts are never accidentally lost.
+  - **Per-Step Inline Script Conversion**: Convert any structured visual step into an inline script with a single click.
+  - **Dual AvalonEdit Code Editors**: Both full-flow and inline JavaScript step editors feature syntax highlighting, line numbers, code typography, and dynamic theme switching.
+- **Spotlight-Style Command Palette**:
+  - Instant fuzzy search across all actions and folders with quick-launch hotkeys, breadcrumbs, autocomplete suggestions, and sorting modes (Alphabetical, Frequency, or Custom Tree Order).
+- **Menu Quick-Key Auto-Numbering**:
+  - Configurable accelerator keys (`1–9`, `A–Z`) for popup menus with `Off`, `Smart Fill`, and `Strict Positional` modes, including visually distinct badges for manual vs. auto-assigned keys.
+- **Top-Aligned Multiline Text Editing**:
+  - Clean top vertical alignment across all multiline template editors, snippet inputs, and interactive dialogs.
+- **Precision Drag-and-Drop & Tree Organization**:
+  - 3-zone visual drop targeting with ghost preview badges, spring-loaded folder expansion, tree state persistence, inline renaming (`<F2>`), and compact/comfortable tree density toggles.
+- **Adaptive Vector UI & High-DPI Theming**:
+  - Unified vector iconography, dark/light theme adaptive high-contrast reticle tray icons, and native Win32 multi-frame taskbar scaling.
+- **Dual-Scope Installer & Atomic Safety**:
+  - Inno Setup installer supporting standard Per-User (no UAC prompt) and All-Users administrative installations with atomic configuration backups.
 
 ---
 
 ## Key Features
 
+### 🔄 Multi-Step Workflows & Script Automation
+- **Visual Step Builder**: Chain actions visually without writing code:
+  - **Prompt User**: Collect dynamic inputs via single-line text, multiline text, numbers, dropdown choices, or date pickers.
+  - **Open URL**: Open web pages in default or specific browsers with custom browser profiles and private window support.
+  - **Ensure Directory**: Check folder existence with silent creation, error handling, or interactive create prompts.
+  - **Launch App**: Launch executables with custom arguments, working directories, Run as Admin, and multi-monitor display targeting.
+  - **Inject Snippet**: Type or paste dynamic template expansions directly into target applications.
+  - **Delay**: Configurable pauses in milliseconds.
+  - **Execute Action**: Trigger other TriggerPoint actions or open nested folder cursor menus.
+  - **Inline JavaScript**: Embed custom script snippets right inside the visual sequence.
+- **Full JavaScript Engine (Jint)**:
+  - Robust script execution powered by Jint with full access to native `tp` APIs (`tp.prompt()`, `tp.openUrl()`, `tp.launch()`, `tp.fs`, `tp.delay()`, `tp.injectSnippet()`, `tp.executeAction()`, `tp.vars`).
+  - Contextual mode switching with safe 3-option re-compile confirmations and per-step script conversion.
+  - Dual AvalonEdit code editors with JavaScript syntax highlighting, line numbers, and dark/light theme adaptability.
+
 ### ⚡ Precision Global Hotkeys & Conflict Detection
 - Fast Win32 `RegisterHotKey` global shortcut registration.
-- **Two-tiered conflict detection**: Warns immediately if a shortcut is claimed by another TriggerPoint action or by an external system process/Windows utility.
-- Interactive hotkey recorder with live visual combination builder.
+- **Two-Tiered Conflict Detection**: Warns immediately if a shortcut is claimed by another TriggerPoint action or an external system process/Windows utility.
+- Interactive hotkey recorder with live visual modifier combination builder.
 
-### 🎯 Window & Browser Target Crosshair Tool
-- Drag an interactive crosshair target onto any open application window to automatically extract its executable path and process name.
-- **Active Browser Tab URL Filter**: Detects when targeting Chromium/Firefox browsers and prompts to capture and filter on the current URL pattern.
+### 🔍 Spotlight-Style Command Palette
+- Summon a fast, floating search palette anywhere with a single global shortcut (`Ctrl+Space` or custom hotkey).
+- Fuzzy search across all actions and folders with autocomplete suggestions, sort modes (Alphabetical, Frequency, or Custom Tree Order), and folder breadcrumb paths (`📁 Tools › Development › Edit Hosts`).
 
 ### 📋 Floating Cursor Menus & Folder Launchers
 - Launch grouped actions directly under your mouse cursor with custom accelerator keys.
 - Organize shortcuts into folders and hierarchical launcher menus.
-- Full keyboard navigation and context menu support for rapid item management.
+- **Sequential Quick-Keys (`1–9`, `A–Z`)**: Auto-numbers popup menus up to 35 direct access keys with `Off`, `Smart Fill`, and `Strict Positional` modes.
 
 ### 📝 Dynamic Snippets & Text Expansion
 - Send keystrokes or clipboard-injected templates directly into the focused window.
+- **Top-Aligned Multiline Editing**: Clean top vertical alignment across snippet boxes, multiline inputs, and prompt dialogs.
 - **Dynamic Date & Time Formatting & Offsets**:
   - `{date}`, `{date:format}` (e.g. `{date:MM/dd/yyyy}`, `{date:dddd, MMMM d, yyyy}`)
   - Relative date offsets: `{date:+1d}`, `{date:-1d:yyyy-MM-dd}`, `{tomorrow}`, `{yesterday}`
@@ -70,6 +93,10 @@ Designed to stay out of your way, TriggerPoint runs quietly in your system tray 
 - **Interactive Prompts with Defaults**:
   - `{text:Label|Default}`, `{multiline:Label|Default}`, `{choice:Label|Opt1=v1*,Opt2=v2}`, `{number:Label|min,max|default}`, `{date_picker:Label|Format}` (e.g. `{date_picker:Due Date|MM/dd/yyyy}`)
 
+### 🎯 Window & Browser Target Crosshair Tool
+- Drag an interactive crosshair target onto any open application window to automatically extract its executable path and process name.
+- **Active Browser Tab URL Filter**: Detects when targeting Chromium/Firefox browsers and prompts to capture and filter on the current URL pattern.
+
 ### 🛡 Process & Context Filters
 - Restrict actions to run only within specific applications (or exclude them).
 - High-contrast tag pill interface with inline double-click editing and file drag-and-drop support.
@@ -79,8 +106,9 @@ Designed to stay out of your way, TriggerPoint runs quietly in your system tray 
 - Daily rolling file sink with configurable retention days (1–90 days).
 - System tray management with quick "Snooze Hotkeys" toggle.
 
-### 📦 Standalone Single-File Installer
-- Packaged with Inno Setup into a clean, non-administrative `TriggerPointSetup.exe` (installs to `%LOCALAPPDATA%\Programs\TriggerPoint` without UAC prompts).
+### 📦 Dual-Scope Single-File Installer
+- Packaged with Inno Setup into a clean `TriggerPointSetup.exe`.
+- Supports standard **Per-User** install (installs to `%LOCALAPPDATA%\Programs\TriggerPoint` without UAC prompts) or **All-Users** machine-wide installation.
 
 ---
 
@@ -104,7 +132,7 @@ cd TriggerPoint
 # Build the solution
 dotnet build TriggerPoint.slnx
 
-# Run all tests
+# Run all unit tests
 dotnet test TriggerPoint.slnx
 
 # Launch TriggerPoint
@@ -127,19 +155,21 @@ TriggerPoint adheres to clean separation of concerns:
 ```
 TriggerPoint/
 ├── src/
-│   ├── TriggerPoint.Core/            # Domain models, contracts, and core service interfaces
+│   ├── TriggerPoint.Core/            # Domain models, workflow compiler, and service contracts
 │   ├── TriggerPoint.Infrastructure/  # Win32 hooks, atomic JSON persistence, and Serilog logging
-│   └── TriggerPoint.UI/              # Modern WPF UI, Tray icon, Hotkey controls, and Dark/Light themes
+│   └── TriggerPoint.UI/              # Modern WPF UI, Tray daemon, Hotkey recorder, and Themes
 ├── tests/
-│   └── TriggerPoint.Tests/           # Unit test suite (xUnit, FluentAssertions)
+│   └── TriggerPoint.Tests/           # Unit test suite (186 tests: xUnit, FluentAssertions)
 ├── installer/
-│   └── TriggerPoint.iss              # Inno Setup installer specification
+│   └── TriggerPoint.iss              # Inno Setup dual-scope installer specification
 ├── build/
-│   └── package.ps1                   # Packaging & build automation script
+│   ├── package.ps1                   # Packaging & Inno Setup automation script
+│   └── set-version.ps1               # Centralized version synchronization script
 ├── artifacts/
 │   └── TriggerPointSetup.exe         # Compiled release installer
 └── assets/
-    └── TriggerPoint.ico              # Multi-resolution application icon
+    ├── TriggerPoint.ico              # Multi-resolution dark theme application icon
+    └── TriggerPoint.Light.ico        # Multi-resolution light theme application icon
 ```
 
 ---
