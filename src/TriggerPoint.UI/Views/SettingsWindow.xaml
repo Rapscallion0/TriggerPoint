@@ -235,8 +235,10 @@
                           ScrollViewer.VerticalScrollBarVisibility="Auto"
                           PreviewMouseWheel="ItemsTreeView_PreviewMouseWheel"
                           PreviewMouseLeftButtonDown="ItemsTreeView_PreviewMouseLeftButtonDown"
+                          PreviewMouseLeftButtonUp="ItemsTreeView_PreviewMouseLeftButtonUp"
                           PreviewMouseRightButtonDown="ItemsTreeView_PreviewMouseRightButtonDown"
                           MouseMove="ItemsTreeView_MouseMove"
+                          MouseLeave="ItemsTreeView_MouseLeave"
                           DragOver="ItemsTreeView_DragOver"
                           DragLeave="ItemsTreeView_DragLeave"
                           Drop="ItemsTreeView_Drop"
@@ -251,7 +253,7 @@
                         </Style>
                     </TreeView.ItemContainerStyle>
                     <TreeView.ContextMenu>
-                        <ContextMenu x:Name="TreeContextMenu" Opened="TreeContextMenu_Opened">
+                        <ContextMenu x:Name="TreeContextMenu" Opened="TreeContextMenu_Opened" Closed="TreeContextMenu_Closed">
                             <MenuItem x:Name="ContextAddMenu" Header="New" PreviewMouseLeftButtonDown="ContextAddMenu_PreviewMouseLeftButtonDown">
                                 <MenuItem.Icon>
                                     <TextBlock Text="➕" FontSize="13" Foreground="{DynamicResource AccentBrush}"/>

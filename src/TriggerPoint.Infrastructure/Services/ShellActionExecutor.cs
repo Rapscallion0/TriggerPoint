@@ -146,6 +146,15 @@ public class ShellActionExecutor : IActionExecutor
             try
             {
                 var expandedPath = Environment.ExpandEnvironmentVariables(command);
+                if (!File.Exists(expandedPath) && !Directory.Exists(expandedPath))
+                {
+                    var resolvedFromPath = ResolveExecutableFromPath(expandedPath);
+                    if (!string.IsNullOrEmpty(resolvedFromPath))
+                    {
+                        expandedPath = resolvedFromPath;
+                    }
+                }
+
                 if (File.Exists(expandedPath) || Directory.Exists(expandedPath))
                 {
                     Process.Start(new ProcessStartInfo
@@ -155,6 +164,12 @@ public class ShellActionExecutor : IActionExecutor
                         UseShellExecute = true
                     });
                     ExecutionSucceeded?.Invoke(item, $"Revealed in Explorer: {Path.GetFileName(expandedPath)}");
+                    return;
+                }
+                else
+                {
+                    _logger.Warning("Reveal in Explorer failed: '{Command}' does not target an existing file or directory.", command);
+                    ExecutionFailed?.Invoke(item, $"Cannot reveal: '{command}' is not a local file or directory.");
                     return;
                 }
             }
@@ -250,4 +265,32 @@ public class ShellActionExecutor : IActionExecutor
             ExecutionFailed?.Invoke(item, $"{ex.Message}:\n{command}");
         }
     }
+
+    private static string? ResolveExecutableFromPath(string fileName)
+    {
+        if (Path.IsPathRooted(fileName)) return null;
+        var pathEnv = Environment.GetEnvironmentVariable("PATH");
+        if (string.IsNullOrEmpty(pathEnv)) return null;
+
+        var extensions = new[] { "", ".exe", ".cmd", ".bat", ".ps1" };
+        var paths = pathEnv.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (var dir in paths)
+        {
+            foreach (var ext in extensions)
+            {
+                try
+                {
+                    var testPath = Path.Combine(dir, fileName.EndsWith(ext, StringComparison.OrdinalIgnoreCase) ? fileName : fileName + ext);
+                    if (File.Exists(testPath))
+                    {
+                        return testPath;
+                    }
+                }
+                catch { }
+            }
+        }
+        return null;
+    }
 }
+

@@ -5,7 +5,7 @@
 
 [![.NET](https://img.shields.io/badge/.NET-9.0--windows-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011%20x64-0078D6?logo=windows)](https://microsoft.com/windows)
-[![Version](https://img.shields.io/badge/Version-v2.0.3-blue.svg)]()
+[![Version](https://img.shields.io/badge/Version-v2.0.4-blue.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/Tests-123%20Passed%20(100%25)-brightgreen)]()
 
@@ -114,7 +114,7 @@ dotnet run --project src/TriggerPoint.UI
 #### Package Installer (`TriggerPointSetup.exe`)
 To package the app into a standalone installer:
 ```powershell
-powershell -ExecutionPolicy Bypass -File build/package.ps1 -AppVersion "2.0.3"
+powershell -ExecutionPolicy Bypass -File build/package.ps1 -AppVersion "2.0.4"
 ```
 The output installer will be produced at `artifacts/TriggerPointSetup.exe`.
 

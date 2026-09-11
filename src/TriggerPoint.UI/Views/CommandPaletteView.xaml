@@ -1,9 +1,10 @@
 <Window x:Class="TriggerPoint.UI.Views.CommandPaletteView"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:TriggerPoint.UI.Views"
         Title="TriggerPoint Command Palette"
-        Width="640"
-        Height="420"
+        Width="680"
+        Height="520"
         WindowStartupLocation="CenterScreen"
         WindowStyle="None"
         AllowsTransparency="True"
@@ -13,192 +14,888 @@
         Deactivated="Window_Deactivated"
         PreviewKeyDown="Window_PreviewKeyDown">
 
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <!-- Filter Pill Button Style -->
+        <Style x:Key="FilterPillStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+            <Setter Property="Padding" Value="8,3"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="pillBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="12"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="pillBorder" Property="Background" Value="{DynamicResource ItemHoverBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                            </Trigger>
+                            <Trigger Property="Tag" Value="Selected">
+                                <Setter TargetName="pillBorder" Property="Background" Value="{DynamicResource AccentSubtleBrush}"/>
+                                <Setter TargetName="pillBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
     <Border Background="{DynamicResource BgSecondaryBrush}"
             BorderBrush="{DynamicResource BorderBrush}"
             BorderThickness="1"
             CornerRadius="12"
             Margin="10">
         <Border.Effect>
-            <DropShadowEffect BlurRadius="28" ShadowDepth="6" Opacity="0.5" Direction="270"/>
+            <DropShadowEffect BlurRadius="30" ShadowDepth="8" Opacity="0.55" Direction="270"/>
         </Border.Effect>
 
-        <Grid Margin="16">
+        <Grid Margin="16,14,16,12">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/> <!-- Search & Scope Header -->
+                <RowDefinition Height="Auto"/> <!-- Filter Pills Bar -->
+                <RowDefinition Height="*"/>    <!-- Results List & Empty State -->
+                <RowDefinition Height="Auto"/> <!-- Selected Item Detail Preview Strip -->
+                <RowDefinition Height="Auto"/> <!-- Contextual Footer Bar -->
             </Grid.RowDefinitions>
 
-            <!-- Search Input Box -->
+            <!-- Row 0: Search Input & Controls Box -->
             <Border Grid.Row="0"
+                    x:Name="SearchBoxBorder"
                     Background="{DynamicResource BgInputBrush}"
                     BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="1"
                     CornerRadius="8"
-                    Padding="12,10"
-                    Margin="0,0,0,12">
+                    Padding="10,8"
+                    Margin="0,0,0,8">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/> <!-- Back Button (Scoped) -->
+                        <ColumnDefinition Width="Auto"/> <!-- Search Icon -->
+                        <ColumnDefinition Width="*"/>    <!-- Search Text Box & Watermark -->
+                        <ColumnDefinition Width="Auto"/> <!-- Scope Badge -->
+                        <ColumnDefinition Width="Auto"/> <!-- Header Utility Buttons -->
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Back Button when Scoped into Folder -->
+                    <Button Grid.Column="0" 
+                            x:Name="BackButton"
+                            ToolTip="Go back to parent folder (Backspace)"
+                            Click="BackButton_Click"
+                            Cursor="Hand"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Padding="2,0,8,0"
+                            Visibility="Collapsed"
+                            VerticalAlignment="Center">
+                        <TextBlock Text="←" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}"/>
+                    </Button>
+
+                    <!-- Search Icon -->
+                    <TextBlock Grid.Column="1" 
+                               Text="🔍" 
+                               FontSize="14" 
+                               Margin="0,0,8,0" 
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextMutedBrush}"/>
+
+                    <!-- Search Box with Placeholder -->
+                    <Grid Grid.Column="2" VerticalAlignment="Center">
+                        <TextBox x:Name="SearchTextBox"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 Foreground="{DynamicResource TextPrimaryBrush}"
+                                 CaretBrush="{DynamicResource AccentBrush}"
+                                 FontSize="14.5"
+                                 VerticalAlignment="Center"
+                                 TextChanged="SearchTextBox_TextChanged"/>
+
+                        <!-- Search Watermark Placeholder -->
+                        <TextBlock x:Name="SearchWatermark"
+                                   Text="Search actions, type @ for filters, or ? for shortcuts..."
+                                   FontSize="13.5"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   IsHitTestVisible="False"
+                                   VerticalAlignment="Center"
+                                   Visibility="Visible"/>
+                    </Grid>
+
+                    <!-- Scope Badge with Dismiss Button -->
+                    <Border Grid.Column="3" 
+                            x:Name="ScopeBadge"
+                            Background="{DynamicResource AccentSubtleBrush}"
+                            BorderBrush="{DynamicResource AccentBrush}"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            Padding="6,2"
+                            Margin="6,0,6,0"
+                            VerticalAlignment="Center"
+                            Visibility="Collapsed">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock x:Name="ScopeText" 
+                                       Text="Scoped" 
+                                       FontSize="11" 
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource AccentBrush}"
+                                       VerticalAlignment="Center"/>
+                            <Button x:Name="ScopeDismissBtn"
+                                    Click="ScopeDismissBtn_Click"
+                                    ToolTip="Clear folder filter (Esc)"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Padding="4,0,0,0"
+                                    Cursor="Hand"
+                                    VerticalAlignment="Center">
+                                <TextBlock Text="✕" FontSize="9.5" Foreground="{DynamicResource AccentBrush}"/>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Header Utility Buttons -->
+                    <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
+                        <!-- Sort Mode Switcher Dropdown -->
+                        <Button x:Name="SortModeBtn"
+                                Click="SortModeBtn_Click"
+                                ToolTip="Select sort mode (Ctrl+S)"
+                                Background="Transparent"
+                                BorderThickness="1"
+                                BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                Cursor="Hand"
+                                Margin="2,0"
+                                Padding="6,2">
+                            <Button.Resources>
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius" Value="4"/>
+                                </Style>
+                            </Button.Resources>
+                            <Button.ContextMenu>
+                                <ContextMenu x:Name="SortContextMenu">
+                                    <MenuItem x:Name="SortItemSmart" Header="Smart (Fuzzy Score &amp; Recents)" Click="SortMenuItem_Click" Tag="Smart"/>
+                                    <MenuItem x:Name="SortItemAlpha" Header="Alphabetical (A–Z)" Click="SortMenuItem_Click" Tag="Alphabetical"/>
+                                    <MenuItem x:Name="SortItemFreq" Header="Most Frequent" Click="SortMenuItem_Click" Tag="MostFrequent"/>
+                                    <MenuItem x:Name="SortItemRecent" Header="Recent" Click="SortMenuItem_Click" Tag="Recent"/>
+                                    <MenuItem x:Name="SortItemTree" Header="Action Tree Order" Click="SortMenuItem_Click" Tag="ActionTree"/>
+                                </ContextMenu>
+                            </Button.ContextMenu>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="↕ " FontSize="10" Foreground="{DynamicResource TextMutedBrush}"/>
+                                <TextBlock x:Name="SortModeText" Text="Smart" FontSize="11" FontWeight="Medium" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                <TextBlock Text=" ▾" FontSize="9" Foreground="{DynamicResource TextMutedBrush}" Margin="2,0,0,0"/>
+                            </StackPanel>
+                        </Button>
+
+                        <!-- Action Manager Button (TriggerPoint Logo) -->
+                        <Button x:Name="ActionManagerBtn"
+                                Click="ActionManagerBtn_Click"
+                                ToolTip="Action Manager (Ctrl+M)"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Cursor="Hand"
+                                Padding="4"
+                                Margin="2,0"
+                                VerticalAlignment="Center">
+                            <Image Source="/Assets/TriggerPoint.ico" 
+                                   Width="16" Height="16" RenderOptions.BitmapScalingMode="HighQuality"/>
+                        </Button>
+
+                        <!-- Application Settings Button -->
+                        <Button x:Name="AppSettingsBtn"
+                                Click="AppSettingsBtn_Click"
+                                ToolTip="Application Settings (Ctrl+,)"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Cursor="Hand"
+                                Padding="4"
+                                Margin="2,0"
+                                VerticalAlignment="Center">
+                            <TextBlock Text="⚙️" FontSize="13" VerticalAlignment="Center"/>
+                        </Button>
+
+                        <!-- Shortcut & Help Cheat-Sheet Button -->
+                        <Button x:Name="HelpOverlayBtn"
+                                Click="HelpOverlayBtn_Click"
+                                ToolTip="Keyboard Shortcuts &amp; Search Hints (F1 or ?)"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Cursor="Hand"
+                                Padding="5,2"
+                                Margin="2,0,0,0"
+                                VerticalAlignment="Center">
+                            <Border Width="16" Height="16" CornerRadius="8" BorderThickness="1" BorderBrush="{DynamicResource TextMutedBrush}">
+                                <TextBlock Text="i" FontSize="11" FontWeight="Bold" FontFamily="Segoe UI" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource TextMutedBrush}" Margin="0,-1,0,0"/>
+                            </Border>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- @ Filter Prefix Autocomplete Popup -->
+            <Popup x:Name="PrefixAutoCompletePopup"
+                   PlacementTarget="{Binding ElementName=SearchBoxBorder}"
+                   Placement="Bottom"
+                   AllowsTransparency="True"
+                   Focusable="False"
+                   StaysOpen="False"
+                   VerticalOffset="4"
+                   PopupAnimation="Fade">
+                <Border Background="{DynamicResource BgSecondaryBrush}"
+                        BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Width="320"
+                        Padding="4"
+                        SnapsToDevicePixels="True">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="20" ShadowDepth="4" Opacity="0.5" Direction="270"/>
+                    </Border.Effect>
+                    <StackPanel>
+                        <Border Padding="8,4,8,4" BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,4">
+                            <TextBlock Text="FILTER BY TYPE" FontSize="9.5" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}"/>
+                        </Border>
+                        <ListBox x:Name="PrefixSuggestionsList"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                 SelectionMode="Single"
+                                 PreviewMouseLeftButtonUp="PrefixSuggestionsList_PreviewMouseLeftButtonUp">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Background" Value="Transparent"/>
+                                    <Setter Property="BorderThickness" Value="0"/>
+                                    <Setter Property="Padding" Value="0"/>
+                                    <Setter Property="Margin" Value="0,1"/>
+                                    <Setter Property="Cursor" Value="Hand"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ListBoxItem">
+                                                <Border x:Name="pBorder"
+                                                        Background="{TemplateBinding Background}"
+                                                        CornerRadius="6"
+                                                        Padding="8,5"
+                                                        SnapsToDevicePixels="True">
+                                                    <ContentPresenter/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="pBorder" Property="Background" Value="{DynamicResource ItemHoverBrush}"/>
+                                                    </Trigger>
+                                                    <Trigger Property="IsSelected" Value="True">
+                                                        <Setter TargetName="pBorder" Property="Background" Value="{DynamicResource ItemSelectedBrush}"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding Icon}" FontSize="13" Width="22" VerticalAlignment="Center"/>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0,8,0">
+                                            <TextBlock Text="{Binding Prefix}" FontWeight="Bold" FontSize="12" Foreground="{DynamicResource AccentBrush}"/>
+                                            <TextBlock Text="  " FontSize="12"/>
+                                            <TextBlock Text="{Binding Title}" FontSize="12" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                        </StackPanel>
+                                        <Border Grid.Column="2" 
+                                                Style="{DynamicResource KeyBadgeStyle}" 
+                                                VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding ShortcutHint}" FontSize="9.5" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        </Border>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </StackPanel>
+                </Border>
+            </Popup>
+
+            <!-- Row 1: Filter Pills Bar -->
+            <Border Grid.Row="1" Margin="0,0,0,6">
+                <StackPanel Orientation="Horizontal">
+                    <!-- Filter Pill: All -->
+                    <Button x:Name="FilterPillAll" 
+                            Click="FilterPill_Click" 
+                            Tag="All" 
+                            Style="{StaticResource FilterPillStyle}">
+                        <TextBlock x:Name="FilterCountAll" Text="All (0)"/>
+                    </Button>
+
+                    <!-- Filter Pill: Apps & Commands -->
+                    <Button x:Name="FilterPillApp" 
+                            Click="FilterPill_Click" 
+                            Tag="App" 
+                            Style="{StaticResource FilterPillStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="⚡ " FontSize="11" Foreground="{DynamicResource ShellBrush}"/>
+                            <TextBlock x:Name="FilterCountApp" Text="Apps &amp; Commands (0)"/>
+                        </StackPanel>
+                    </Button>
+
+                    <!-- Filter Pill: Snippets -->
+                    <Button x:Name="FilterPillSnippet" 
+                            Click="FilterPill_Click" 
+                            Tag="Snippet" 
+                            Style="{StaticResource FilterPillStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="📝 " FontSize="11" Foreground="{DynamicResource SnippetBrush}"/>
+                            <TextBlock x:Name="FilterCountSnippet" Text="Snippets (0)"/>
+                        </StackPanel>
+                    </Button>
+
+                    <!-- Filter Pill: Workflows -->
+                    <Button x:Name="FilterPillWorkflow" 
+                            Click="FilterPill_Click" 
+                            Tag="Workflow" 
+                            Style="{StaticResource FilterPillStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🔀 " FontSize="11" Foreground="{DynamicResource WorkflowBrush}"/>
+                            <TextBlock x:Name="FilterCountWorkflow" Text="Workflows (0)"/>
+                        </StackPanel>
+                    </Button>
+
+                    <!-- Filter Pill: Folders -->
+                    <Button x:Name="FilterPillFolder" 
+                            Click="FilterPill_Click" 
+                            Tag="Folder" 
+                            Style="{StaticResource FilterPillStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="📁 " FontSize="11" Foreground="{DynamicResource FolderBrush}"/>
+                            <TextBlock x:Name="FilterCountFolder" Text="Folders (0)"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Border>
+
+            <!-- Row 2: Results List & Empty State View -->
+            <Grid Grid.Row="2">
+                <!-- Results List -->
+                <ListBox x:Name="ResultsListBox"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         SelectionMode="Single"
+                         SelectionChanged="ResultsListBox_SelectionChanged"
+                         MouseDoubleClick="ResultsListBox_MouseDoubleClick">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Margin" Value="0,1.5"/>
+                            <Setter Property="Focusable" Value="{Binding IsSelectable}"/>
+                            <Setter Property="IsEnabled" Value="{Binding IsSelectable}"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border x:Name="itemBorder"
+                                                Background="{TemplateBinding Background}"
+                                                CornerRadius="6"
+                                                Padding="8,6"
+                                                SnapsToDevicePixels="True">
+                                            <ContentPresenter/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="itemBorder" Property="Background" Value="{DynamicResource ItemHoverBrush}"/>
+                                            </Trigger>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="itemBorder" Property="Background" Value="{DynamicResource ItemSelectedBrush}"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid>
+                                <!-- Mode A: Discreet Section Header -->
+                                <Border Visibility="{Binding HeaderVisibility}" 
+                                        Padding="4,6,4,3" 
+                                        BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                        BorderThickness="{Binding HeaderBorderThickness}"
+                                        Opacity="0.85">
+                                    <TextBlock Text="{Binding SectionHeaderText}"
+                                               FontSize="10"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextMutedBrush}"/>
+                                 </Border>
+
+                                 <!-- Mode B: Standard Interactive Action Row -->
+                                 <Grid Visibility="{Binding ActionVisibility}">
+                                     <Grid.ColumnDefinitions>
+                                         <ColumnDefinition Width="Auto"/> <!-- Left Icon -->
+                                         <ColumnDefinition Width="*"/>    <!-- Name & Description -->
+                                         <ColumnDefinition Width="Auto"/> <!-- Right Badges & Metadata -->
+                                     </Grid.ColumnDefinitions>
+
+                                     <!-- Left Action Icon -->
+                                     <TextBlock Grid.Column="0"
+                                                Text="{Binding IconSymbol}"
+                                                FontSize="14"
+                                                Width="24"
+                                                VerticalAlignment="Center"
+                                                Foreground="{Binding IconBrush}"/>
+
+                                     <!-- Center: Highlighted Title & Detail -->
+                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="6,0,10,0">
+                                         <!-- Title with Character Highlight Support -->
+                                         <TextBlock local:TextBlockInlines.Segments="{Binding HighlightedNameSegments}"
+                                                    FontSize="13"
+                                                    FontWeight="SemiBold"
+                                                    Foreground="{DynamicResource TextPrimaryBrush}"
+                                                    TextTrimming="CharacterEllipsis"/>
+
+                                         <!-- Secondary Detail / Description -->
+                                         <TextBlock Text="{Binding SecondaryDetail}"
+                                                    FontSize="11"
+                                                    Foreground="{DynamicResource TextSecondaryBrush}"
+                                                    TextTrimming="CharacterEllipsis"
+                                                    Visibility="{Binding HasSecondaryDetail}"
+                                                    Margin="0,1,0,0"/>
+                                     </StackPanel>
+
+                                     <!-- Right Column: Breadcrumbs, Recency, Type Badge, Hotkey -->
+                                     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                         <!-- Folder Breadcrumb -->
+                                         <TextBlock Text="{Binding FolderBreadcrumb}"
+                                                    FontSize="11"
+                                                    Foreground="{DynamicResource TextMutedBrush}"
+                                                    Margin="0,0,8,0"
+                                                    Visibility="{Binding HasFolderBreadcrumb}"
+                                                    VerticalAlignment="Center"/>
+
+                                         <!-- Usage Recency / Launch Count -->
+                                         <TextBlock Text="{Binding UsageRecencyText}"
+                                                    FontSize="10.5"
+                                                    Foreground="{DynamicResource TextMutedBrush}"
+                                                    Margin="0,0,8,0"
+                                                    Visibility="{Binding HasUsageRecency}"
+                                                    VerticalAlignment="Center"/>
+
+                                         <!-- Action Type Micro-Badge -->
+                                         <Border CornerRadius="4"
+                                                 BorderThickness="1"
+                                                 BorderBrush="{Binding TypeBorderBrush}"
+                                                 Background="{Binding TypeBackgroundBrush}"
+                                                 Padding="5,1.5"
+                                                 Margin="0,0,6,0"
+                                                 VerticalAlignment="Center">
+                                             <TextBlock Text="{Binding TypeText}"
+                                                        FontSize="9.5"
+                                                        FontWeight="SemiBold"
+                                                        Foreground="{Binding TypeForegroundBrush}"/>
+                                         </Border>
+
+                                         <!-- Folder Drill-Down Chevron (Clickable for mouse users) -->
+                                         <Button Visibility="{Binding IsFolder}"
+                                                 Click="FolderChevron_Click"
+                                                 ToolTip="Drill into folder"
+                                                 Background="Transparent"
+                                                 BorderThickness="0"
+                                                 Padding="4,1"
+                                                 Cursor="Hand"
+                                                 VerticalAlignment="Center">
+                                             <TextBlock Text="›" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/>
+                                         </Button>
+
+                                         <!-- Global Hotkey Badge (if configured) -->
+                                         <Border Style="{DynamicResource KeyBadgeStyle}"
+                                                 Visibility="{Binding HasHotkey}"
+                                                 VerticalAlignment="Center">
+                                             <TextBlock Text="{Binding HotkeyText}"
+                                                        FontSize="10"
+                                                        Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                         </Border>
+                                     </StackPanel>
+                                 </Grid>
+                             </Grid>
+                         </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <!-- Empty State Card (0 Matches) -->
+                <Border x:Name="EmptyStateCard"
+                        Background="{DynamicResource BgInputBrush}"
+                        BorderBrush="{DynamicResource BorderSubtleBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="24,18"
+                        Margin="12"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Visibility="Collapsed">
+                    <StackPanel HorizontalAlignment="Center">
+                        <TextBlock Text="🔍" FontSize="24" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                        <TextBlock Text="No matching actions found." 
+                                   FontSize="13.5" 
+                                   FontWeight="SemiBold" 
+                                   Foreground="{DynamicResource TextPrimaryBrush}" 
+                                   HorizontalAlignment="Center"/>
+                        <TextBlock x:Name="EmptyStatePromptText"
+                                   Text="Press Enter to create a new action"
+                                   FontSize="11.5"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,4,0,12"/>
+                        <Button x:Name="CreateActionEmptyBtn"
+                                Click="CreateActionEmptyBtn_Click"
+                                Cursor="Hand"
+                                Padding="12,6"
+                                HorizontalAlignment="Center"
+                                Background="{DynamicResource AccentBrush}"
+                                BorderThickness="0">
+                            <Button.Resources>
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius" Value="6"/>
+                                </Style>
+                            </Button.Resources>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="➕ Create Action" FontSize="12" FontWeight="SemiBold" Foreground="White"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Row 3: Selected Item Detail Preview Strip -->
+            <Border Grid.Row="3"
+                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+                    BorderThickness="0,1,0,0"
+                    Margin="0,6,0,0"
+                    Padding="4,6,4,2">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
                     <TextBlock Grid.Column="0" 
-                               Text="🔍" 
-                               FontSize="14" 
-                               Margin="0,0,10,0" 
+                               Text="PREVIEW: " 
+                               FontSize="10" 
+                               FontWeight="Bold" 
+                               Foreground="{DynamicResource TextMutedBrush}" 
                                VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="1" 
+                               x:Name="PreviewDetailText"
+                               Text="Select an action to view details" 
+                               FontSize="11" 
+                               Foreground="{DynamicResource TextSecondaryBrush}" 
+                               TextTrimming="CharacterEllipsis" 
+                               VerticalAlignment="Center"/>
+                </Grid>
+            </Border>
 
-                    <TextBox Grid.Column="1" 
-                             x:Name="SearchTextBox"
-                             Background="Transparent"
-                             BorderThickness="0"
-                             Foreground="{DynamicResource TextPrimaryBrush}"
-                             CaretBrush="{DynamicResource AccentBrush}"
-                             FontSize="15"
-                             FontFamily="{StaticResource AppFont}"
-                             VerticalAlignment="Center"
-                             TextChanged="SearchTextBox_TextChanged"/>
+            <!-- Row 4: Contextual Footer Bar & Inline Feedback Toast -->
+            <Border Grid.Row="4"
+                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+                    BorderThickness="0,1,0,0"
+                    Margin="0,4,0,0"
+                    Padding="0,6,0,0">
+                <Grid>
+                    <!-- Left: Contextual Shortcut Hints -->
+                    <TextBlock x:Name="FooterHintsText"
+                               FontSize="11"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               HorizontalAlignment="Left"
+                               VerticalAlignment="Center">
+                        <Run Text="Enter Run   •   "/>
+                        <Run Text="Ctrl+Enter Run as Admin   •   "/>
+                        <Run Text="Alt+Enter Edit in Action Manager"/>
+                    </TextBlock>
 
-                    <Border Grid.Column="2" 
-                            x:Name="ScopeBadge"
-                            Style="{StaticResource KeyBadgeStyle}"
+                    <!-- Right / Center: Inline Feedback Banner (e.g. Copied to Clipboard) -->
+                    <Border x:Name="FeedbackBadge"
+                            Background="{DynamicResource SuccessBrush}"
+                            CornerRadius="4"
+                            Padding="8,2"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
                             Visibility="Collapsed">
-                        <TextBlock x:Name="ScopeText" 
-                                   Text="Scoped" 
-                                   FontSize="11" 
-                                   Foreground="{DynamicResource AccentBrush}"/>
+                        <TextBlock x:Name="FeedbackText"
+                                   Text="Copied to clipboard! 📋"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   Foreground="White"/>
                     </Border>
                 </Grid>
             </Border>
 
-            <!-- Results List -->
-            <ListBox Grid.Row="1"
-                     x:Name="ResultsListBox"
-                     Background="Transparent"
-                     BorderThickness="0"
-                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                     ScrollViewer.VerticalScrollBarVisibility="Auto"
-                     SelectionMode="Single"
-                     MouseDoubleClick="ResultsListBox_MouseDoubleClick">
-                <ListBox.ItemContainerStyle>
-                    <Style TargetType="ListBoxItem">
-                        <Setter Property="Background" Value="Transparent"/>
-                        <Setter Property="BorderThickness" Value="0"/>
-                        <Setter Property="Padding" Value="0"/>
-                        <Setter Property="Margin" Value="0,2"/>
-                        <Setter Property="Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="ListBoxItem">
-                                    <Border x:Name="itemBorder"
-                                            Background="{TemplateBinding Background}"
-                                            CornerRadius="6"
-                                            Padding="10,8"
-                                            SnapsToDevicePixels="True">
-                                        <ContentPresenter/>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="itemBorder" Property="Background" Value="{DynamicResource ItemHoverBrush}"/>
-                                        </Trigger>
-                                        <Trigger Property="IsSelected" Value="True">
-                                            <Setter TargetName="itemBorder" Property="Background" Value="{DynamicResource ItemSelectedBrush}"/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                    </Style>
-                </ListBox.ItemContainerStyle>
-                <ListBox.ItemTemplate>
-                    <DataTemplate>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
+            <!-- Overlay: Keyboard Shortcuts & Search Hints Cheat-Sheet Modal -->
+            <Grid Grid.Row="0" Grid.RowSpan="5" 
+                  x:Name="CheatSheetOverlay" 
+                  Background="{DynamicResource BgSecondaryBrush}"
+                  Visibility="Collapsed">
+                <Border BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Background="{DynamicResource BgSecondaryBrush}"
+                        Padding="20,16">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/> <!-- Title & Close -->
+                            <RowDefinition Height="*"/>    <!-- Cheat Sheet Content -->
+                        </Grid.RowDefinitions>
 
-                            <!-- Type Icon / Indicator -->
-                            <TextBlock Grid.Column="0"
-                                       Text="{Binding IconSymbol}"
-                                       FontSize="14"
-                                       Width="24"
-                                       VerticalAlignment="Center"
-                                       Foreground="{Binding IconBrush}"/>
-
-                            <!-- Match Highlight Title & Description / Detail -->
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="6,0,12,0">
-                                <TextBlock Text="{Binding Name}"
-                                           FontSize="13"
-                                           FontWeight="SemiBold"
-                                           Foreground="{DynamicResource TextPrimaryBrush}"
-                                           TextTrimming="CharacterEllipsis"/>
-                                <TextBlock Text="{Binding SecondaryDetail}"
-                                           FontSize="11"
-                                           Foreground="{DynamicResource TextSecondaryBrush}"
-                                           TextTrimming="CharacterEllipsis"
-                                           Visibility="{Binding HasSecondaryDetail, Converter={x:Null}}"/>
+                        <!-- Header -->
+                        <Grid Grid.Row="0" Margin="0,0,0,14">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="⌨️ Command Palette Shortcuts &amp; Help" 
+                                           FontSize="15" 
+                                           FontWeight="Bold" 
+                                           Foreground="{DynamicResource TextPrimaryBrush}"/>
                             </StackPanel>
-
-                            <!-- Badges: Hotkey + Usage Count -->
-                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                <Border Style="{StaticResource AccentKeyBadgeStyle}" 
-                                        Margin="0,0,6,0"
-                                        Visibility="{Binding HasHotkey, Converter={x:Null}}">
-                                    <TextBlock Text="{Binding HotkeyText}" 
-                                               FontSize="11" 
-                                               Foreground="{DynamicResource AccentBrush}"/>
-                                </Border>
-                                <TextBlock Text="{Binding LaunchCountBadge}" 
-                                           FontSize="10" 
-                                           Foreground="{DynamicResource TextMutedBrush}"
-                                           VerticalAlignment="Center"/>
-                            </StackPanel>
+                            <Button x:Name="CloseHelpBtn" 
+                                    Click="CloseHelpBtn_Click" 
+                                    HorizontalAlignment="Right" 
+                                    Background="Transparent" 
+                                    BorderThickness="0" 
+                                    Cursor="Hand" 
+                                    Padding="6,2">
+                                <TextBlock Text="✕" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/>
+                            </Button>
                         </Grid>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
 
-            <!-- Modifier overrides footer -->
-            <Border Grid.Row="2"
-                    BorderBrush="{DynamicResource BorderSubtleBrush}"
-                    BorderThickness="0,1,0,0"
-                    Margin="0,10,0,0"
-                    Padding="0,8,0,0">
-                <TextBlock FontSize="11"
-                           Foreground="{DynamicResource TextMutedBrush}"
-                           HorizontalAlignment="Center">
-                    <InlineUIContainer BaselineAlignment="Center">
-                        <Path Data="{StaticResource EnterKeyGeometry}" 
-                              Fill="{DynamicResource TextPrimaryBrush}" 
-                              Width="10.5" Height="10.5" Stretch="Uniform" Margin="0,0,2,0"/>
-                    </InlineUIContainer>
-                    <Run Text="Run   •   "/>
-                    <Run Text="Ctrl+" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                    <InlineUIContainer BaselineAlignment="Center">
-                        <Path Data="{StaticResource EnterKeyGeometry}" 
-                              Fill="{DynamicResource TextPrimaryBrush}" 
-                              Width="10.5" Height="10.5" Stretch="Uniform" Margin="0,0,2,0"/>
-                    </InlineUIContainer>
-                    <Run Text="Run as Admin   •   "/>
-                    <Run Text="Shift+" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                    <InlineUIContainer BaselineAlignment="Center">
-                        <Path Data="{StaticResource EnterKeyGeometry}" 
-                              Fill="{DynamicResource TextPrimaryBrush}" 
-                              Width="10.5" Height="10.5" Stretch="Uniform" Margin="0,0,2,0"/>
-                    </InlineUIContainer>
-                    <Run Text="Reveal in Explorer   •   "/>
-                    <Run Text="Alt+" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                    <InlineUIContainer BaselineAlignment="Center">
-                        <Path Data="{StaticResource EnterKeyGeometry}" 
-                              Fill="{DynamicResource TextPrimaryBrush}" 
-                              Width="10.5" Height="10.5" Stretch="Uniform" Margin="0,0,2,0"/>
-                    </InlineUIContainer>
-                    <Run Text="Open in Settings"/>
-                </TextBlock>
-            </Border>
+                        <!-- Content Cards -->
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="0,0,10,0">
+                                <!-- Group 1: Filter Prefixes -->
+                                <Border Background="{DynamicResource BgInputBrush}" CornerRadius="6" Padding="14,10" Margin="0,0,0,10">
+                                    <StackPanel>
+                                        <TextBlock Text="SEARCH FILTER PREFIXES" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,0,0,8"/>
+                                        
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="@app, @cmd" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Filter to Apps &amp; Shell Commands (Ctrl+2)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="@snip, @text" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Filter to Snippets &amp; Templates (Ctrl+3)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="@flow, @wf" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Filter to Workflows (Ctrl+4)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="@folder, @dir" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Filter to Folders (Ctrl+5)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="@all" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Reset to All Items (Ctrl+1)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Group 2: Execution Keys -->
+                                <Border Background="{DynamicResource BgInputBrush}" CornerRadius="6" Padding="14,10" Margin="0,0,0,10">
+                                    <StackPanel>
+                                        <TextBlock Text="EXECUTION MODIFIERS" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,0,0,8"/>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="Enter" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Execute action / Drill into selected folder" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="Ctrl+Enter" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Run Application as Administrator" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="Shift+Enter" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Reveal target in Windows File Explorer (Local files only)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="Ctrl+C" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Copy Snippet text or Command directly to clipboard" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="Alt+Enter" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Open &amp; edit item in Action Manager" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Group 3: Navigation & Management -->
+                                <Border Background="{DynamicResource BgInputBrush}" CornerRadius="6" Padding="14,10">
+                                    <StackPanel>
+                                        <TextBlock Text="NAVIGATION &amp; GENERAL" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,0,0,8"/>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="Ctrl+S" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Select Sort Mode (Smart, Alphabetical, Frequent, Recent, Tree)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="Ctrl+M" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Open Action Manager" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="Ctrl+," FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Open Application Settings" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="Tab / Shift+Tab" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Cycle through filter pills" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="Backspace" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Back out of current folder scope (when search is empty)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="Esc" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Back out of folder scope / Close Command Palette" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="? / F1" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Toggle this shortcuts &amp; help window" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+            </Grid>
         </Grid>
     </Border>
 </Window>

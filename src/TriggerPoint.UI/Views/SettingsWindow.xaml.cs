@@ -2069,6 +2069,39 @@ public partial class SettingsWindow : Window
         SetDirty(true);
     }
 
+    public void CreateAndEditNewItem(string initialName, ActionType actionType = ActionType.Shell)
+    {
+        if (!PromptSaveIfDirty()) return;
+        CommitCurrentFormChanges();
+
+        string name = string.IsNullOrWhiteSpace(initialName) ? "New App & Command" : initialName.Trim();
+
+        var newItem = new TriggerItem
+        {
+            Id = Guid.NewGuid(),
+            ParentId = null,
+            Name = name,
+            ActionType = actionType,
+            PresentationMode = PresentationMode.Direct,
+            OrderIndex = _items.Count
+        };
+
+        if (actionType == ActionType.Workflow)
+        {
+            newItem.Payload.WorkflowSteps = [];
+        }
+
+        _newUnsavedItemId = newItem.Id;
+        _items.Add(newItem);
+        RebuildTree();
+        SelectTreeItem(newItem);
+        _ = RestoreTreeFocus(newItem);
+        SetDirty(true);
+
+        ItemNameBox.Focus();
+        ItemNameBox.SelectAll();
+    }
+
     private void AddShellActionBtn_Click(object sender, RoutedEventArgs e)
     {
         CreateNewItem(ActionType.Shell, sender == ContextAddShellItem);
@@ -2148,6 +2181,9 @@ public partial class SettingsWindow : Window
 
     private void ItemsTreeView_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
+        _treeDragStartPoint = null;
+        _draggedTreeVm = null;
+
         DependencyObject? source = e.OriginalSource as DependencyObject;
         while (source != null && source is not TreeViewItem)
         {
@@ -2164,6 +2200,12 @@ public partial class SettingsWindow : Window
         {
             _rightClickedTreeVm = null;
         }
+    }
+
+    private void TreeContextMenu_Closed(object sender, RoutedEventArgs e)
+    {
+        _treeDragStartPoint = null;
+        _draggedTreeVm = null;
     }
 
     private List<TriggerItem> GetAllDescendants(Guid folderId)
@@ -2191,6 +2233,9 @@ public partial class SettingsWindow : Window
 
     private void TreeContextMenu_Opened(object sender, RoutedEventArgs e)
     {
+        _treeDragStartPoint = null;
+        _draggedTreeVm = null;
+
         if (_rightClickedTreeVm != null)
         {
             if (_rightClickedTreeVm.IsRecycleBinRoot)
@@ -3643,8 +3688,18 @@ public partial class SettingsWindow : Window
         base.OnPreviewMouseLeftButtonDown(e);
     }
 
+    protected override void OnPreviewMouseLeftButtonUp(MouseButtonEventArgs e)
+    {
+        _treeDragStartPoint = null;
+        _draggedTreeVm = null;
+        base.OnPreviewMouseLeftButtonUp(e);
+    }
+
     protected override void OnPreviewMouseRightButtonDown(MouseButtonEventArgs e)
     {
+        _treeDragStartPoint = null;
+        _draggedTreeVm = null;
+
         var currentlyEditing = FindCurrentlyEditingViewModel();
         if (currentlyEditing != null && !IsEventFromTextBox(e.OriginalSource))
         {
@@ -3666,9 +3721,31 @@ public partial class SettingsWindow : Window
         _draggedTreeVm = FindTreeItemViewModelUnderMouse(e.OriginalSource as DependencyObject);
     }
 
+    private void ItemsTreeView_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        _treeDragStartPoint = null;
+        _draggedTreeVm = null;
+    }
+
+    private void ItemsTreeView_MouseLeave(object sender, MouseEventArgs e)
+    {
+        if (TreeDragGhostPopup == null || !TreeDragGhostPopup.IsOpen)
+        {
+            _treeDragStartPoint = null;
+            _draggedTreeVm = null;
+        }
+    }
+
     private void ItemsTreeView_MouseMove(object sender, MouseEventArgs e)
     {
-        if (e.LeftButton == MouseButtonState.Pressed && _treeDragStartPoint.HasValue && _draggedTreeVm != null)
+        if (e.LeftButton != MouseButtonState.Pressed)
+        {
+            _treeDragStartPoint = null;
+            _draggedTreeVm = null;
+            return;
+        }
+
+        if (_treeDragStartPoint.HasValue && _draggedTreeVm != null)
         {
             if (_draggedTreeVm.IsRecycleBinRoot || _draggedTreeVm.IsRecycledItem || _draggedTreeVm.IsEditingName)
             {

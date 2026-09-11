@@ -121,16 +121,12 @@ public static class FuzzyMatcher
 
     public static IReadOnlyList<FuzzyMatchResult> FilterAndRank(
         IEnumerable<TriggerItem> items, 
-        string pattern)
+        string pattern,
+        CommandPaletteSortMode sortMode = CommandPaletteSortMode.Smart)
     {
         var results = new List<FuzzyMatchResult>();
         foreach (var item in items)
         {
-            if (item.ActionType == ActionType.Folder && !string.IsNullOrWhiteSpace(pattern))
-            {
-                // Can also include folders if desired, but primarily rank executable items
-            }
-
             var res = Match(item, pattern);
             if (res.IsMatch)
             {
@@ -138,9 +134,71 @@ public static class FuzzyMatcher
             }
         }
 
-        results.Sort((a, b) => b.Score.CompareTo(a.Score));
+        switch (sortMode)
+        {
+            case CommandPaletteSortMode.Alphabetical:
+                results.Sort((a, b) => string.Compare(a.Item.Name, b.Item.Name, StringComparison.OrdinalIgnoreCase));
+                break;
+
+            case CommandPaletteSortMode.MostFrequent:
+                results.Sort((a, b) =>
+                {
+                    int cmp = b.Item.UsageStats.LaunchCount.CompareTo(a.Item.UsageStats.LaunchCount);
+                    return cmp != 0 ? cmp : string.Compare(a.Item.Name, b.Item.Name, StringComparison.OrdinalIgnoreCase);
+                });
+                break;
+
+            case CommandPaletteSortMode.Recent:
+                results.Sort((a, b) =>
+                {
+                    var aTime = a.Item.UsageStats.LastExecutedUtc ?? DateTime.MinValue;
+                    var bTime = b.Item.UsageStats.LastExecutedUtc ?? DateTime.MinValue;
+                    int cmp = bTime.CompareTo(aTime);
+                    if (cmp != 0) return cmp;
+                    int countCmp = b.Item.UsageStats.LaunchCount.CompareTo(a.Item.UsageStats.LaunchCount);
+                    return countCmp != 0 ? countCmp : string.Compare(a.Item.Name, b.Item.Name, StringComparison.OrdinalIgnoreCase);
+                });
+                break;
+
+            case CommandPaletteSortMode.ActionTree:
+                // Preserves incoming Action Tree sequence
+                break;
+
+            case CommandPaletteSortMode.Smart:
+            default:
+                results.Sort((a, b) =>
+                {
+                    int cmp = b.Score.CompareTo(a.Score);
+                    return cmp != 0 ? cmp : string.Compare(a.Item.Name, b.Item.Name, StringComparison.OrdinalIgnoreCase);
+                });
+                break;
+        }
+
         return results;
     }
+
+    public static (IReadOnlyList<FuzzyMatchResult> Recent, IReadOnlyList<FuzzyMatchResult> Alphabetical) PartitionEmptySearch(
+        IEnumerable<TriggerItem> items,
+        int maxRecent = 5)
+    {
+        var allList = items.Select(x => Match(x, string.Empty)).ToList();
+
+        // Recent items: has executed or launched at least once
+        var recent = allList
+            .Where(x => x.Item.UsageStats.LaunchCount > 0 || x.Item.UsageStats.LastExecutedUtc.HasValue)
+            .OrderByDescending(x => x.Item.UsageStats.LastExecutedUtc ?? DateTime.MinValue)
+            .ThenByDescending(x => x.Item.UsageStats.LaunchCount)
+            .Take(maxRecent)
+            .ToList();
+
+        // Alphabetical: full catalog sorted A-Z
+        var alphabetical = allList
+            .OrderBy(x => x.Item.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return (recent, alphabetical);
+    }
+
 
     private static bool IsWordBoundary(ReadOnlySpan<char> span, int index)
     {

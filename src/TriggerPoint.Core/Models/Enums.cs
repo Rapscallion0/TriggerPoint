@@ -64,3 +64,21 @@ public enum HotkeyConflictType
     Internal = 1,
     External = 2
 }
+
+public enum CommandPaletteSortMode
+{
+    Smart = 0,
+    Alphabetical = 1,
+    MostFrequent = 2,
+    Recent = 3,
+    ActionTree = 4
+}
+
+public enum CommandPaletteFilterType
+{
+    All = 0,
+    App = 1,
+    Snippet = 2,
+    Workflow = 3,
+    Folder = 4
+}

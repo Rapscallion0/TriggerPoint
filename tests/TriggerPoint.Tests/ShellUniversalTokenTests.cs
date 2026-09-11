@@ -73,4 +73,60 @@ public class ShellUniversalTokenTests
         promptMock.Response = null;
         await executor.ExecuteAsync(item);
     }
+
+    [Fact]
+    public async Task ExecuteAsync_RevealInExplorer_NonExistentFile_FailsGracefullyWithoutExecuting()
+    {
+        var snippetMock = new MockSnippetService();
+        var telemetryMock = new MockTelemetryService();
+        var contextMock = new MockContextFilterService();
+
+        var executor = new ShellActionExecutor(snippetMock, telemetryMock, contextMock);
+
+        string? failureMessage = null;
+        executor.ExecutionFailed += (item, msg) => failureMessage = msg;
+
+        var item = new TriggerItem
+        {
+            Name = "Non-existent File Target",
+            ActionType = ActionType.Shell,
+            Payload = new ActionPayload
+            {
+                Command = @"C:\NonExistentFolder_12345\FakeApp.exe"
+            }
+        };
+
+        await executor.ExecuteAsync(item, ExecutionOverride.RevealInExplorer);
+
+        Assert.NotNull(failureMessage);
+        Assert.Contains("is not a local file or directory", failureMessage);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_RevealInExplorer_Url_FailsGracefully()
+    {
+        var snippetMock = new MockSnippetService();
+        var telemetryMock = new MockTelemetryService();
+        var contextMock = new MockContextFilterService();
+
+        var executor = new ShellActionExecutor(snippetMock, telemetryMock, contextMock);
+
+        string? failureMessage = null;
+        executor.ExecutionFailed += (item, msg) => failureMessage = msg;
+
+        var item = new TriggerItem
+        {
+            Name = "Google Website",
+            ActionType = ActionType.Shell,
+            Payload = new ActionPayload
+            {
+                Command = "https://www.google.com"
+            }
+        };
+
+        await executor.ExecuteAsync(item, ExecutionOverride.RevealInExplorer);
+
+        Assert.NotNull(failureMessage);
+        Assert.Contains("is not a local file or directory", failureMessage);
+    }
 }

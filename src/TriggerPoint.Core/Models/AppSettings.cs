@@ -55,6 +55,7 @@ public class AppSettings
     public double? WindowWidth { get; set; }
     public double? WindowHeight { get; set; }
     public bool WindowMaximized { get; set; }
+    public CommandPaletteSortMode CommandPaletteSortMode { get; set; } = CommandPaletteSortMode.Smart;
 
     public void Normalize()
     {

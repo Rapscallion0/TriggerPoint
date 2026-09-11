@@ -29,6 +29,7 @@ public partial class App : Application
     private IShortcutListener? _shortcutListener;
     private IActionExecutor? _executor;
     private IConfigRepository? _repository;
+    public IConfigRepository? Repository => _repository;
     private ILogManagerService? _logManagerService;
     private Serilog.Core.LoggingLevelSwitch _levelSwitch = new();
 
@@ -378,33 +379,57 @@ public partial class App : Application
 
     private void OpenCommandPalette(TriggerItem? triggerItem = null, IntPtr targetHwnd = default)
     {
-        if (_repository == null || _executor == null) return;
+        if (_repository == null || _executor == null)
+        {
+            Log.Warning("OpenCommandPalette aborted: repository or executor is not initialized.");
+            return;
+        }
 
         _ = Task.Run(async () =>
         {
-            var allItems = await _repository.LoadAsync();
-            Guid? scopeId = null;
-            string? scopeName = null;
-
-            if (triggerItem != null && triggerItem.ActionType == ActionType.Folder)
+            try
             {
-                scopeId = triggerItem.Id;
-                scopeName = triggerItem.Name;
-            }
+                var allItems = await _repository.LoadAsync();
+                Guid? scopeId = null;
+                string? scopeName = null;
 
-            await Dispatcher.InvokeAsync(() =>
-            {
-                var palette = new CommandPaletteView(allItems, _executor, scopeId, scopeName, targetHwnd);
-                palette.Show();
-                palette.Activate();
-                try
+                if (triggerItem != null && triggerItem.ActionType == ActionType.Folder)
                 {
-                    var handle = new System.Windows.Interop.WindowInteropHelper(palette).Handle;
-                    NativeMethods.SetForegroundWindow(handle);
+                    scopeId = triggerItem.Id;
+                    scopeName = triggerItem.Name;
                 }
-                catch { }
-            });
+
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    try
+                    {
+                        var palette = new CommandPaletteView(allItems, _executor, _repository, scopeId, scopeName, targetHwnd);
+                        palette.Show();
+                        palette.Activate();
+                        try
+                        {
+                            var handle = new System.Windows.Interop.WindowInteropHelper(palette).Handle;
+                            NativeMethods.SetForegroundWindow(handle);
+                        }
+                        catch { }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error(ex, "Failed to instantiate or show CommandPaletteView on Dispatcher.");
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to prepare Command Palette items in background task.");
+            }
         });
+    }
+
+    public void ShowSettingsWindowAndCreate(string initialName)
+    {
+        ShowSettingsWindow();
+        _settingsWindow?.CreateAndEditNewItem(initialName);
     }
 
     public void ShowSettingsWindow(TriggerItem? focusedItem = null)

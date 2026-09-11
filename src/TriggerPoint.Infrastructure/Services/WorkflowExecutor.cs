@@ -94,6 +94,12 @@ public class WorkflowExecutor : IWorkflowExecutor
     {
         _ = _telemetryService.RecordExecutionAsync(item.Id);
 
+        if (executionOverride == ExecutionOverride.RevealInExplorer)
+        {
+            WorkflowFailed?.Invoke(item, "Cannot reveal: Workflows do not have a local file target.");
+            return;
+        }
+
         var isElevated = executionOverride == ExecutionOverride.RunAsAdmin || item.Payload.RunAsAdmin;
         var effectiveHwnd = targetHwnd ?? IntPtr.Zero;
         if (effectiveHwnd == IntPtr.Zero)

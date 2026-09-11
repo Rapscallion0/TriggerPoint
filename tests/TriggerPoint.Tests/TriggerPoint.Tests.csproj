@@ -17,6 +17,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\TriggerPoint.Core\TriggerPoint.Core.csproj" />
     <ProjectReference Include="..\..\src\TriggerPoint.Infrastructure\TriggerPoint.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\TriggerPoint.UI\TriggerPoint.UI.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -483,5 +483,42 @@ public class WorkflowExecutorTests
         Assert.Equal(TokenType.PromptDatePicker, dateToken.Type);
         Assert.Equal("yyyy-MM-dd", dateToken.DateFormat);
     }
+
+    [Fact]
+    public async Task ExecuteWorkflow_RevealInExplorer_FailsGracefullyWithoutExecutingSteps()
+    {
+        var promptMock = new MockPromptService();
+        var confirmMock = new MockConfirmationService();
+        var toastMock = new MockToastService();
+        var snippetMock = new MockSnippetService();
+        var telemetryMock = new MockTelemetryService();
+        var contextMock = new MockContextFilterService();
+
+        var scriptEngine = new JintScriptEngineService(promptMock, confirmMock, toastMock, snippetMock);
+        var executor = new WorkflowExecutor(scriptEngine, promptMock, confirmMock, toastMock, snippetMock, telemetryMock, contextMock);
+
+        string? failureMsg = null;
+        executor.WorkflowFailed += (item, msg) => failureMsg = msg;
+
+        var item = new TriggerItem
+        {
+            Id = Guid.NewGuid(),
+            Name = "Multi Step Workflow",
+            ActionType = ActionType.Workflow,
+            Payload = new ActionPayload
+            {
+                WorkflowSteps =
+                [
+                    new WorkflowStep { StepType = WorkflowStepType.Delay, DelayMs = 500 }
+                ]
+            }
+        };
+
+        await executor.ExecuteWorkflowAsync(item, ExecutionOverride.RevealInExplorer);
+
+        Assert.NotNull(failureMsg);
+        Assert.Contains("do not have a local file", failureMsg);
+    }
 }
+
 
