@@ -27,6 +27,13 @@ public enum ImportChoice
     Merge
 }
 
+public enum ConvertJsChoice
+{
+    Cancel,
+    Recompile,
+    KeepScript
+}
+
 public enum SavePromptChoice
 {
     Cancel,
@@ -39,6 +46,7 @@ public partial class ModernMessageDialog : Window
     public bool UserConfirmed { get; private set; }
     public FolderDeleteChoice FolderChoice { get; private set; } = FolderDeleteChoice.Cancel;
     public ImportChoice ImportUserChoice { get; private set; } = ImportChoice.Cancel;
+    public ConvertJsChoice ConvertJsUserChoice { get; private set; } = ConvertJsChoice.Cancel;
     public SavePromptChoice SaveChoice { get; private set; } = SavePromptChoice.Cancel;
 
     public ModernMessageDialog(
@@ -165,6 +173,24 @@ public partial class ModernMessageDialog : Window
         return dlg.ImportUserChoice;
     }
 
+    public static ConvertJsChoice ShowConvertJsDialog(Window? owner)
+    {
+        var dlg = new ModernMessageDialog(
+            "Convert to JavaScript",
+            "You already have a JavaScript script from a previous conversion.\n\nWhat would you like to do?",
+            primaryButtonText: "⚡ Re-compile from Steps",
+            secondaryButtonText: "Cancel",
+            dialogType: ModernDialogType.Question,
+            isDestructive: true)
+        {
+            Owner = owner
+        };
+        dlg.AlternateBtn.Content = "← Keep My Script";
+        dlg.AlternateBtn.Visibility = Visibility.Visible;
+        dlg.ShowDialog();
+        return dlg.ConvertJsUserChoice;
+    }
+
     public static void ShowAlert(
         Window? owner, 
         string title, 
@@ -219,6 +245,7 @@ public partial class ModernMessageDialog : Window
     {
         FolderChoice = FolderDeleteChoice.DeleteAll;
         ImportUserChoice = ImportChoice.Replace;
+        ConvertJsUserChoice = ConvertJsChoice.Recompile;
         SaveChoice = SavePromptChoice.Save;
         UserConfirmed = true;
         SafeClose(true);
@@ -228,6 +255,7 @@ public partial class ModernMessageDialog : Window
     {
         FolderChoice = FolderDeleteChoice.MoveToRoot;
         ImportUserChoice = ImportChoice.Merge;
+        ConvertJsUserChoice = ConvertJsChoice.KeepScript;
         SaveChoice = SavePromptChoice.Discard;
         UserConfirmed = true;
         SafeClose(true);
@@ -237,6 +265,7 @@ public partial class ModernMessageDialog : Window
     {
         FolderChoice = FolderDeleteChoice.Cancel;
         ImportUserChoice = ImportChoice.Cancel;
+        ConvertJsUserChoice = ConvertJsChoice.Cancel;
         SaveChoice = SavePromptChoice.Cancel;
         UserConfirmed = false;
         SafeClose(false);
@@ -262,6 +291,10 @@ public partial class ModernMessageDialog : Window
             if (ImportUserChoice == ImportChoice.Cancel)
             {
                 ImportUserChoice = ImportChoice.Replace;
+            }
+            if (ConvertJsUserChoice == ConvertJsChoice.Cancel)
+            {
+                ConvertJsUserChoice = ConvertJsChoice.Recompile;
             }
             if (SaveChoice == SavePromptChoice.Cancel)
             {

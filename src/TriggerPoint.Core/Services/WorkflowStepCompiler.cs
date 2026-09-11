@@ -78,6 +78,57 @@ public static class WorkflowStepCompiler
         return sb.ToString().TrimEnd();
     }
 
+    /// <summary>
+    /// Compiles a single workflow step to its JavaScript equivalent without any
+    /// file-level header comments. Suitable for use as an inline script body.
+    /// </summary>
+    public static string CompileSingleStep(WorkflowStep step)
+    {
+        if (step == null) return string.Empty;
+
+        var sb = new StringBuilder();
+        var definedVariables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        switch (step.StepType)
+        {
+            case WorkflowStepType.Prompt:
+                CompilePromptStep(step, sb, definedVariables);
+                break;
+
+            case WorkflowStepType.OpenUrl:
+                CompileOpenUrlStep(step, sb);
+                break;
+
+            case WorkflowStepType.EnsureDirectory:
+                CompileEnsureDirectoryStep(step, sb);
+                break;
+
+            case WorkflowStepType.LaunchApp:
+                CompileLaunchAppStep(step, sb);
+                break;
+
+            case WorkflowStepType.InjectSnippet:
+                CompileInjectSnippetStep(step, sb);
+                break;
+
+            case WorkflowStepType.Delay:
+                sb.AppendLine($"await tp.delay({Math.Max(10, step.DelayMs)});");
+                break;
+
+            case WorkflowStepType.RunScript:
+                // Already a script — return its content as-is
+                if (!string.IsNullOrWhiteSpace(step.InlineScript))
+                    sb.AppendLine(step.InlineScript.Trim());
+                break;
+
+            case WorkflowStepType.ExecuteAction:
+                CompileExecuteActionStep(step, sb);
+                break;
+        }
+
+        return sb.ToString().TrimEnd();
+    }
+
     private static void CompileExecuteActionStep(WorkflowStep step, StringBuilder sb)
     {
         if (step.TargetItemId.HasValue)

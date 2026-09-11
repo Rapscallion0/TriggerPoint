@@ -214,4 +214,139 @@ public class WorkflowStepCompilerTests
         Assert.Equal(original.TargetDisplay, clone.TargetDisplay);
         Assert.Equal(original.OpenInNewWindow, clone.OpenInNewWindow);
     }
+
+    [Fact]
+    public void CompileSingleStep_NullStep_ReturnsEmptyString()
+    {
+        var js = WorkflowStepCompiler.CompileSingleStep(null!);
+        Assert.Equal(string.Empty, js);
+    }
+
+    [Fact]
+    public void CompileSingleStep_Prompt_GeneratesPromptWithoutHeader()
+    {
+        var step = new WorkflowStep
+        {
+            StepType = WorkflowStepType.Prompt,
+            Name = "Ask Name",
+            VariableName = "userName",
+            PromptLabel = "Your Name",
+            PromptDefaultValue = "Alice"
+        };
+
+        var js = WorkflowStepCompiler.CompileSingleStep(step);
+
+        Assert.DoesNotContain("// TriggerPoint Workflow Script", js);
+        Assert.Contains("const userName = await tp.prompt(\"Your Name\", { default: \"Alice\" });", js);
+        Assert.Contains("tp.vars.userName = userName;", js);
+    }
+
+    [Fact]
+    public void CompileSingleStep_OpenUrl_GeneratesUrlCall()
+    {
+        var step = new WorkflowStep
+        {
+            StepType = WorkflowStepType.OpenUrl,
+            Url = "https://example.com/test"
+        };
+
+        var js = WorkflowStepCompiler.CompileSingleStep(step);
+
+        Assert.DoesNotContain("// TriggerPoint Workflow Script", js);
+        Assert.Equal("tp.openUrl(`https://example.com/test`);", js);
+    }
+
+    [Fact]
+    public void CompileSingleStep_EnsureDirectory_GeneratesDirectoryCheck()
+    {
+        var step = new WorkflowStep
+        {
+            StepType = WorkflowStepType.EnsureDirectory,
+            DirectoryPath = @"C:\Projects",
+            DirectoryMissingPolicy = DirectoryMissingPolicy.CreateSilently
+        };
+
+        var js = WorkflowStepCompiler.CompileSingleStep(step);
+
+        Assert.DoesNotContain("// TriggerPoint Workflow Script", js);
+        Assert.Contains("tp.fs.createDirectory(", js);
+    }
+
+    [Fact]
+    public void CompileSingleStep_LaunchApp_GeneratesLaunch()
+    {
+        var step = new WorkflowStep
+        {
+            StepType = WorkflowStepType.LaunchApp,
+            Command = "notepad.exe",
+            Arguments = "notes.txt",
+            TargetDisplay = "cursor"
+        };
+
+        var js = WorkflowStepCompiler.CompileSingleStep(step);
+
+        Assert.DoesNotContain("// TriggerPoint Workflow Script", js);
+        Assert.Equal("tp.launch(`notepad.exe`, `notes.txt`, ``, false, \"cursor\");", js);
+    }
+
+    [Fact]
+    public void CompileSingleStep_InjectSnippet_GeneratesInjectSnippet()
+    {
+        var step = new WorkflowStep
+        {
+            StepType = WorkflowStepType.InjectSnippet,
+            SnippetTemplate = "Hello {name}!"
+        };
+
+        var js = WorkflowStepCompiler.CompileSingleStep(step);
+
+        Assert.DoesNotContain("// TriggerPoint Workflow Script", js);
+        Assert.Equal("await tp.injectSnippet(`Hello ${tp.vars.name ?? '{name}'}!`);", js);
+    }
+
+    [Fact]
+    public void CompileSingleStep_Delay_GeneratesDelay()
+    {
+        var step = new WorkflowStep
+        {
+            StepType = WorkflowStepType.Delay,
+            DelayMs = 250
+        };
+
+        var js = WorkflowStepCompiler.CompileSingleStep(step);
+
+        Assert.DoesNotContain("// TriggerPoint Workflow Script", js);
+        Assert.Equal("await tp.delay(250);", js);
+    }
+
+    [Fact]
+    public void CompileSingleStep_RunScript_ReturnsExistingInlineScript()
+    {
+        var step = new WorkflowStep
+        {
+            StepType = WorkflowStepType.RunScript,
+            InlineScript = "  await tp.delay(100);  "
+        };
+
+        var js = WorkflowStepCompiler.CompileSingleStep(step);
+
+        Assert.DoesNotContain("// TriggerPoint Workflow Script", js);
+        Assert.Equal("await tp.delay(100);", js);
+    }
+
+    [Fact]
+    public void CompileSingleStep_ExecuteAction_GeneratesExecuteAction()
+    {
+        var targetId = Guid.NewGuid();
+        var step = new WorkflowStep
+        {
+            StepType = WorkflowStepType.ExecuteAction,
+            TargetItemId = targetId
+        };
+
+        var js = WorkflowStepCompiler.CompileSingleStep(step);
+
+        Assert.DoesNotContain("// TriggerPoint Workflow Script", js);
+        Assert.Equal($"await tp.executeAction(\"{targetId}\");", js);
+    }
 }

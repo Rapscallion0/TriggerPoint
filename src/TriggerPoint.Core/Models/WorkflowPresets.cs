@@ -190,7 +190,7 @@ public static class WorkflowPresets
                     {
                         StepType = WorkflowStepType.EnsureDirectory,
                         Name = "Ensure Ticket Folder",
-                        DirectoryPath = @"d:\Tickets\{ticket}",
+                        DirectoryPath = @"C:\Tickets\{ticket}",
                         DirectoryMissingPolicy = DirectoryMissingPolicy.PromptToCreate,
                         OpenInExplorer = false,
                         OnError = StepErrorPolicy.StopWorkflow
@@ -200,7 +200,7 @@ public static class WorkflowPresets
                         StepType = WorkflowStepType.LaunchApp,
                         Name = "Open in Sublime / Editor",
                         Command = "subl.exe",
-                        Arguments = @"d:\Tickets\{ticket}",
+                        Arguments = @"C:\Tickets\{ticket}",
                         OnError = StepErrorPolicy.Continue
                     }
                 ]),

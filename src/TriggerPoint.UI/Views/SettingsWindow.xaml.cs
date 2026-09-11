@@ -1201,10 +1201,6 @@ public partial class SettingsWindow : Window
             SnippetTemplateBox.Text = item.Payload.SnippetTemplate;
 
             // Workflow payload
-            if (WorkflowModeCombo != null)
-            {
-                WorkflowModeCombo.SelectedIndex = item.Payload.WorkflowMode == WorkflowMode.Script ? 1 : 0;
-            }
             if (WorkflowVisualContainer != null && WorkflowScriptContainer != null)
             {
                 bool isScript = item.Payload.WorkflowMode == WorkflowMode.Script;
@@ -1216,6 +1212,7 @@ public partial class SettingsWindow : Window
                 WorkflowScriptEditor.Text = item.Payload.ScriptSource ?? string.Empty;
             }
             RebuildWorkflowStepCards();
+            UpdateReturnToVisualBtnVisibility();
 
             // Context filter
             AllowedProcessesTagInput.SetTags(item.ContextFilter.AllowedProcesses);
@@ -1427,14 +1424,12 @@ public partial class SettingsWindow : Window
 
         _selectedItem.Payload.SnippetTemplate = SnippetTemplateBox.Text;
 
-        if (WorkflowModeCombo != null && WorkflowModeCombo.SelectedIndex == 1)
-        {
-            _selectedItem.Payload.WorkflowMode = WorkflowMode.Script;
-        }
-        else
-        {
-            _selectedItem.Payload.WorkflowMode = WorkflowMode.Visual;
-        }
+        // WorkflowMode is updated directly by ConvertToJsBtn_Click and ReturnToVisualBtn_Click;
+        // read the current container state as the source of truth.
+        _selectedItem.Payload.WorkflowMode =
+            WorkflowScriptContainer?.Visibility == Visibility.Visible
+                ? WorkflowMode.Script
+                : WorkflowMode.Visual;
         if (WorkflowScriptEditor != null)
         {
             _selectedItem.Payload.ScriptSource = WorkflowScriptEditor.Text;

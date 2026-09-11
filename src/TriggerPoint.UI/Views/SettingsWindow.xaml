@@ -1033,6 +1033,7 @@
                                      Height="110" 
                                      AcceptsReturn="True" 
                                      TextWrapping="Wrap" 
+                                     VerticalContentAlignment="Top"
                                      VerticalScrollBarVisibility="Auto" 
                                      ToolTip="Enter the text template to expand. Click token chips above to insert dynamic tokens"
                                      SelectionChanged="SnippetTemplateBox_SelectionChanged"/>
@@ -1191,26 +1192,14 @@
                                            VerticalAlignment="Center" 
                                            Margin="0,6,12,0"/>
 
-                                <StackPanel Grid.Row="1" Grid.Column="1" 
-                                            Orientation="Horizontal" 
-                                            VerticalAlignment="Center" 
+                                <!-- Presets Button -->
+                                <StackPanel Grid.Row="1" Grid.Column="1"
+                                            Orientation="Horizontal"
+                                            VerticalAlignment="Center"
                                             Margin="0,6,0,0">
-                                    <ComboBox x:Name="WorkflowModeCombo"
-                                              Height="28"
-                                              FontSize="12"
-                                              Width="175"
-                                              Margin="0,0,8,0"
-                                              VerticalAlignment="Center"
-                                              SelectionChanged="WorkflowModeCombo_SelectionChanged"
-                                              ToolTip="Switch between Visual Step Builder and Advanced JavaScript mode">
-                                        <ComboBoxItem Content="🧱 Visual Step Builder"/>
-                                        <ComboBoxItem Content="⚡ JavaScript (Advanced)"/>
-                                    </ComboBox>
-
-                                    <!-- Presets Button -->
-                                    <Button x:Name="WorkflowPresetsBtn" 
-                                            Content="🎁 Presets ▾" 
-                                            Style="{StaticResource SecondaryButtonStyle}" 
+                                    <Button x:Name="WorkflowPresetsBtn"
+                                            Content="🎁 Presets ▾"
+                                            Style="{StaticResource SecondaryButtonStyle}"
                                             Click="WorkflowPresetsBtn_Click">
                                         <Button.ContextMenu>
                                             <ContextMenu x:Name="WorkflowPresetsMenu"/>
@@ -1295,10 +1284,12 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="JavaScript Script Editor (Powered by Jint)" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center"/>
-                                    <Button Grid.Column="1" x:Name="MaximizeScriptEditorBtn" Content="⛶ Maximize" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="8,4" Margin="0,0,6,0" ToolTip="Toggle expanded full-view code editor" Click="MaximizeScriptEditorBtn_Click"/>
-                                    <Button Grid.Column="2" x:Name="ToggleApiDrawerBtn" Content="📖 API &amp; Snippet Reference ▾" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="8,4" Click="ToggleApiDrawerBtn_Click"/>
+                                    <Button Grid.Column="1" x:Name="ReturnToVisualBtn" Content="← Visual Steps" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="8,4" Margin="0,0,6,0" ToolTip="Return to the Visual Step Builder (your script is preserved)" Click="ReturnToVisualBtn_Click"/>
+                                    <Button Grid.Column="2" x:Name="MaximizeScriptEditorBtn" Content="⛶ Maximize" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="8,4" Margin="0,0,6,0" ToolTip="Toggle expanded full-view code editor" Click="MaximizeScriptEditorBtn_Click"/>
+                                    <Button Grid.Column="3" x:Name="ToggleApiDrawerBtn" Content="📖 API &amp; Snippet Reference ▾" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="8,4" Click="ToggleApiDrawerBtn_Click"/>
                                 </Grid>
 
                                 <!-- API Reference Drawer (Collapsible) -->

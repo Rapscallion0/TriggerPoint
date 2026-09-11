@@ -12,6 +12,8 @@ using Microsoft.Win32;
 using TriggerPoint.Core.Models;
 using TriggerPoint.Core.Services;
 using TriggerPoint.UI.Theme;
+using ICSharpCode.AvalonEdit;
+using ICSharpCode.AvalonEdit.Highlighting;
 
 namespace TriggerPoint.UI.Views;
 
@@ -19,20 +21,67 @@ public partial class SettingsWindow
 {
     private Guid? _activeWorkflowStepId;
 
-    private void WorkflowModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void SwitchToVisualMode()
     {
         if (WorkflowVisualContainer == null || WorkflowScriptContainer == null) return;
-
-        bool isScript = WorkflowModeCombo?.SelectedIndex == 1;
-        WorkflowVisualContainer.Visibility = isScript ? Visibility.Collapsed : Visibility.Visible;
-        WorkflowScriptContainer.Visibility = isScript ? Visibility.Visible : Visibility.Collapsed;
-
-        if (!_isUpdatingForm && _selectedItem != null)
+        WorkflowVisualContainer.Visibility = Visibility.Visible;
+        WorkflowScriptContainer.Visibility = Visibility.Collapsed;
+        if (_selectedItem != null)
         {
-            _selectedItem.Payload.WorkflowMode = isScript ? WorkflowMode.Script : WorkflowMode.Visual;
+            _selectedItem.Payload.WorkflowMode = WorkflowMode.Visual;
             UpdateWorkflowPresetsVisibility();
-            OnFormEdited();
         }
+    }
+
+    private void SwitchToScriptMode()
+    {
+        if (WorkflowVisualContainer == null || WorkflowScriptContainer == null) return;
+        WorkflowVisualContainer.Visibility = Visibility.Collapsed;
+        WorkflowScriptContainer.Visibility = Visibility.Visible;
+        if (_selectedItem != null)
+        {
+            _selectedItem.Payload.WorkflowMode = WorkflowMode.Script;
+            UpdateWorkflowPresetsVisibility();
+        }
+    }
+
+    private void ReturnToVisualBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedItem == null) return;
+
+        // Guard: nothing to return to if no visual steps exist
+        if (_selectedItem.Payload.WorkflowSteps == null || _selectedItem.Payload.WorkflowSteps.Count == 0)
+        {
+            ModernMessageDialog.ShowAlert(this,
+                "No Visual Steps",
+                "There are no visual steps to return to. Add steps in Visual mode first, or start a fresh workflow.",
+                ModernDialogType.Info);
+            return;
+        }
+
+        // Warn if the script exists (may be out of sync with visual steps)
+        if (!string.IsNullOrWhiteSpace(_selectedItem.Payload.ScriptSource))
+        {
+            bool confirmed = ModernMessageDialog.ShowConfirm(this,
+                "Return to Visual Steps",
+                "Your JavaScript script will be preserved but will no longer execute — only the visual steps will run.\n\nIf you've modified the script since the last conversion, those edits won't be reflected in the visual steps.\n\nContinue?",
+                "← Return to Visual Steps",
+                "Stay in Script Mode");
+            if (!confirmed) return;
+        }
+
+        SwitchToVisualMode();
+        OnFormEdited();
+
+        // Update ReturnToVisualBtn visibility based on step count
+        UpdateReturnToVisualBtnVisibility();
+    }
+
+    private void UpdateReturnToVisualBtnVisibility()
+    {
+        if (ReturnToVisualBtn == null) return;
+        bool hasSteps = _selectedItem?.Payload.WorkflowSteps?.Count > 0;
+        ReturnToVisualBtn.Visibility = hasSteps ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void WorkflowScriptEditor_TextChanged(object? sender, EventArgs e)
@@ -574,24 +623,8 @@ public partial class SettingsWindow
         Grid.SetColumn(leftHeader, 0);
         headerGrid.Children.Add(leftHeader);
 
-        // Right Header: Reorder & Action buttons
+        // Right Header: ▲/▼ reorder + ⋮ kebab menu
         var rightHeader = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-
-        // Test Step Button
-        var testStepBtn = new Button
-        {
-            Content = "▶ Test",
-            FontSize = 11,
-            Padding = new Thickness(8, 2, 8, 2),
-            Margin = new Thickness(0, 0, 4, 0),
-            Style = Application.Current.TryFindResource("SecondaryButtonStyle") as Style,
-            ToolTip = "Test this step individually"
-        };
-        testStepBtn.Click += async (s, e) =>
-        {
-            await TestSingleWorkflowStepAsync(step, stepIndex);
-        };
-        rightHeader.Children.Add(testStepBtn);
 
         // Move Up
         var upBtn = new Button
@@ -599,7 +632,7 @@ public partial class SettingsWindow
             Content = "▲",
             FontSize = 10,
             Padding = new Thickness(6, 2, 6, 2),
-            Margin = new Thickness(0, 0, 4, 0),
+            Margin = new Thickness(0, 0, 3, 0),
             IsEnabled = !isFirst,
             Style = Application.Current.TryFindResource("SecondaryButtonStyle") as Style,
             ToolTip = "Move step up"
@@ -613,7 +646,7 @@ public partial class SettingsWindow
             Content = "▼",
             FontSize = 10,
             Padding = new Thickness(6, 2, 6, 2),
-            Margin = new Thickness(0, 0, 4, 0),
+            Margin = new Thickness(0, 0, 6, 0),
             IsEnabled = !isLast,
             Style = Application.Current.TryFindResource("SecondaryButtonStyle") as Style,
             ToolTip = "Move step down"
@@ -621,47 +654,51 @@ public partial class SettingsWindow
         downBtn.Click += (s, e) => MoveStep(step, 1);
         rightHeader.Children.Add(downBtn);
 
-        // Duplicate Step
-        var dupBtn = new Button
-        {
-            Content = "⧉",
-            FontSize = 11,
-            Padding = new Thickness(6, 2, 6, 2),
-            Margin = new Thickness(0, 0, 4, 0),
-            Style = Application.Current.TryFindResource("SecondaryButtonStyle") as Style,
-            ToolTip = "Duplicate step"
-        };
-        dupBtn.Click += (s, e) => DuplicateStep(step);
-        rightHeader.Children.Add(dupBtn);
+        // ⋮ Kebab overflow menu
+        var kebabMenu = new ContextMenu();
 
-        // Delete Step
-        var delBtn = new Button
-        {
-            Content = "🗑",
-            FontSize = 11,
-            Padding = new Thickness(6, 2, 6, 2),
-            Margin = new Thickness(0, 0, 6, 0),
-            Style = Application.Current.TryFindResource("SecondaryButtonStyle") as Style,
-            ToolTip = "Delete step"
-        };
-        delBtn.Click += (s, e) => DeleteStep(step);
-        rightHeader.Children.Add(delBtn);
+        var testItem = new MenuItem { Header = "▶  Test Step", FontSize = 12 };
+        testItem.Click += async (s, e) => await TestSingleWorkflowStepAsync(step, stepIndex);
+        kebabMenu.Items.Add(testItem);
 
-        // Expand / Collapse Toggle
-        var toggleBtn = new Button
+        var dupItem = new MenuItem { Header = "⧉  Duplicate", FontSize = 12 };
+        dupItem.Click += (s, e) => DuplicateStep(step);
+        kebabMenu.Items.Add(dupItem);
+
+        // Convert to Inline Script — hidden for RunScript steps (already a script)
+        if (step.StepType != WorkflowStepType.RunScript)
         {
-            Content = step.IsCollapsed ? "▼ Edit" : "▲ Done",
-            FontSize = 11,
-            Padding = new Thickness(8, 2, 8, 2),
+            var convertItem = new MenuItem { Header = "📜  Convert to Inline Script", FontSize = 12 };
+            convertItem.Click += (s, e) => ConvertStepToScript(step);
+            kebabMenu.Items.Add(convertItem);
+        }
+
+        kebabMenu.Items.Add(new Separator());
+
+        var deleteItem = new MenuItem
+        {
+            Header = "🗑  Delete",
+            FontSize = 12,
+            Foreground = Application.Current.TryFindResource("ErrorBrush") as Brush ?? Brushes.Red
+        };
+        deleteItem.Click += (s, e) => DeleteStep(step);
+        kebabMenu.Items.Add(deleteItem);
+
+        var kebabBtn = new Button
+        {
+            Content = "⋮",
+            FontSize = 14,
+            Padding = new Thickness(7, 1, 7, 1),
             Style = Application.Current.TryFindResource("SecondaryButtonStyle") as Style,
-            ToolTip = step.IsCollapsed ? "Expand step to edit" : "Collapse step"
+            ToolTip = "Step actions",
+            ContextMenu = kebabMenu
         };
-        toggleBtn.Click += (s, e) =>
+        kebabBtn.Click += (s, e) =>
         {
-            step.IsCollapsed = !step.IsCollapsed;
-            RebuildWorkflowStepCards();
+            kebabMenu.PlacementTarget = kebabBtn;
+            kebabMenu.IsOpen = true;
         };
-        rightHeader.Children.Add(toggleBtn);
+        rightHeader.Children.Add(kebabBtn);
 
         Grid.SetColumn(rightHeader, 1);
         headerGrid.Children.Add(rightHeader);
@@ -1611,6 +1648,7 @@ public partial class SettingsWindow
                     Padding = new Thickness(8, 4, 8, 4),
                     TextWrapping = TextWrapping.Wrap,
                     AcceptsReturn = true,
+                    VerticalContentAlignment = VerticalAlignment.Top,
                     Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style
                 };
                 snipBox.TextChanged += (s, e) =>
@@ -1659,24 +1697,41 @@ public partial class SettingsWindow
                 var scriptStack = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
                 scriptStack.Children.Add(new TextBlock { Text = "Inline JavaScript Code", FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 3) });
 
-                var scriptBox = new TextBox
+                var editorHost = new Border
                 {
-                    Text = step.InlineScript,
-                    Height = 100,
-                    Padding = new Thickness(8, 4, 8, 4),
-                    TextWrapping = TextWrapping.Wrap,
-                    AcceptsReturn = true,
-                    AcceptsTab = true,
-                    FontFamily = Application.Current.TryFindResource("CodeFont") as FontFamily,
-                    Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(6),
+                    Padding = new Thickness(4)
                 };
-                scriptBox.TextChanged += (s, e) =>
+                editorHost.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
+                editorHost.SetResourceReference(Border.BackgroundProperty, "BgInputBrush");
+
+                var scriptEditor = new TextEditor
                 {
-                    step.InlineScript = scriptBox.Text;
+                    SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("JavaScript"),
+                    ShowLineNumbers = true,
+                    FontSize = 12.5,
+                    Height = 140,
+                    Background = Brushes.Transparent,
+                    HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                    VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+                };
+                if (Application.Current.TryFindResource("CodeFont") is FontFamily codeFont)
+                {
+                    scriptEditor.FontFamily = codeFont;
+                }
+                scriptEditor.SetResourceReference(TextEditor.ForegroundProperty, "TextPrimaryBrush");
+                scriptEditor.Text = step.InlineScript ?? string.Empty;
+
+                scriptEditor.TextChanged += (s, e) =>
+                {
+                    step.InlineScript = scriptEditor.Text;
                     summaryText.Text = GetStepLiveSummary(step);
                     OnFormEdited();
                 };
-                scriptStack.Children.Add(scriptBox);
+
+                editorHost.Child = scriptEditor;
+                scriptStack.Children.Add(editorHost);
                 container.Children.Add(scriptStack);
                 break;
             }
@@ -1969,6 +2024,27 @@ public partial class SettingsWindow
         if (_selectedItem?.Payload.WorkflowSteps == null) return;
         _selectedItem.Payload.WorkflowSteps.Remove(step);
         RebuildWorkflowStepCards();
+        UpdateReturnToVisualBtnVisibility();
+        OnFormEdited();
+    }
+
+    private void ConvertStepToScript(WorkflowStep step)
+    {
+        if (_selectedItem == null) return;
+
+        bool confirmed = ModernMessageDialog.ShowConfirm(this,
+            "Convert Step to Script",
+            $"This step \"{step.Name}\" will be converted into an Inline Script.\n\nOnce saved, this conversion cannot be automatically reversed back into visual fields.\n\nDo you wish to proceed?",
+            "📜 Convert to Script",
+            "Cancel");
+        if (!confirmed) return;
+
+        var js = WorkflowStepCompiler.CompileSingleStep(step);
+
+        step.StepType = WorkflowStepType.RunScript;
+        step.InlineScript = js;
+
+        RebuildWorkflowStepCards(step.Id);
         OnFormEdited();
     }
 
@@ -2002,6 +2078,7 @@ public partial class SettingsWindow
         var newStep = CreateDefaultStep(stepType);
         _selectedItem.Payload.WorkflowSteps.Add(newStep);
         RebuildWorkflowStepCards(newStep.Id);
+        UpdateReturnToVisualBtnVisibility();
         OnFormEdited();
     }
 
@@ -2047,25 +2124,50 @@ public partial class SettingsWindow
     {
         if (_selectedItem?.Payload.WorkflowSteps == null || _selectedItem.Payload.WorkflowSteps.Count == 0)
         {
-            MessageBox.Show("There are no visual steps to convert. Add steps first.", "Convert to JavaScript", MessageBoxButton.OK, MessageBoxImage.Information);
+            ModernMessageDialog.ShowAlert(this,
+                "Convert to JavaScript",
+                "There are no visual steps to convert. Add steps first.",
+                ModernDialogType.Info);
             return;
         }
 
-        if (!string.IsNullOrWhiteSpace(WorkflowScriptEditor.Text))
+        if (!string.IsNullOrWhiteSpace(_selectedItem.Payload.ScriptSource))
         {
-            var res = MessageBox.Show(
-                "Existing script content in the JavaScript editor will be replaced by the generated script.\nDo you wish to proceed?",
-                "Replace Script Confirmation",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question);
+            // Existing script — show 3-option dialog
+            var choice = ModernMessageDialog.ShowConvertJsDialog(this);
+            switch (choice)
+            {
+                case ConvertJsChoice.Recompile:
+                    // Replace the script with freshly compiled output
+                    var js = WorkflowStepCompiler.CompileToJavaScript(_selectedItem.Payload.WorkflowSteps);
+                    if (WorkflowScriptEditor != null) WorkflowScriptEditor.Text = js;
+                    _selectedItem.Payload.ScriptSource = js;
+                    SwitchToScriptMode();
+                    OnFormEdited();
+                    break;
 
-            if (res != MessageBoxResult.Yes) return;
+                case ConvertJsChoice.KeepScript:
+                    // Just switch to script view — no recompilation
+                    SwitchToScriptMode();
+                    OnFormEdited();
+                    break;
+
+                case ConvertJsChoice.Cancel:
+                default:
+                    return;
+            }
+        }
+        else
+        {
+            // No existing script — compile immediately, no dialog needed
+            var js = WorkflowStepCompiler.CompileToJavaScript(_selectedItem.Payload.WorkflowSteps);
+            if (WorkflowScriptEditor != null) WorkflowScriptEditor.Text = js;
+            _selectedItem.Payload.ScriptSource = js;
+            SwitchToScriptMode();
+            OnFormEdited();
         }
 
-        var js = WorkflowStepCompiler.CompileToJavaScript(_selectedItem.Payload.WorkflowSteps);
-        WorkflowScriptEditor.Text = js;
-        if (WorkflowModeCombo != null) WorkflowModeCombo.SelectedIndex = 1;
-        OnFormEdited();
+        UpdateReturnToVisualBtnVisibility();
     }
 
     private void WorkflowPresetsBtn_Click(object sender, RoutedEventArgs e)
@@ -2129,7 +2231,7 @@ public partial class SettingsWindow
 
         _selectedItem.Payload.WorkflowSteps = preset.Steps.ConvertAll(s => s.Clone());
         _selectedItem.Payload.WorkflowMode = WorkflowMode.Visual;
-        if (WorkflowModeCombo != null) WorkflowModeCombo.SelectedIndex = 0;
+        SwitchToVisualMode();
 
         if (string.IsNullOrWhiteSpace(ItemNameBox.Text) || ItemNameBox.Text.StartsWith("New Action") || ItemNameBox.Text.StartsWith("New Workflow"))
         {
@@ -2138,6 +2240,7 @@ public partial class SettingsWindow
         }
 
         RebuildWorkflowStepCards();
+        UpdateReturnToVisualBtnVisibility();
         OnFormEdited();
     }
 

@@ -191,6 +191,7 @@ public partial class InteractivePromptDialog : Window, IPromptDialogService
                         Style = (Style)Application.Current.FindResource("ModernTextBoxStyle"),
                         AcceptsReturn = true,
                         TextWrapping = TextWrapping.Wrap,
+                        VerticalContentAlignment = VerticalAlignment.Top,
                         Height = 80,
                         VerticalScrollBarVisibility = ScrollBarVisibility.Auto
                     };
