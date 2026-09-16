@@ -296,6 +296,12 @@
                                       FontSize="13" 
                                       Margin="0,0,0,10"
                                       ToolTip="Checks if shortcut target files exist on disk when TriggerPoint starts and notifies you of broken links"/>
+
+                            <CheckBox x:Name="ConfirmRevertChangesCheck" 
+                                      Content="Confirm before reverting unsaved changes to an item" 
+                                      FontSize="13" 
+                                      Margin="0,0,0,10"
+                                      ToolTip="Shows a confirmation dialog before discarding uncommitted edits to an action or folder"/>
                         </StackPanel>
                     </Border>
 

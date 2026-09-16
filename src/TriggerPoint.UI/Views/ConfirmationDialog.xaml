@@ -10,6 +10,7 @@
         Background="Transparent"
         Topmost="True"
         ShowInTaskbar="False"
+        Loaded="Window_Loaded"
         KeyDown="Window_KeyDown">
 
     <Border Background="{DynamicResource BgSecondaryBrush}"
@@ -47,21 +48,28 @@
                        Foreground="{DynamicResource TextSecondaryBrush}"
                        Margin="0,0,0,16"/>
 
-            <!-- Action Buttons -->
-            <StackPanel Grid.Row="2" 
-                        Orientation="Horizontal" 
-                        HorizontalAlignment="Right" 
-                        Margin="0,6,0,0">
-                <Button x:Name="CancelBtn"
-                        Content="Cancel (Esc)" 
-                        Style="{StaticResource SecondaryButtonStyle}" 
-                        Margin="0,0,10,0"
-                        Click="CancelButton_Click"/>
-                <Button x:Name="ConfirmBtn"
-                        Content="Confirm (Enter)" 
-                        Style="{StaticResource AccentButtonStyle}" 
-                        Click="ConfirmButton_Click"/>
-            </StackPanel>
+            <!-- Action Footer -->
+            <Grid Grid.Row="2" Margin="0,6,0,0">
+                <CheckBox x:Name="DoNotAskAgainCheck"
+                          Content="Don't ask again"
+                          FontSize="12"
+                          Foreground="{DynamicResource TextSecondaryBrush}"
+                          Visibility="Collapsed"
+                          VerticalAlignment="Center"
+                          HorizontalAlignment="Left"/>
+                <StackPanel Orientation="Horizontal" 
+                            HorizontalAlignment="Right">
+                    <Button x:Name="CancelBtn"
+                            Content="Cancel (Esc)" 
+                            Style="{StaticResource SecondaryButtonStyle}" 
+                            Margin="0,0,10,0"
+                            Click="CancelButton_Click"/>
+                    <Button x:Name="ConfirmBtn"
+                            Content="Confirm (Enter)" 
+                            Style="{StaticResource AccentButtonStyle}" 
+                            Click="ConfirmButton_Click"/>
+                </StackPanel>
+            </Grid>
         </Grid>
     </Border>
 </Window>

@@ -1,0 +1,81 @@
+<Window x:Class="TriggerPoint.UI.Views.MacroRecordingHudWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Recording Macro"
+        Width="340"
+        Height="54"
+        WindowStartupLocation="Manual"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        KeyDown="Window_KeyDown"
+        MouseDown="Window_MouseDown">
+
+    <Window.Resources>
+        <Storyboard x:Key="BlinkStoryboard" RepeatBehavior="Forever">
+            <DoubleAnimation Storyboard.TargetName="RecDot"
+                             Storyboard.TargetProperty="Opacity"
+                             From="1.0" To="0.2"
+                             Duration="0:0:0.7"
+                             AutoReverse="True"/>
+        </Storyboard>
+    </Window.Resources>
+
+    <Border Background="#EE161922"
+            BorderBrush="#FFEF4444"
+            BorderThickness="1.5"
+            CornerRadius="27"
+            Margin="4">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.55" Color="#000000"/>
+        </Border.Effect>
+
+        <Grid Margin="16,0,12,0" VerticalAlignment="Center">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Pulsing Red Dot -->
+            <Ellipse x:Name="RecDot"
+                     Grid.Column="0"
+                     Width="12"
+                     Height="12"
+                     Fill="#FFEF4444"
+                     VerticalAlignment="Center"
+                     Margin="0,0,12,0"/>
+
+            <!-- Status Text -->
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,10,0">
+                <TextBlock Text="RECORDING MACRO"
+                           FontSize="10"
+                           FontWeight="Bold"
+                           Foreground="#FFEF4444"/>
+                <TextBlock x:Name="StatsTextBlock"
+                           Text="0 events • 00:00"
+                           FontSize="12"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextPrimaryBrush}"/>
+            </StackPanel>
+
+            <!-- Stop Button -->
+            <Button x:Name="StopBtn"
+                    Grid.Column="2"
+                    Height="32"
+                    Padding="12,4,12,4"
+                    Style="{StaticResource AccentButtonStyle}"
+                    Background="#DC2626"
+                    BorderBrush="#B91C1C"
+                    Click="StopButton_Click"
+                    ToolTip="Stop recording (or press Escape)">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Rectangle Width="9" Height="9" Fill="White" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                    <TextBlock Text="Stop" FontSize="11.5" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+        </Grid>
+    </Border>
+</Window>

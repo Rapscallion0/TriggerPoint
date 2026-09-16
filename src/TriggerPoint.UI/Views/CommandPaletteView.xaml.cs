@@ -691,12 +691,12 @@ public partial class CommandPaletteView : Window
                 }
             } while (added);
 
-            scopeCandidates = _allItems.Where(x => x.ParentId.HasValue && descendantFolderIds.Contains(x.ParentId.Value)).ToList();
+            scopeCandidates = _allItems.Where(x => x.ParentId.HasValue && descendantFolderIds.Contains(x.ParentId.Value) && x.IsEnabled).ToList();
         }
         else
         {
-            // At root: include all items and virtual system actions
-            var list = new List<TriggerItem>(_allItems);
+            // At root: include all enabled items and virtual system actions
+            var list = new List<TriggerItem>(_allItems.Where(x => x.IsEnabled));
             list.Add(_virtualActionManagerItem);
             list.Add(_virtualAppSettingsItem);
             scopeCandidates = list;

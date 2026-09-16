@@ -31,7 +31,8 @@ public enum ActionType
     Shell = 0,
     Snippet = 1,
     Folder = 2,
-    Workflow = 3
+    Workflow = 3,
+    Macro = 4
 }
 
 public enum WorkflowMode
@@ -49,7 +50,42 @@ public enum WorkflowStepType
     InjectSnippet = 4,
     Delay = 5,
     RunScript = 6,
-    ExecuteAction = 7
+    ExecuteAction = 7,
+    Dialog = 8,
+    Macro = 9
+}
+
+public enum WorkflowDialogButtons
+{
+    Ok = 0,
+    OkCancel = 1,
+    YesNo = 2,
+    YesNoCancel = 3
+}
+
+public enum WorkflowDialogIcon
+{
+    Information = 0,
+    Question = 1,
+    Warning = 2,
+    Error = 3
+}
+
+public enum MacroEventType
+{
+    KeyDown = 0,
+    KeyUp = 1,
+    MouseMove = 2,
+    MouseDown = 3,
+    MouseUp = 4,
+    Delay = 5
+}
+
+public enum MacroMouseButton
+{
+    Left = 0,
+    Right = 1,
+    Middle = 2
 }
 
 public enum StepErrorPolicy
@@ -87,5 +123,6 @@ public enum CommandPaletteFilterType
     App = 1,
     Snippet = 2,
     Workflow = 3,
-    Folder = 4
+    Folder = 4,
+    Macro = 5
 }

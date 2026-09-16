@@ -56,6 +56,58 @@ public class SettingsIconAndThemeTests
     }
 
     [Fact]
+    public void VectorGeometries_EyeAndRevert_ExistAndAreValid()
+    {
+        Exception? caughtEx = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                if (Application.Current == null)
+                {
+                    new Application();
+                }
+
+                if (!Application.Current!.Resources.MergedDictionaries.Any(d => d.Source?.OriginalString?.Contains("ThemeResources.xaml") == true))
+                {
+                    Application.Current!.Resources.MergedDictionaries.Add(new ResourceDictionary
+                    {
+                        Source = new Uri("pack://application:,,,/TriggerPoint;component/Theme/ThemeResources.xaml", UriKind.Absolute)
+                    });
+                }
+
+                var eyeVisible = Application.Current.FindResource("EyeVisibleGeometry") as Geometry;
+                Assert.NotNull(eyeVisible);
+                Assert.False(eyeVisible.Bounds.IsEmpty);
+                Assert.True(eyeVisible.Bounds.Width > 0);
+
+                var eyeSlash = Application.Current.FindResource("EyeSlashGeometry") as Geometry;
+                Assert.NotNull(eyeSlash);
+                Assert.False(eyeSlash.Bounds.IsEmpty);
+                Assert.True(eyeSlash.Bounds.Width > 0);
+
+                var revertUndo = Application.Current.FindResource("RevertUndoGeometry") as Geometry;
+                Assert.NotNull(revertUndo);
+                Assert.False(revertUndo.Bounds.IsEmpty);
+                Assert.True(revertUndo.Bounds.Width > 0);
+            }
+            catch (Exception ex)
+            {
+                caughtEx = ex;
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join(5000);
+
+        if (caughtEx != null)
+        {
+            throw new InvalidOperationException($"VectorGeometries validation failed: {caughtEx.Message}", caughtEx);
+        }
+    }
+
+    [Fact]
     public void ThemeManager_ApplyTheme_SetsMultiFrameBitmapFrame()
     {
         Exception? caughtEx = null;

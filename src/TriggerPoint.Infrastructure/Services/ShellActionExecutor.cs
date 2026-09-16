@@ -16,6 +16,7 @@ public class ShellActionExecutor : IActionExecutor
     private readonly IContextFilterService _contextFilterService;
     private readonly IPromptDialogService? _promptDialogService;
     private readonly IWorkflowExecutor? _workflowExecutor;
+    private readonly IMacroService? _macroService;
 
     public event Action<TriggerItem>? OpenSettingsRequested;
     public event Action<TriggerItem, string>? ExecutionSucceeded;
@@ -26,13 +27,15 @@ public class ShellActionExecutor : IActionExecutor
         ITelemetryService telemetryService,
         IContextFilterService contextFilterService,
         IPromptDialogService? promptDialogService = null,
-        IWorkflowExecutor? workflowExecutor = null)
+        IWorkflowExecutor? workflowExecutor = null,
+        IMacroService? macroService = null)
     {
         _snippetService = snippetService;
         _telemetryService = telemetryService;
         _contextFilterService = contextFilterService;
         _promptDialogService = promptDialogService;
         _workflowExecutor = workflowExecutor;
+        _macroService = macroService;
     }
 
     public async Task ExecuteAsync(TriggerItem item, ExecutionOverride executionOverride = ExecutionOverride.Standard, IntPtr? targetHwnd = null)
@@ -92,6 +95,29 @@ public class ShellActionExecutor : IActionExecutor
             {
                 _logger.Error(ex, "Failed to inject snippet for action '{Name}'", item.Name);
                 ExecutionFailed?.Invoke(item, $"Failed to inject snippet: {ex.Message}");
+            }
+            return;
+        }
+
+        if (item.ActionType == ActionType.Macro)
+        {
+            try
+            {
+                if (_macroService != null && item.Payload.Macro != null && item.Payload.Macro.Events.Count > 0)
+                {
+                    _logger.Information("Executing macro '{Name}' ({Count} events)", item.Name, item.Payload.Macro.Events.Count);
+                    await _macroService.PlayMacroAsync(item.Payload.Macro).ConfigureAwait(false);
+                    ExecutionSucceeded?.Invoke(item, "Macro executed successfully.");
+                }
+                else
+                {
+                    ExecutionFailed?.Invoke(item, "Macro service not available or macro contains no events.");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to execute macro '{Name}'", item.Name);
+                ExecutionFailed?.Invoke(item, $"Macro execution failed: {ex.Message}");
             }
             return;
         }

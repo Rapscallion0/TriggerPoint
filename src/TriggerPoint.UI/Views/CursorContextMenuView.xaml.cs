@@ -51,6 +51,7 @@ public partial class CursorContextMenuView : Window
     private readonly List<TriggerItem> _allItems;
     private readonly IActionExecutor _executor;
     private readonly IntPtr _targetHwnd;
+    private readonly IContextFilterService? _contextFilterService;
     private readonly Stack<TriggerItem?> _navHistory = new();
     private TriggerItem? _currentFolder;
     private List<CursorMenuItemViewModel> _displayedItems = new();
@@ -63,13 +64,15 @@ public partial class CursorContextMenuView : Window
         IEnumerable<TriggerItem> allItems, 
         IActionExecutor executor, 
         TriggerItem? initialFolder = null,
-        IntPtr targetHwnd = default)
+        IntPtr targetHwnd = default,
+        IContextFilterService? contextFilterService = null)
     {
         InitializeComponent();
         _executor = executor;
         _allItems = allItems.ToList();
         _currentFolder = initialFolder;
         _targetHwnd = targetHwnd;
+        _contextFilterService = contextFilterService;
 
         RenderCurrentFolder();
         Loaded += CursorContextMenuView_Loaded;
@@ -77,28 +80,32 @@ public partial class CursorContextMenuView : Window
 
     private void RenderCurrentFolder()
     {
-        List<TriggerItem> children;
+        List<TriggerItem> rawChildren;
         if (_currentFolder != null && _currentFolder.ActionType == ActionType.Folder)
         {
-            children = _allItems
+            rawChildren = _allItems
                 .Where(x => x.ParentId == _currentFolder.Id && x.IsEnabled)
                 .OrderBy(x => x.OrderIndex)
                 .ToList();
         }
         else if (_currentFolder != null)
         {
-            children = _allItems
+            rawChildren = _allItems
                 .Where(x => x.ParentId == _currentFolder.ParentId && x.IsEnabled)
                 .OrderBy(x => x.OrderIndex)
                 .ToList();
         }
         else
         {
-            children = _allItems
+            rawChildren = _allItems
                 .Where(x => !x.ParentId.HasValue && x.IsEnabled)
                 .OrderBy(x => x.OrderIndex)
                 .ToList();
         }
+
+        var children = _contextFilterService == null
+            ? rawChildren
+            : rawChildren.Where(x => _contextFilterService.ShouldExecute(x, _allItems)).ToList();
 
         var autoMode = _currentFolder?.AutoNumberMode ?? FolderAutoNumberMode.Off;
         var resolvedKeys = MenuQuickKeyResolver.ResolveKeys(children, autoMode);

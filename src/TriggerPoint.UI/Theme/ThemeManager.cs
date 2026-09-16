@@ -31,7 +31,7 @@ public static class ThemeManager
     {
         CurrentPreference = preference;
         ApplyPreference(preference);
-        ApplyTreeDensity(false);
+        ApplyTreeDensity(true);
 
         SystemEvents.UserPreferenceChanged += (s, e) =>
         {

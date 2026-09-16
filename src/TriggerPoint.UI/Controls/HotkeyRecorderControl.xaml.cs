@@ -28,6 +28,9 @@ public partial class HotkeyRecorderControl : UserControl
     public static event EventHandler? RecordingStarted;
     public static event EventHandler? RecordingStopped;
 
+    private static readonly object _syncLock = new();
+    private static readonly HashSet<HotkeyRecorderControl> _activeRecorders = [];
+
     private bool _isRecording;
     public bool IsRecording => _isRecording;
 
@@ -40,6 +43,7 @@ public partial class HotkeyRecorderControl : UserControl
         PreviewKeyUp += HotkeyRecorderControl_PreviewKeyUp;
         GotFocus += (s, e) => StartRecording();
         LostFocus += (s, e) => StopRecording(cancelled: true);
+        Unloaded += (s, e) => StopRecording(cancelled: true);
     }
 
     private static void OnBindingChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -54,13 +58,13 @@ public partial class HotkeyRecorderControl : UserControl
     {
         if (_isRecording)
         {
-            RecordingBorder.BorderBrush = (Brush)Application.Current.FindResource("AccentBrush");
+            RecordingBorder.BorderBrush = (Brush)(Application.Current?.TryFindResource("AccentBrush") ?? Brushes.DodgerBlue);
             RecordingBorder.BorderThickness = new Thickness(1.5);
             ClearButton.Visibility = Visibility.Visible;
         }
         else
         {
-            RecordingBorder.BorderBrush = (Brush)Application.Current.FindResource("BorderBrush");
+            RecordingBorder.BorderBrush = (Brush)(Application.Current?.TryFindResource("BorderBrush") ?? Brushes.Gray);
             RecordingBorder.BorderThickness = new Thickness(1);
 
             if (Binding != null && !Binding.IsEmpty)
@@ -92,7 +96,14 @@ public partial class HotkeyRecorderControl : UserControl
     {
         if (_isRecording) return;
         _isRecording = true;
-        RecordingStarted?.Invoke(this, EventArgs.Empty);
+        lock (_syncLock)
+        {
+            _activeRecorders.Add(this);
+            if (_activeRecorders.Count == 1)
+            {
+                RecordingStarted?.Invoke(this, EventArgs.Empty);
+            }
+        }
         PromptText.Text = "Recording... Press keys";
         PromptText.Visibility = Visibility.Visible;
         KeyBadge.Visibility = Visibility.Collapsed;
@@ -103,7 +114,14 @@ public partial class HotkeyRecorderControl : UserControl
     {
         if (!_isRecording) return;
         _isRecording = false;
-        RecordingStopped?.Invoke(this, EventArgs.Empty);
+        lock (_syncLock)
+        {
+            _activeRecorders.Remove(this);
+            if (_activeRecorders.Count == 0)
+            {
+                RecordingStopped?.Invoke(this, EventArgs.Empty);
+            }
+        }
         UpdateUi();
     }
 
@@ -140,8 +158,7 @@ public partial class HotkeyRecorderControl : UserControl
         Binding = newBinding;
         BindingRecorded?.Invoke(this, newBinding);
 
-        _isRecording = false;
-        UpdateUi();
+        StopRecording(cancelled: false);
         e.Handled = true;
     }
 
@@ -230,8 +247,7 @@ public partial class HotkeyRecorderControl : UserControl
     {
         Binding = null;
         BindingRecorded?.Invoke(this, null);
-        _isRecording = false;
-        UpdateUi();
+        StopRecording(cancelled: false);
         e.Handled = true;
     }
 }

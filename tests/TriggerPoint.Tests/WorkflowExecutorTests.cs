@@ -84,6 +84,9 @@ public class WorkflowExecutorTests
         public string? GetForegroundProcessName() => "explorer";
         public string? GetActiveBrowserUrl(IntPtr hWnd, string? processName = null) => null;
         public bool ShouldExecute(TriggerItem item) => true;
+        public bool ShouldExecute(TriggerItem item, IReadOnlyList<TriggerItem>? allItems) => true;
+        public void SetAllItemsProvider(Func<IReadOnlyList<TriggerItem>>? provider) { }
+        public List<TriggerItem> GetInheritanceChain(TriggerItem item, IReadOnlyList<TriggerItem> allItems) => [];
     }
 
     [Fact]

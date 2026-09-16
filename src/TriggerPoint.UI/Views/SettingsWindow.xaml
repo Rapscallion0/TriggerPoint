@@ -130,6 +130,8 @@
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
                         <TextBox Grid.Column="0"
@@ -141,17 +143,46 @@
                                  TextChanged="TreeSearchBox_TextChanged"/>
 
                         <Button Grid.Column="1"
+                                x:Name="ToggleDensityBtn"
+                                Content="≡"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Width="32" Height="32"
+                                FontSize="14"
+                                FontWeight="Bold"
+                                Padding="0"
+                                Margin="6,0,0,0"
+                                ToolTip="Toggle tree view density (Compact / Comfortable)"
+                                Click="ToggleDensityBtn_Click"/>
+
+                        <Button Grid.Column="2"
+                                x:Name="ToggleShowDisabledBtn"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Width="32" Height="32"
+                                Padding="0"
+                                Margin="4,0,0,0"
+                                ToolTip="Toggle visibility of disabled items in tree"
+                                Click="ToggleShowDisabledBtn_Click">
+                            <Path x:Name="ToggleShowDisabledIcon"
+                                  Data="{DynamicResource EyeVisibleGeometry}"
+                                  Width="15" Height="15"
+                                  Stretch="Uniform"
+                                  Fill="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"
+                                  VerticalAlignment="Center"
+                                  HorizontalAlignment="Center"/>
+                        </Button>
+
+                        <Button Grid.Column="3"
                                 x:Name="ToggleShortcutsBadgeBtn"
                                 Content="⌨"
                                 Style="{StaticResource SecondaryButtonStyle}"
                                 Width="32" Height="32"
                                 FontSize="13"
                                 Padding="0"
-                                Margin="6,0,0,0"
+                                Margin="4,0,0,0"
                                 ToolTip="Toggle hotkey badges in tree"
                                 Click="ToggleShortcutsBadgeBtn_Click"/>
 
-                        <Button Grid.Column="2"
+                        <Button Grid.Column="4"
                                 x:Name="ToggleExpandAllBtn"
                                 Style="{StaticResource SecondaryButtonStyle}"
                                 Width="32" Height="32"
@@ -172,7 +203,7 @@
                                   VerticalAlignment="Center"/>
                         </Button>
 
-                        <Button Grid.Column="3"
+                        <Button Grid.Column="5"
                                 x:Name="AddMenuBtn"
                                 Content="+"
                                 Style="{StaticResource SecondaryButtonStyle}"
@@ -198,6 +229,11 @@
                                     <MenuItem Header="New Workflow" Click="AddWorkflowActionBtn_Click">
                                         <MenuItem.Icon>
                                             <TextBlock Text="🔀" FontSize="13" Foreground="{DynamicResource WorkflowBrush}"/>
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="New Recorded Macro" Click="AddMacroActionBtn_Click">
+                                        <MenuItem.Icon>
+                                            <TextBlock Text="🔴" FontSize="13" Foreground="#FFEF4444"/>
                                         </MenuItem.Icon>
                                     </MenuItem>
                                     <Separator/>
@@ -228,6 +264,30 @@
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <TextBlock Text="✕ " FontWeight="Bold" FontSize="10" VerticalAlignment="Center"/>
                                 <TextBlock x:Name="BrokenFilterChipText" Text="0 Broken" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="DisabledFilterChip"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Padding="8,3"
+                                Height="24"
+                                FontSize="11"
+                                FontWeight="SemiBold"
+                                Foreground="{DynamicResource TextSecondaryBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                Background="#1A888888"
+                                Margin="4,0,0,0"
+                                Visibility="Collapsed"
+                                ToolTip="Click to toggle showing or hiding disabled items in tree"
+                                Click="DisabledFilterChip_Click">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Path x:Name="DisabledFilterChipIconPath"
+                                      Data="{DynamicResource EyeSlashGeometry}"
+                                      Width="12" Height="12"
+                                      Stretch="Uniform"
+                                      Margin="0,0,5,0"
+                                      Fill="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"
+                                      VerticalAlignment="Center"/>
+                                <TextBlock x:Name="DisabledFilterChipText" Text="0 Disabled" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
                     </WrapPanel>
@@ -282,6 +342,11 @@
                                         <TextBlock Text="🔀" FontSize="13" Foreground="{DynamicResource WorkflowBrush}"/>
                                     </MenuItem.Icon>
                                 </MenuItem>
+                                <MenuItem x:Name="ContextAddMacroItem" Header="New Recorded Macro" Click="AddMacroActionBtn_Click">
+                                    <MenuItem.Icon>
+                                        <TextBlock Text="🔴" FontSize="13" Foreground="#FFEF4444"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
                                 <Separator/>
                                 <MenuItem x:Name="ContextAddFolderItem" Header="New Folder" Click="AddFolderBtn_Click">
                                     <MenuItem.Icon>
@@ -292,6 +357,15 @@
                             <MenuItem x:Name="ContextDuplicateItem" Header="Duplicate" InputGestureText="Ctrl+D" Click="DuplicateItemBtn_Click">
                                 <MenuItem.Icon>
                                     <TextBlock Text="⧉" FontSize="13" Foreground="{DynamicResource AccentBrush}"/>
+                                </MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem x:Name="ContextToggleEnabledItem" Header="Disable Action" InputGestureText="Ctrl+E" Click="ContextToggleEnabledItem_Click">
+                                <MenuItem.Icon>
+                                    <Path x:Name="ContextToggleEnabledIconPath"
+                                          Data="{DynamicResource EyeSlashGeometry}"
+                                          Width="13" Height="13"
+                                          Stretch="Uniform"
+                                          Fill="{DynamicResource WarningBrush}"/>
                                 </MenuItem.Icon>
                             </MenuItem>
                             <MenuItem x:Name="ContextRenameItem" Header="Rename" InputGestureText="F2" Click="ContextRenameItem_Click">
@@ -306,9 +380,18 @@
                                 </MenuItem.Icon>
                             </MenuItem>
                             <Separator/>
-                            <MenuItem x:Name="ContextToggleCompactDensity" Header="Compact View" IsCheckable="True" Click="ContextToggleCompactDensity_Click">
+                            <MenuItem x:Name="ContextToggleCompactDensity" Header="Switch to Comfortable View" Click="ContextToggleCompactDensity_Click">
                                 <MenuItem.Icon>
-                                    <TextBlock Text="≡" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}"/>
+                                    <TextBlock x:Name="ContextToggleCompactDensityIcon" Text="☷" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}"/>
+                                </MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem x:Name="ContextToggleShowDisabled" Header="Show Disabled Items" IsCheckable="True" Click="ContextToggleShowDisabled_Click">
+                                <MenuItem.Icon>
+                                    <Path x:Name="ContextToggleShowDisabledIconPath"
+                                          Data="{DynamicResource EyeVisibleGeometry}"
+                                          Width="13" Height="13"
+                                          Stretch="Uniform"
+                                          Fill="{DynamicResource TextSecondaryBrush}"/>
                                 </MenuItem.Icon>
                             </MenuItem>
                             <Separator x:Name="ContextExportSeparator"/>
@@ -351,6 +434,7 @@
                                 <!-- Main Item Row Container -->
                                 <Border CornerRadius="4" 
                                         Padding="{DynamicResource TreeItemPadding}" 
+                                        Opacity="{Binding ItemOpacity}"
                                         Background="{Binding DropInsideBackgroundBrush}" 
                                         BorderBrush="{Binding DropInsideBorderBrush}" 
                                         BorderThickness="1.5">
@@ -358,6 +442,7 @@
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="Auto"/>
@@ -428,8 +513,31 @@
                                                        Foreground="{DynamicResource WarningBrush}"/>
                                         </Border>
 
-                                        <!-- Hotkey Badge -->
+                                        <!-- Disabled Badge -->
                                         <Border Grid.Column="4" 
+                                                Style="{StaticResource ConflictBadgeStyle}" 
+                                                Background="#20888888"
+                                                BorderBrush="{DynamicResource TextMutedBrush}"
+                                                Margin="6,0,0,0"
+                                                VerticalAlignment="Center"
+                                                ToolTip="This item is disabled (inactive)"
+                                                Visibility="{Binding DisabledBadgeVisibility}">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <Path Data="{DynamicResource EyeSlashGeometry}" 
+                                                      Width="10" Height="10" 
+                                                      Stretch="Uniform" 
+                                                      Fill="{DynamicResource TextMutedBrush}" 
+                                                      Margin="0,0,3,0"
+                                                      VerticalAlignment="Center"/>
+                                                <TextBlock Text="Disabled" 
+                                                           FontSize="9.5" 
+                                                           FontWeight="SemiBold" 
+                                                           Foreground="{DynamicResource TextMutedBrush}"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <!-- Hotkey Badge -->
+                                        <Border Grid.Column="5" 
                                                 Style="{StaticResource AccentKeyBadgeStyle}" 
                                                 Margin="6,0,0,0"
                                                 VerticalAlignment="Center"
@@ -533,15 +641,36 @@
                                        ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
                                        Margin="0,0,0,4"/>
 
-                            <Border x:Name="EditorTypeBadge"
-                                    HorizontalAlignment="Left"
-                                    CornerRadius="4"
-                                    Padding="6,2"
-                                    Visibility="Collapsed">
-                                <TextBlock x:Name="EditorTypeBadgeText"
-                                           FontSize="11"
-                                           FontWeight="SemiBold"/>
-                            </Border>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Border x:Name="EditorTypeBadge"
+                                        HorizontalAlignment="Left"
+                                        CornerRadius="4"
+                                        Padding="6,2"
+                                        Visibility="Collapsed">
+                                    <TextBlock x:Name="EditorTypeBadgeText"
+                                               FontSize="11"
+                                               FontWeight="SemiBold"/>
+                                </Border>
+                                <CheckBox x:Name="ItemEnabledCheck"
+                                          FontSize="12"
+                                          FontWeight="SemiBold"
+                                          Foreground="{DynamicResource TextSecondaryBrush}"
+                                          Margin="12,0,0,0"
+                                          VerticalAlignment="Center"
+                                          ToolTip="When unchecked, this item is disabled and its shortcut is not registered"
+                                          Click="ItemEnabledCheck_Click">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Path x:Name="ItemEnabledCheckIcon"
+                                              Data="{DynamicResource EyeVisibleGeometry}"
+                                              Width="12" Height="12"
+                                              Stretch="Uniform"
+                                              Margin="0,0,4,0"
+                                              Fill="{Binding RelativeSource={RelativeSource AncestorType=CheckBox}, Path=Foreground}"
+                                              VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="ItemEnabledCheckText" Text="Enabled" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </CheckBox>
+                            </StackPanel>
                         </StackPanel>
 
                         <!-- Toolbar: Save, Test, Delete -->
@@ -555,15 +684,20 @@
                                     Click="SaveBtn_Click"/>
 
                             <Button x:Name="RevertItemBtn"
-                                    Content="↺" 
                                     Style="{StaticResource SecondaryButtonStyle}" 
                                     Margin="0,0,8,0"
                                     Width="34" Height="34"
                                     Padding="0"
-                                    FontSize="20"
                                     IsEnabled="False"
                                     ToolTip="Revert unsaved changes to this item"
-                                    Click="RevertItemBtn_Click"/>
+                                    Click="RevertItemBtn_Click">
+                                <Path Data="{DynamicResource RevertUndoGeometry}"
+                                      Width="18" Height="18"
+                                      Stretch="Uniform"
+                                      Fill="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"
+                                      VerticalAlignment="Center"
+                                      HorizontalAlignment="Center"/>
+                            </Button>
 
                             <Button x:Name="TestActionBtn"
                                     Content="▶ Test" 
@@ -1025,18 +1159,21 @@
                                 </Button>
                             </WrapPanel>
 
-                            <!-- Snippet Editor -->
-                            <TextBox x:Name="SnippetTemplateBox" 
-                                     Style="{StaticResource ModernTextBoxStyle}" 
-                                     FontFamily="{StaticResource CodeFont}" 
-                                     FontSize="13" 
-                                     Height="110" 
-                                     AcceptsReturn="True" 
-                                     TextWrapping="Wrap" 
-                                     VerticalContentAlignment="Top"
-                                     VerticalScrollBarVisibility="Auto" 
-                                     ToolTip="Enter the text template to expand. Click token chips above to insert dynamic tokens"
-                                     SelectionChanged="SnippetTemplateBox_SelectionChanged"/>
+                            <!-- Snippet Editor with Floating Pill Overlay Canvas -->
+                            <Grid x:Name="SnippetTemplateHostGrid">
+                                <TextBox x:Name="SnippetTemplateBox" 
+                                         Style="{StaticResource ModernTextBoxStyle}" 
+                                         FontFamily="{StaticResource CodeFont}" 
+                                         FontSize="13" 
+                                         Height="110" 
+                                         AcceptsReturn="True" 
+                                         TextWrapping="Wrap" 
+                                         VerticalContentAlignment="Top"
+                                         VerticalScrollBarVisibility="Auto" 
+                                         ToolTip="Enter the text template to expand. Click token chips above to insert dynamic tokens"
+                                         SelectionChanged="SnippetTemplateBox_SelectionChanged"/>
+                                <Canvas x:Name="SnippetFloatingOverlayCanvas" IsHitTestVisible="False" ClipToBounds="False"/>
+                            </Grid>
 
                             <!-- Contextual Token Assistant Bar -->
                             <Border x:Name="TokenAssistantBorder" 
@@ -1316,6 +1453,28 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- Macro Settings Box (Visible for Macro type) -->
+                    <Border x:Name="MacroSettingsGroup" 
+                            Background="{DynamicResource CardBgBrush}" 
+                            BorderBrush="{DynamicResource CardBorderBrush}" 
+                            BorderThickness="1" 
+                            CornerRadius="8" 
+                            Padding="16" 
+                            Margin="0,0,0,16" 
+                            Visibility="Collapsed">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,6">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="🔴" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Recorded Macro Sequence" FontWeight="Bold" FontSize="14" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Grid>
+                            <TextBlock Text="Record and automate keystrokes, delays, and mouse clicks with exact screen coordinates." FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,10"/>
+
+                            <controls:MacroEditorControl x:Name="MacroEditor" Height="380"/>
+                        </StackPanel>
+                    </Border>
+
                     <!-- Context Process Filter Settings -->
                     <Border x:Name="ContextProcessFilterGroup"
                             Background="{DynamicResource CardBgBrush}" 
@@ -1327,10 +1486,39 @@
                             DragOver="ProcessFilterGroup_DragOver"
                             Drop="ProcessFilterGroup_Drop">
                         <StackPanel>
-                            <TextBlock Text="Process Context Rules (Optional)" FontWeight="Bold" FontSize="14" Margin="0,0,0,4"/>
-                            <TextBlock Text="Scope this action to specific applications or browser URLs. Drag executables or use target tools." FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,0"/>
+                            <TextBlock x:Name="ProcessFilterHeaderTitle" Text="Process Context Rules (Optional)" FontWeight="Bold" FontSize="14" Margin="0,0,0,4"/>
+                            <TextBlock x:Name="ProcessFilterHeaderSub" Text="Scope this action to specific applications or browser URLs. Drag executables or use target tools." FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,0"/>
 
                             <Border Height="1" Background="{DynamicResource BorderSubtleBrush}" Margin="0,8,0,12" SnapsToDevicePixels="True"/>
+
+                            <!-- Inherited Rules from Parent Folder Banner -->
+                            <Border x:Name="InheritedRulesBorder"
+                                    Background="{DynamicResource BgSecondaryBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="12,10"
+                                    Margin="0,0,0,14"
+                                    Visibility="Collapsed">
+                                <StackPanel>
+                                    <CheckBox x:Name="InheritParentRulesCheck"
+                                              Content="Inherit context rules from parent folder"
+                                              FontWeight="SemiBold"
+                                              FontSize="12.5"
+                                              Foreground="{DynamicResource TextPrimaryBrush}"
+                                              VerticalAlignment="Center"
+                                              Click="InheritParentRulesCheck_Click"
+                                              Checked="InheritParentRulesCheck_Click"
+                                              Unchecked="InheritParentRulesCheck_Click"/>
+                                    <TextBlock x:Name="InheritedRulesNoticeText"
+                                               FontSize="11"
+                                               Foreground="{DynamicResource TextSecondaryBrush}"
+                                               Margin="24,3,0,6"
+                                               TextWrapping="Wrap"
+                                               Text="When checked, this item is only active when parent folder context rules are also satisfied."/>
+                                    <WrapPanel x:Name="InheritedRulesTagsPanel" Margin="24,0,0,0"/>
+                                </StackPanel>
+                            </Border>
 
                             <!-- Allowed Processes -->
                             <Grid Margin="0,0,0,6">

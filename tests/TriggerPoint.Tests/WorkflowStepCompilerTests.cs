@@ -349,4 +349,60 @@ public class WorkflowStepCompilerTests
         Assert.DoesNotContain("// TriggerPoint Workflow Script", js);
         Assert.Equal($"await tp.executeAction(\"{targetId}\");", js);
     }
+
+    [Fact]
+    public void CompileSingleStep_EnsureDirectory_ExportsVariable()
+    {
+        var step = new WorkflowStep
+        {
+            StepType = WorkflowStepType.EnsureDirectory,
+            DirectoryPath = @"C:\Projects\Work",
+            VariableName = "myFolder"
+        };
+
+        var js = WorkflowStepCompiler.CompileSingleStep(step);
+
+        Assert.Contains("tp.vars.myFolder = folderPath_", js);
+    }
+
+    [Fact]
+    public void CompileSingleStep_Dialog_GeneratesConfirmAndExportsResult()
+    {
+        var step = new WorkflowStep
+        {
+            StepType = WorkflowStepType.Dialog,
+            DialogTitle = "Save Changes",
+            DialogMessage = "Do you want to save?",
+            DialogButtons = WorkflowDialogButtons.YesNo,
+            VariableName = "userChoice",
+            OnError = StepErrorPolicy.StopWorkflow
+        };
+
+        var js = WorkflowStepCompiler.CompileSingleStep(step);
+
+        Assert.Contains("await tp.confirm(`Do you want to save?`, \"Save Changes\", \"Yes\", \"No\")", js);
+        Assert.Contains("tp.vars.userChoice = dlg_", js);
+        Assert.Contains("return; // Cancelled at dialog", js);
+    }
+
+    [Fact]
+    public void CompileSingleStep_Macro_GeneratesRunMacro()
+    {
+        var step = new WorkflowStep
+        {
+            StepType = WorkflowStepType.Macro,
+            Macro = new MacroPayload
+            {
+                Events = [
+                    new MacroEvent { Type = MacroEventType.KeyDown, KeyCode = 13, KeyName = "Enter" },
+                    new MacroEvent { Type = MacroEventType.KeyUp, KeyCode = 13, KeyName = "Enter" }
+                ]
+            }
+        };
+
+        var js = WorkflowStepCompiler.CompileSingleStep(step);
+
+        Assert.Contains("await tp.runMacro(", js);
+        Assert.Contains("Enter", js);
+    }
 }

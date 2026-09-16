@@ -191,20 +191,55 @@ public partial class TagInputControl : UserControl
         }
     }
 
+    private bool _isUpdatingTags;
+
     public void SetTags(IEnumerable<string>? items)
     {
-        Tags.Clear();
-        if (items != null)
+        _isUpdatingTags = true;
+        try
         {
-            foreach (var item in items)
+            if (InlineInputBox != null)
             {
-                if (!string.IsNullOrWhiteSpace(item))
+                InlineInputBox.Text = string.Empty;
+            }
+            Tags.Clear();
+            if (items != null)
+            {
+                foreach (var item in items)
                 {
-                    Tags.Add(new PillViewModel(item.Trim()));
+                    if (!string.IsNullOrWhiteSpace(item))
+                    {
+                        Tags.Add(new PillViewModel(item.Trim()));
+                    }
                 }
             }
+            UpdatePlaceholderVisibility();
         }
-        UpdatePlaceholderVisibility();
+        finally
+        {
+            _isUpdatingTags = false;
+        }
+    }
+
+    public bool CommitPendingInput()
+    {
+        if (InlineInputBox != null && !string.IsNullOrWhiteSpace(InlineInputBox.Text))
+        {
+            var text = InlineInputBox.Text.Trim();
+            InlineInputBox.Text = string.Empty;
+            if (text.Contains(','))
+            {
+                var parts = text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                bool anyAdded = false;
+                foreach (var part in parts)
+                {
+                    if (AddTag(part)) anyAdded = true;
+                }
+                return anyAdded;
+            }
+            return AddTag(text);
+        }
+        return false;
     }
 
     public List<string> GetTags()
@@ -320,16 +355,20 @@ public partial class TagInputControl : UserControl
         vm.IsEditing = false;
     }
 
+    private void InlineInputBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Tab && !string.IsNullOrWhiteSpace(InlineInputBox.Text))
+        {
+            CommitPendingInput();
+            // Do not set e.Handled = true so focus moves to next control
+        }
+    }
+
     private void InlineInputBox_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key is Key.Enter or Key.OemComma)
         {
-            var text = InlineInputBox.Text.Trim();
-            if (!string.IsNullOrWhiteSpace(text))
-            {
-                AddTag(text);
-                InlineInputBox.Text = string.Empty;
-            }
+            CommitPendingInput();
             e.Handled = true;
         }
         else if (e.Key == Key.Back && string.IsNullOrEmpty(InlineInputBox.Text) && Tags.Count > 0)
@@ -341,9 +380,15 @@ public partial class TagInputControl : UserControl
         }
     }
 
+    private void InlineInputBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        CommitPendingInput();
+    }
+
     private void InlineInputBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         UpdatePlaceholderVisibility();
+        if (_isUpdatingTags) return;
 
         // If user pasted comma-delimited items
         var text = InlineInputBox.Text;
@@ -356,6 +401,8 @@ public partial class TagInputControl : UserControl
             }
             InlineInputBox.Text = string.Empty;
         }
+
+        TagsChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void RemovePillBtn_Click(object sender, RoutedEventArgs e)

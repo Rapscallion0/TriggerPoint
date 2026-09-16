@@ -19,12 +19,12 @@ public class ContextFilterService : IContextFilterService
 
     public IntPtr LastExternalForegroundHwnd { get; set; } = IntPtr.Zero;
 
-    public IntPtr GetForegroundWindowHandle()
+    public virtual IntPtr GetForegroundWindowHandle()
     {
         return NativeMethods.GetForegroundWindow();
     }
 
-    public string? GetForegroundProcessName()
+    public virtual string? GetForegroundProcessName()
     {
         var hWnd = GetForegroundWindowHandle();
         if (hWnd == IntPtr.Zero) return null;
@@ -53,7 +53,7 @@ public class ContextFilterService : IContextFilterService
         return null;
     }
 
-    public string? GetActiveBrowserUrl(IntPtr hWnd, string? processName = null)
+    public virtual string? GetActiveBrowserUrl(IntPtr hWnd, string? processName = null)
     {
         if (hWnd == IntPtr.Zero) return null;
 
@@ -119,7 +119,50 @@ public class ContextFilterService : IContextFilterService
         return detectedUrl;
     }
 
+    private Func<IReadOnlyList<TriggerItem>>? _allItemsProvider;
+
+    public void SetAllItemsProvider(Func<IReadOnlyList<TriggerItem>>? provider)
+    {
+        _allItemsProvider = provider;
+    }
+
     public bool ShouldExecute(TriggerItem item)
+    {
+        return ShouldExecute(item, _allItemsProvider?.Invoke());
+    }
+
+    public bool ShouldExecute(TriggerItem item, IReadOnlyList<TriggerItem>? allItems)
+    {
+        return ShouldExecuteInternal(item, allItems ?? _allItemsProvider?.Invoke(), new HashSet<Guid>());
+    }
+
+    private bool ShouldExecuteInternal(TriggerItem item, IReadOnlyList<TriggerItem>? allItems, HashSet<Guid> visited)
+    {
+        if (item == null) return true;
+        if (!visited.Add(item.Id))
+        {
+            return true; // prevent circular dependency
+        }
+
+        // 1. If inheriting from parent folder, parent rules must also pass
+        if (item.InheritContextFilter && item.ParentId.HasValue && allItems != null)
+        {
+            var parent = allItems.FirstOrDefault(x => x.Id == item.ParentId.Value);
+            if (parent != null)
+            {
+                if (!ShouldExecuteInternal(parent, allItems, visited))
+                {
+                    _logger.Debug("Context filter suppressed '{Name}': Parent folder '{ParentName}' context rules failed.", item.Name, parent.Name);
+                    return false;
+                }
+            }
+        }
+
+        // 2. Evaluate item's own context filter
+        return EvaluateSelfContextFilter(item);
+    }
+
+    private bool EvaluateSelfContextFilter(TriggerItem item)
     {
         if (item.ContextFilter == null) return true;
 
@@ -155,5 +198,31 @@ public class ContextFilterService : IContextFilterService
         _logger.Debug("Context filter process evaluation for '{Name}' on '{Proc}': {Active}", 
             item.Name, currentProc, procActive);
         return procActive;
+    }
+
+    public List<TriggerItem> GetInheritanceChain(TriggerItem item, IReadOnlyList<TriggerItem> allItems)
+    {
+        var chain = new List<TriggerItem>();
+        if (allItems == null || item == null) return chain;
+
+        var current = item;
+        var visited = new HashSet<Guid> { current.Id };
+        while (current.ParentId.HasValue)
+        {
+            var parent = allItems.FirstOrDefault(x => x.Id == current.ParentId.Value);
+            if (parent == null || !visited.Add(parent.Id)) break;
+
+            if (parent.ContextFilter != null && (
+                parent.ContextFilter.AllowedProcesses.Count > 0 ||
+                parent.ContextFilter.ExcludedProcesses.Count > 0 ||
+                parent.ContextFilter.AllowedUrls.Count > 0 ||
+                parent.ContextFilter.ExcludedUrls.Count > 0))
+            {
+                chain.Add(parent);
+            }
+            if (!parent.InheritContextFilter) break;
+            current = parent;
+        }
+        return chain;
     }
 }

@@ -354,6 +354,16 @@ public partial class SettingsWindow
                     definedVariables.Add(step.VariableName.Trim());
                 }
             }
+            else if (step.StepType == WorkflowStepType.EnsureDirectory)
+            {
+                var folderVar = string.IsNullOrWhiteSpace(step.VariableName) ? "folder" : step.VariableName.Trim();
+                definedVariables.Add(folderVar);
+            }
+            else if (step.StepType == WorkflowStepType.Dialog)
+            {
+                var dlgVar = string.IsNullOrWhiteSpace(step.VariableName) ? "dialogResult" : step.VariableName.Trim();
+                definedVariables.Add(dlgVar);
+            }
         }
 
         UpdateToggleAllExpandButtonUi();
@@ -445,10 +455,12 @@ public partial class SettingsWindow
         var types = new (string Title, WorkflowStepType Type, string Icon)[]
         {
             ("Prompt for User Input", WorkflowStepType.Prompt, "💬"),
+            ("Show Dialog / Confirmation", WorkflowStepType.Dialog, "💬"),
             ("Open URL / Web Page", WorkflowStepType.OpenUrl, "🌐"),
             ("Launch Application / Command", WorkflowStepType.LaunchApp, "⚡"),
             ("Ensure Folder Exists", WorkflowStepType.EnsureDirectory, "📁"),
             ("Paste / Insert Text Snippet", WorkflowStepType.InjectSnippet, "📝"),
+            ("Recorded Macro Sequence", WorkflowStepType.Macro, "🔴"),
             ("Delay / Pause Execution", WorkflowStepType.Delay, "⏱"),
             ("Execute Action / Folder", WorkflowStepType.ExecuteAction, "⚡"),
             ("Inline JavaScript", WorkflowStepType.RunScript, "📜")
@@ -512,6 +524,23 @@ public partial class SettingsWindow
         else if (stepType == WorkflowStepType.OpenUrl)
         {
             step.Url = "https://";
+        }
+        else if (stepType == WorkflowStepType.EnsureDirectory)
+        {
+            step.VariableName = "folder";
+        }
+        else if (stepType == WorkflowStepType.Dialog)
+        {
+            step.Name = "Show Confirmation Dialog";
+            step.DialogTitle = "Confirmation";
+            step.DialogMessage = "Do you want to proceed with this workflow?";
+            step.DialogButtons = WorkflowDialogButtons.OkCancel;
+            step.VariableName = "dialogResult";
+        }
+        else if (stepType == WorkflowStepType.Macro)
+        {
+            step.Name = "Recorded Macro";
+            step.Macro = new MacroPayload();
         }
         else if (stepType == WorkflowStepType.Delay)
         {
@@ -1513,6 +1542,26 @@ public partial class SettingsWindow
                 policyGrid.Children.Add(openStack);
 
                 container.Children.Add(policyGrid);
+
+                // Export Variable Token Name row
+                var varExportStack = new StackPanel { Margin = new Thickness(0, 6, 0, 0) };
+                varExportStack.Children.Add(new TextBlock { Text = "Export Variable Token Name", FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 3) });
+                var varBox = new TextBox
+                {
+                    Text = string.IsNullOrWhiteSpace(step.VariableName) ? "folder" : step.VariableName,
+                    Height = 32,
+                    Padding = new Thickness(8, 3, 8, 3),
+                    VerticalContentAlignment = VerticalAlignment.Center,
+                    Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style,
+                    ToolTip = "Name of the variable token created with this folder path, e.g. {folder} for subsequent steps"
+                };
+                varBox.TextChanged += (s, e) =>
+                {
+                    step.VariableName = varBox.Text.Trim();
+                    OnFormEdited();
+                };
+                varExportStack.Children.Add(varBox);
+                container.Children.Add(varExportStack);
                 break;
             }
 
@@ -1906,6 +1955,123 @@ public partial class SettingsWindow
                 container.Children.Add(execStack);
                 break;
             }
+
+            case WorkflowStepType.Dialog:
+            {
+                // Dialog Title
+                var titleStack = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
+                titleStack.Children.Add(new TextBlock { Text = "Dialog Title", FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 3) });
+                var titleBox = new TextBox
+                {
+                    Text = step.DialogTitle,
+                    Height = 32,
+                    Padding = new Thickness(8, 3, 8, 3),
+                    VerticalContentAlignment = VerticalAlignment.Center,
+                    Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style
+                };
+                titleBox.TextChanged += (s, e) =>
+                {
+                    step.DialogTitle = titleBox.Text;
+                    summaryText.Text = GetStepLiveSummary(step);
+                    OnFormEdited();
+                };
+                titleStack.Children.Add(titleBox);
+                container.Children.Add(titleStack);
+
+                // Dialog Message
+                var msgStack = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
+                msgStack.Children.Add(new TextBlock { Text = "Dialog Message", FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 3) });
+                var msgBox = new TextBox
+                {
+                    Text = step.DialogMessage,
+                    Height = 56,
+                    AcceptsReturn = true,
+                    TextWrapping = TextWrapping.Wrap,
+                    Padding = new Thickness(8, 4, 8, 4),
+                    Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style
+                };
+                msgBox.TextChanged += (s, e) =>
+                {
+                    step.DialogMessage = msgBox.Text;
+                    summaryText.Text = GetStepLiveSummary(step);
+                    OnFormEdited();
+                };
+                msgStack.Children.Add(msgBox);
+                container.Children.Add(msgStack);
+
+                RenderVariableChips(container, msgBox, availableVariables);
+
+                // Buttons & Export Row
+                var optionsGrid = new Grid { Margin = new Thickness(0, 4, 0, 8) };
+                optionsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                optionsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12, GridUnitType.Pixel) });
+                optionsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+                var btnStack = new StackPanel();
+                btnStack.Children.Add(new TextBlock { Text = "Dialog Buttons", FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 3) });
+                var btnCombo = new ComboBox { Height = 32, FontSize = 12 };
+                btnCombo.Items.Add(new ComboBoxItem { Content = "OK (Alert / Notification)" });
+                btnCombo.Items.Add(new ComboBoxItem { Content = "OK / Cancel" });
+                btnCombo.Items.Add(new ComboBoxItem { Content = "Yes / No" });
+                btnCombo.SelectedIndex = step.DialogButtons switch
+                {
+                    WorkflowDialogButtons.Ok => 0,
+                    WorkflowDialogButtons.YesNo => 2,
+                    _ => 1
+                };
+                btnCombo.SelectionChanged += (s, e) =>
+                {
+                    step.DialogButtons = btnCombo.SelectedIndex switch
+                    {
+                        0 => WorkflowDialogButtons.Ok,
+                        2 => WorkflowDialogButtons.YesNo,
+                        _ => WorkflowDialogButtons.OkCancel
+                    };
+                    summaryText.Text = GetStepLiveSummary(step);
+                    OnFormEdited();
+                };
+                btnStack.Children.Add(btnCombo);
+                Grid.SetColumn(btnStack, 0);
+                optionsGrid.Children.Add(btnStack);
+
+                var varStack = new StackPanel();
+                varStack.Children.Add(new TextBlock { Text = "Result Variable Name", FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 3) });
+                var varBox = new TextBox
+                {
+                    Text = string.IsNullOrWhiteSpace(step.VariableName) ? "dialogResult" : step.VariableName,
+                    Height = 32,
+                    Padding = new Thickness(8, 3, 8, 3),
+                    VerticalContentAlignment = VerticalAlignment.Center,
+                    Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style,
+                    ToolTip = "Variable set to 'ok' or 'cancel' based on user selection"
+                };
+                varBox.TextChanged += (s, e) =>
+                {
+                    step.VariableName = varBox.Text.Trim();
+                    OnFormEdited();
+                };
+                varStack.Children.Add(varBox);
+                Grid.SetColumn(varStack, 2);
+                optionsGrid.Children.Add(varStack);
+
+                container.Children.Add(optionsGrid);
+                break;
+            }
+
+            case WorkflowStepType.Macro:
+            {
+                step.Macro ??= new MacroPayload();
+                var macroEditor = new Controls.MacroEditorControl { Height = 340, Margin = new Thickness(0, 4, 0, 4) };
+                macroEditor.Initialize(_macroService, step.Macro);
+                macroEditor.MacroChanged += (s, e) =>
+                {
+                    step.Macro = macroEditor.CurrentMacro;
+                    summaryText.Text = GetStepLiveSummary(step);
+                    OnFormEdited();
+                };
+                container.Children.Add(macroEditor);
+                break;
+            }
         }
     }
 
@@ -1945,21 +2111,42 @@ public partial class SettingsWindow
         container.Children.Add(wrap);
     }
 
-    private static void InsertTokenIntoBox(TextBox box, string token)
+    private void InsertTokenIntoBox(TextBox box, string token)
     {
-        int caret = box.SelectionStart;
-        box.Text = box.Text.Insert(caret, token);
-        box.SelectionStart = caret + token.Length;
+        if (box == null || string.IsNullOrEmpty(token)) return;
+
+        string current = box.Text ?? string.Empty;
+        int insertPos;
+
+        if (box.IsFocused || (box.SelectionStart > 0 && box.SelectionStart <= current.Length))
+        {
+            insertPos = box.SelectionStart;
+            int selLen = Math.Max(0, Math.Min(box.SelectionLength, current.Length - insertPos));
+            if (selLen > 0)
+            {
+                current = current.Remove(insertPos, selLen);
+            }
+        }
+        else
+        {
+            insertPos = current.Length;
+        }
+
+        box.Text = current.Insert(insertPos, token);
         box.Focus();
+        box.Select(insertPos, token.Length);
+        OnFormEdited();
     }
 
     private static string GetStepTypeIconAndName(WorkflowStepType stepType) => stepType switch
     {
         WorkflowStepType.Prompt => "💬 Prompt for Input",
+        WorkflowStepType.Dialog => "💬 Show Confirmation Dialog",
         WorkflowStepType.OpenUrl => "🌐 Open Web URL",
         WorkflowStepType.EnsureDirectory => "📁 Ensure Folder Exists",
         WorkflowStepType.LaunchApp => "⚡ Launch Application",
         WorkflowStepType.InjectSnippet => "📝 Insert Snippet",
+        WorkflowStepType.Macro => "🔴 Recorded Macro",
         WorkflowStepType.Delay => "⏱ Delay / Pause",
         WorkflowStepType.ExecuteAction => "⚡ Execute Action / Folder",
         WorkflowStepType.RunScript => "📜 Inline Script",
@@ -1973,6 +2160,9 @@ public partial class SettingsWindow
                 ? $"stores into ${{{step.PromptFields[0].VariableName}}}" 
                 : $"{step.PromptFields.Count} fields: " + string.Join(", ", step.PromptFields.Select(f => $"${{{f.VariableName}}}")))
             : (string.IsNullOrWhiteSpace(step.VariableName) ? "No variable defined" : $"stores into ${{{step.VariableName}}}"),
+        WorkflowStepType.Dialog => string.IsNullOrWhiteSpace(step.DialogMessage) 
+            ? "No dialog message" 
+            : $"{step.DialogButtons}: \"{step.DialogMessage}\"",
         WorkflowStepType.OpenUrl => string.IsNullOrWhiteSpace(step.Url) 
             ? "No URL specified" 
             : !string.IsNullOrWhiteSpace(step.BrowserTarget)
@@ -1981,6 +2171,7 @@ public partial class SettingsWindow
         WorkflowStepType.EnsureDirectory => string.IsNullOrWhiteSpace(step.DirectoryPath) ? "No directory path" : step.DirectoryPath,
         WorkflowStepType.LaunchApp => string.IsNullOrWhiteSpace(step.Command) ? "No command specified" : step.Command,
         WorkflowStepType.InjectSnippet => string.IsNullOrWhiteSpace(step.SnippetTemplate) ? "Empty snippet" : step.SnippetTemplate,
+        WorkflowStepType.Macro => step.Macro != null ? $"{step.Macro.Events.Count} event(s)" : "No recorded events",
         WorkflowStepType.Delay => $"{step.DelayMs}ms",
         WorkflowStepType.ExecuteAction => step.TargetItemId.HasValue
             ? (_items?.FirstOrDefault(i => i.Id == step.TargetItemId.Value) is { } target ? $"Run: {target.Name} ({(target.ActionType == ActionType.Folder ? "Folder Menu" : target.ActionType.ToString())})" : "Target item not found")

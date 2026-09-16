@@ -21,6 +21,7 @@ public class JintScriptEngineService : IScriptEngineService
     private readonly IToastNotificationService _toastNotificationService;
     private readonly ISnippetService _snippetService;
     private readonly IBrowserDetectionService? _browserDetectionService;
+    private readonly IMacroService? _macroService;
 
     public Func<string, IntPtr?, Task<bool>>? ActionExecutionHandler { get; set; }
 
@@ -29,13 +30,15 @@ public class JintScriptEngineService : IScriptEngineService
         IConfirmationDialogService confirmationDialogService,
         IToastNotificationService toastNotificationService,
         ISnippetService snippetService,
-        IBrowserDetectionService? browserDetectionService = null)
+        IBrowserDetectionService? browserDetectionService = null,
+        IMacroService? macroService = null)
     {
         _promptDialogService = promptDialogService;
         _confirmationDialogService = confirmationDialogService;
         _toastNotificationService = toastNotificationService;
         _snippetService = snippetService;
         _browserDetectionService = browserDetectionService;
+        _macroService = macroService;
     }
 
     public async Task<ScriptExecutionResult> ExecuteAsync(
@@ -60,6 +63,7 @@ public class JintScriptEngineService : IScriptEngineService
                     _toastNotificationService,
                     _snippetService,
                     _browserDetectionService,
+                    _macroService,
                     ActionExecutionHandler,
                     isElevated,
                     targetHwnd,
@@ -130,6 +134,7 @@ public class TriggerPointJsBridge
     private readonly IToastNotificationService _toastNotificationService;
     private readonly ISnippetService _snippetService;
     private readonly IBrowserDetectionService? _browserDetectionService;
+    private readonly IMacroService? _macroService;
     private readonly Func<string, IntPtr?, Task<bool>>? _actionExecutionHandler;
     private readonly bool _isElevated;
     private readonly IntPtr? _targetHwnd;
@@ -146,6 +151,7 @@ public class TriggerPointJsBridge
         IToastNotificationService toastNotificationService,
         ISnippetService snippetService,
         IBrowserDetectionService? browserDetectionService,
+        IMacroService? macroService,
         Func<string, IntPtr?, Task<bool>>? actionExecutionHandler,
         bool isElevated,
         IntPtr? targetHwnd,
@@ -157,11 +163,29 @@ public class TriggerPointJsBridge
         _toastNotificationService = toastNotificationService;
         _snippetService = snippetService;
         _browserDetectionService = browserDetectionService;
+        _macroService = macroService;
         _actionExecutionHandler = actionExecutionHandler;
         _isElevated = isElevated;
         _targetHwnd = targetHwnd;
         _cancellationToken = cancellationToken;
         _logger = logger;
+    }
+
+    public void runMacro(string macroJson)
+    {
+        if (string.IsNullOrWhiteSpace(macroJson) || _macroService == null) return;
+        try
+        {
+            var macro = System.Text.Json.JsonSerializer.Deserialize<MacroPayload>(macroJson);
+            if (macro != null && macro.Events.Count > 0)
+            {
+                _macroService.PlayMacroAsync(macro, 1.0, _cancellationToken).GetAwaiter().GetResult();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Failed to run macro in script");
+        }
     }
 
     public string? prompt(string label, JsValue? optionsVal = null)
@@ -229,11 +253,13 @@ public class TriggerPointJsBridge
         return null;
     }
 
-    public bool confirm(string message, string? title = null)
+    public bool confirm(string message, string? title = null, string? confirmText = null, string? cancelText = null)
     {
         return _confirmationDialogService.ShowConfirmationAsync(
             message ?? "Confirm action?",
-            title ?? "TriggerPoint Confirmation").GetAwaiter().GetResult();
+            title ?? "TriggerPoint Confirmation",
+            string.IsNullOrWhiteSpace(confirmText) ? "Confirm" : confirmText,
+            string.IsNullOrWhiteSpace(cancelText) ? "Cancel" : cancelText).GetAwaiter().GetResult();
     }
 
     public void alert(string message, string? title = null)

@@ -18,6 +18,7 @@ public sealed class TriggerItem
     public ActionType ActionType { get; set; } = ActionType.Shell;
     public ActionPayload Payload { get; set; } = new();
     public ContextFilter ContextFilter { get; set; } = new();
+    public bool InheritContextFilter { get; set; } = true;
     public UsageStats UsageStats { get; set; } = new();
     public int OrderIndex { get; set; } = 0;
     public bool IsEnabled { get; set; } = true;
@@ -71,6 +72,7 @@ public sealed class TriggerItem
             },
             OrderIndex = OrderIndex,
             IsEnabled = IsEnabled,
+            InheritContextFilter = InheritContextFilter,
             ConflictStatus = ConflictStatus
         };
     }

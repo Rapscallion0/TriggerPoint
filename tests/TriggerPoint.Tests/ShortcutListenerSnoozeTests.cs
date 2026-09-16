@@ -58,4 +58,29 @@ public class ShortcutListenerSnoozeTests
         listener.Resume();
         listener.Resume();
     }
+
+    [Fact]
+    public void Win32HotkeyListener_RegisterAllWhileSuspended_CachesAndRegistersOnResume()
+    {
+        using var listener = new Win32HotkeyListener();
+        var item = new TriggerPoint.Core.Models.TriggerItem
+        {
+            Id = Guid.NewGuid(),
+            Name = "Test Snippet",
+            IsEnabled = true,
+            Hotkey = new TriggerPoint.Core.Models.ShortcutBinding(
+                TriggerPoint.Core.Models.ModifierKeys.Control | TriggerPoint.Core.Models.ModifierKeys.Shift,
+                0x54, // 'T' virtual key
+                "Ctrl + Shift + T")
+        };
+
+        // Suspend listener
+        listener.Suspend();
+
+        // Register items while suspended (should cache without registering with OS)
+        listener.RegisterAll([item]);
+
+        // Resume listener (should trigger registration of cached items)
+        listener.Resume();
+    }
 }

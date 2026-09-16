@@ -1,0 +1,142 @@
+<UserControl x:Class="TriggerPoint.UI.Controls.MacroEditorControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             mc:Ignorable="d" 
+             d:DesignHeight="400" d:DesignWidth="650">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Top Toolbar -->
+        <Border Grid.Row="0"
+                Background="{DynamicResource CardBgBrush}"
+                BorderBrush="{DynamicResource CardBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="6"
+                Padding="10,8,10,8"
+                Margin="0,0,0,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Record Button -->
+                <Button x:Name="RecordBtn"
+                        Grid.Column="0"
+                        Height="32"
+                        Padding="12,4,14,4"
+                        Style="{StaticResource AccentButtonStyle}"
+                        Background="#DC2626"
+                        BorderBrush="#B91C1C"
+                        Click="RecordButton_Click"
+                        ToolTip="Record new macro actions from keyboard and mouse">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Ellipse Width="10" Height="10" Fill="White" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="Record Macro..." FontWeight="SemiBold" FontSize="12" Foreground="White"/>
+                    </StackPanel>
+                </Button>
+
+                <!-- Add Event Menu Button -->
+                <Button x:Name="AddEventBtn"
+                        Grid.Column="1"
+                        Height="32"
+                        Margin="8,0,0,0"
+                        Padding="10,4,10,4"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        Click="AddEventButton_Click"
+                        ToolTip="Manually insert an event into the macro timeline">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="+" FontSize="13" FontWeight="Bold" Margin="0,0,5,0"/>
+                        <TextBlock Text="Add Event ▾" FontSize="12"/>
+                    </StackPanel>
+                </Button>
+
+                <!-- Speed & Repeat -->
+                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
+                    <TextBlock Text="Speed:" FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                    <ComboBox x:Name="SpeedCombo" Width="72" Height="28" FontSize="11.5" SelectionChanged="SpeedCombo_SelectionChanged">
+                        <ComboBoxItem Content="0.5x"/>
+                        <ComboBoxItem Content="1.0x" IsSelected="True"/>
+                        <ComboBoxItem Content="1.5x"/>
+                        <ComboBoxItem Content="2.0x"/>
+                        <ComboBoxItem Content="5.0x"/>
+                    </ComboBox>
+
+                    <TextBlock Text="Repeats:" FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="12,0,5,0"/>
+                    <TextBox x:Name="RepeatsBox" Width="44" Height="28" Text="1" FontSize="11.5" TextAlignment="Center" VerticalContentAlignment="Center" TextChanged="RepeatsBox_TextChanged"/>
+                </StackPanel>
+
+                <!-- Clear Button -->
+                <Button x:Name="ClearBtn"
+                        Grid.Column="4"
+                        Height="32"
+                        Padding="10,4,10,4"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        Click="ClearButton_Click"
+                        ToolTip="Clear all recorded events">
+                    <TextBlock Text="Clear All" FontSize="11.5"/>
+                </Button>
+
+                <!-- Test / Play Button -->
+                <Button x:Name="PlayBtn"
+                        Grid.Column="5"
+                        Height="32"
+                        Margin="8,0,0,0"
+                        Padding="12,4,14,4"
+                        Style="{StaticResource AccentButtonStyle}"
+                        Click="PlayButton_Click"
+                        ToolTip="Replay recorded macro immediately">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="▶" FontSize="11" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="Test Playback" FontSize="11.5" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- Events List -->
+        <Border Grid.Row="1"
+                Background="{DynamicResource BgSecondaryBrush}"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="1"
+                CornerRadius="6"
+                Padding="0">
+            <Grid>
+                <!-- Empty State -->
+                <StackPanel x:Name="EmptyStatePanel"
+                            VerticalAlignment="Center"
+                            HorizontalAlignment="Center"
+                            Visibility="Collapsed">
+                    <TextBlock Text="🔴" FontSize="28" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                    <TextBlock Text="No Macro Events Recorded"
+                               FontWeight="Bold"
+                               FontSize="14"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
+                               HorizontalAlignment="Center"/>
+                    <TextBlock Text="Click 'Record Macro' to capture keyboard and mouse clicks, or manually add events above."
+                               FontSize="12"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
+                               HorizontalAlignment="Center"
+                               Margin="0,4,0,0"/>
+                </StackPanel>
+
+                <!-- Timeline List -->
+                <ScrollViewer x:Name="EventsScrollViewer"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel x:Name="EventsHostPanel" Margin="8"/>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

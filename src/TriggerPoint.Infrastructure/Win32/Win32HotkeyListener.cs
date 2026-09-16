@@ -48,10 +48,15 @@ public class Win32HotkeyListener : IShortcutListener
 
     public void Suspend()
     {
-        if (System.Threading.Interlocked.Increment(ref _suspendCount) == 1)
+        int count = System.Threading.Interlocked.Increment(ref _suspendCount);
+        if (count == 1)
         {
             UnregisterAll();
             _logger.Information("Win32HotkeyListener suspended (OS hotkeys temporarily unregistered).");
+        }
+        else
+        {
+            _logger.Debug("Win32HotkeyListener nested suspend (count: {Count}).", count);
         }
     }
 
@@ -66,6 +71,10 @@ public class Win32HotkeyListener : IShortcutListener
             {
                 RegisterAll(_lastItems);
             }
+        }
+        else
+        {
+            _logger.Debug("Win32HotkeyListener nested resume (remaining count: {Count}).", count);
         }
     }
 

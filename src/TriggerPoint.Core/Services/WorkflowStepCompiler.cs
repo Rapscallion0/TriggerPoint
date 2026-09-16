@@ -44,7 +44,7 @@ public static class WorkflowStepCompiler
                     break;
 
                 case WorkflowStepType.EnsureDirectory:
-                    CompileEnsureDirectoryStep(step, sb);
+                    CompileEnsureDirectoryStep(step, sb, definedVariables);
                     break;
 
                 case WorkflowStepType.LaunchApp:
@@ -68,6 +68,14 @@ public static class WorkflowStepCompiler
 
                 case WorkflowStepType.ExecuteAction:
                     CompileExecuteActionStep(step, sb);
+                    break;
+
+                case WorkflowStepType.Dialog:
+                    CompileDialogStep(step, sb, definedVariables);
+                    break;
+
+                case WorkflowStepType.Macro:
+                    CompileMacroStep(step, sb);
                     break;
             }
 
@@ -100,7 +108,7 @@ public static class WorkflowStepCompiler
                 break;
 
             case WorkflowStepType.EnsureDirectory:
-                CompileEnsureDirectoryStep(step, sb);
+                CompileEnsureDirectoryStep(step, sb, definedVariables);
                 break;
 
             case WorkflowStepType.LaunchApp:
@@ -123,6 +131,14 @@ public static class WorkflowStepCompiler
 
             case WorkflowStepType.ExecuteAction:
                 CompileExecuteActionStep(step, sb);
+                break;
+
+            case WorkflowStepType.Dialog:
+                CompileDialogStep(step, sb, definedVariables);
+                break;
+
+            case WorkflowStepType.Macro:
+                CompileMacroStep(step, sb);
                 break;
         }
 
@@ -237,7 +253,7 @@ public static class WorkflowStepCompiler
         }
     }
 
-    private static void CompileEnsureDirectoryStep(WorkflowStep step, StringBuilder sb)
+    private static void CompileEnsureDirectoryStep(WorkflowStep step, StringBuilder sb, HashSet<string> definedVariables)
     {
         var template = ConvertPlaceholdersToTemplateLiteral(step.DirectoryPath);
         var folderVar = "folderPath_" + Math.Abs(step.Id.GetHashCode() % 10000);
@@ -279,10 +295,61 @@ public static class WorkflowStepCompiler
             sb.AppendLine($"}}");
         }
 
+        var exportVar = string.IsNullOrWhiteSpace(step.VariableName) ? "folder" : SanitizeIdentifier(step.VariableName);
+        definedVariables.Add(exportVar);
+        sb.AppendLine($"tp.vars.{exportVar} = {folderVar};");
+
         if (step.OpenInExplorer)
         {
             sb.AppendLine($"tp.fs.openInExplorer({folderVar});");
         }
+    }
+
+    private static void CompileDialogStep(WorkflowStep step, StringBuilder sb, HashSet<string> definedVariables)
+    {
+        var title = EscapeJsString(string.IsNullOrWhiteSpace(step.DialogTitle) ? "Notification" : step.DialogTitle);
+        var msg = ConvertPlaceholdersToTemplateLiteral(string.IsNullOrWhiteSpace(step.DialogMessage) ? "Proceed with workflow?" : step.DialogMessage);
+        var exportVar = string.IsNullOrWhiteSpace(step.VariableName) ? "dialogResult" : SanitizeIdentifier(step.VariableName);
+
+        definedVariables.Add(exportVar);
+
+        if (step.DialogButtons == WorkflowDialogButtons.Ok)
+        {
+            sb.AppendLine($"tp.alert(`{msg}`, \"{title}\");");
+            sb.AppendLine($"tp.vars.{exportVar} = \"ok\";");
+        }
+        else
+        {
+            var confirmBtn = EscapeJsString(string.IsNullOrWhiteSpace(step.DialogConfirmText)
+                ? (step.DialogButtons == WorkflowDialogButtons.YesNo ? "Yes" : "Confirm")
+                : step.DialogConfirmText);
+            var cancelBtn = EscapeJsString(string.IsNullOrWhiteSpace(step.DialogCancelText)
+                ? (step.DialogButtons == WorkflowDialogButtons.YesNo ? "No" : "Cancel")
+                : step.DialogCancelText);
+
+            var boolVar = "dlg_" + Math.Abs(step.Id.GetHashCode() % 10000);
+            sb.AppendLine($"const {boolVar} = await tp.confirm(`{msg}`, \"{title}\", \"{confirmBtn}\", \"{cancelBtn}\");");
+            sb.AppendLine($"tp.vars.{exportVar} = {boolVar} ? \"ok\" : \"cancel\";");
+            if (step.OnError == StepErrorPolicy.StopWorkflow)
+            {
+                sb.AppendLine($"if (!{boolVar}) {{");
+                sb.AppendLine($"    return; // Cancelled at dialog");
+                sb.AppendLine($"}}");
+            }
+        }
+    }
+
+    private static void CompileMacroStep(WorkflowStep step, StringBuilder sb)
+    {
+        if (step.Macro == null || step.Macro.Events.Count == 0)
+        {
+            sb.AppendLine("// Empty macro step");
+            return;
+        }
+
+        var json = System.Text.Json.JsonSerializer.Serialize(step.Macro);
+        var escapedJson = EscapeJsString(json);
+        sb.AppendLine($"await tp.runMacro(\"{escapedJson}\");");
     }
 
     private static void CompileLaunchAppStep(WorkflowStep step, StringBuilder sb)

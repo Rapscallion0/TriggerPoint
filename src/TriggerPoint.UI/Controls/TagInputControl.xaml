@@ -108,7 +108,9 @@
                          FontSize="12.5"
                          VerticalAlignment="Center"
                          Padding="2"
+                         PreviewKeyDown="InlineInputBox_PreviewKeyDown"
                          KeyDown="InlineInputBox_KeyDown"
+                         LostFocus="InlineInputBox_LostFocus"
                          TextChanged="InlineInputBox_TextChanged"/>
                 <TextBlock x:Name="PlaceholderBlock"
                            Text="Type and press Enter to add..."

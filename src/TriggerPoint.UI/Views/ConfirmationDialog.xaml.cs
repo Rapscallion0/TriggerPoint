@@ -11,24 +11,48 @@ namespace TriggerPoint.UI.Views;
 public partial class ConfirmationDialog : Window, IConfirmationDialogService
 {
     public bool Confirmed { get; private set; } = false;
+    public bool DoNotAskAgain => DoNotAskAgainCheck.IsChecked == true;
 
     public ConfirmationDialog()
     {
         InitializeComponent();
     }
 
-    public ConfirmationDialog(string message, string title = "TriggerPoint Confirmation", string confirmButtonText = "Confirm", string cancelButtonText = "Cancel") : this()
+    public ConfirmationDialog(string message, string title = "TriggerPoint Confirmation", string confirmButtonText = "Confirm", string cancelButtonText = "Cancel", bool showDoNotAskAgain = false) : this()
     {
         TitleTextBlock.Text = title;
         MessageTextBlock.Text = message;
         ConfirmBtn.Content = confirmButtonText;
         CancelBtn.Content = $"{cancelButtonText} (Esc)";
+        if (showDoNotAskAgain)
+        {
+            DoNotAskAgainCheck.Visibility = Visibility.Visible;
+        }
     }
 
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
         CenterOnActiveScreen();
+        var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        if (hwnd != IntPtr.Zero)
+        {
+            NativeMethods.SetForegroundWindow(hwnd);
+        }
+    }
+
+    private void Window_Loaded(object sender, RoutedEventArgs e)
+    {
+        Activate();
+        Focus();
+        ConfirmBtn.Focus();
+        Keyboard.Focus(ConfirmBtn);
+
+        var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        if (hwnd != IntPtr.Zero)
+        {
+            NativeMethods.SetForegroundWindow(hwnd);
+        }
     }
 
     private void CenterOnActiveScreen()

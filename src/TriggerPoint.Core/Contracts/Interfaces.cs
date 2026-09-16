@@ -73,6 +73,9 @@ public interface IContextFilterService
     string? GetForegroundProcessName();
     string? GetActiveBrowserUrl(IntPtr hWnd, string? processName = null);
     bool ShouldExecute(TriggerItem item);
+    bool ShouldExecute(TriggerItem item, IReadOnlyList<TriggerItem>? allItems);
+    void SetAllItemsProvider(Func<IReadOnlyList<TriggerItem>>? provider);
+    List<TriggerItem> GetInheritanceChain(TriggerItem item, IReadOnlyList<TriggerItem> allItems);
 }
 
 public interface ITelemetryService
@@ -146,4 +149,13 @@ public interface IBrowserDetectionService
     IReadOnlyList<BrowserInfo> GetInstalledBrowsers();
     IReadOnlyList<BrowserProfileInfo> GetProfiles(string browserId);
     bool LaunchUrl(string url, string? browserId = null, string? profileId = null, bool newWindow = false);
+}
+
+public interface IMacroService
+{
+    bool IsRecording { get; }
+    event Action<MacroEvent>? EventCaptured;
+    void StartRecording();
+    MacroPayload StopRecording();
+    Task PlayMacroAsync(MacroPayload macro, double speedMultiplier = 1.0, System.Threading.CancellationToken cancellationToken = default);
 }

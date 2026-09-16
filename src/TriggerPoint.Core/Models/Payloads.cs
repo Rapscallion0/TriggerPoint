@@ -20,6 +20,9 @@ public sealed class ActionPayload
     public WorkflowMode WorkflowMode { get; set; } = WorkflowMode.Visual;
     public List<WorkflowStep> WorkflowSteps { get; set; } = [];
     public string ScriptSource { get; set; } = string.Empty;
+
+    // Macro execution properties
+    public MacroPayload Macro { get; set; } = new();
 }
 
 public sealed class WorkflowPromptField
@@ -103,6 +106,17 @@ public sealed class WorkflowStep
     // ExecuteAction properties
     public Guid? TargetItemId { get; set; }
 
+    // Dialog properties
+    public string DialogTitle { get; set; } = "Notification";
+    public string DialogMessage { get; set; } = "Proceed with workflow?";
+    public WorkflowDialogButtons DialogButtons { get; set; } = WorkflowDialogButtons.OkCancel;
+    public WorkflowDialogIcon DialogIcon { get; set; } = WorkflowDialogIcon.Information;
+    public string DialogConfirmText { get; set; } = string.Empty;
+    public string DialogCancelText { get; set; } = string.Empty;
+
+    // Macro properties
+    public MacroPayload Macro { get; set; } = new();
+
     public WorkflowStep Clone()
     {
         return new WorkflowStep
@@ -139,7 +153,56 @@ public sealed class WorkflowStep
             SnippetTemplate = SnippetTemplate,
             DelayMs = DelayMs,
             InlineScript = InlineScript,
-            TargetItemId = TargetItemId
+            TargetItemId = TargetItemId,
+            DialogTitle = DialogTitle,
+            DialogMessage = DialogMessage,
+            DialogButtons = DialogButtons,
+            DialogIcon = DialogIcon,
+            DialogConfirmText = DialogConfirmText,
+            DialogCancelText = DialogCancelText,
+            Macro = Macro?.Clone() ?? new MacroPayload()
+        };
+    }
+}
+
+public sealed class MacroEvent
+{
+    public MacroEventType Type { get; set; } = MacroEventType.Delay;
+    public int KeyCode { get; set; }
+    public string? KeyName { get; set; }
+    public MacroMouseButton MouseButton { get; set; } = MacroMouseButton.Left;
+    public int X { get; set; }
+    public int Y { get; set; }
+    public int DelayMs { get; set; }
+
+    public MacroEvent Clone()
+    {
+        return new MacroEvent
+        {
+            Type = Type,
+            KeyCode = KeyCode,
+            KeyName = KeyName,
+            MouseButton = MouseButton,
+            X = X,
+            Y = Y,
+            DelayMs = DelayMs
+        };
+    }
+}
+
+public sealed class MacroPayload
+{
+    public List<MacroEvent> Events { get; set; } = [];
+    public int RepeatCount { get; set; } = 1;
+    public double PlaybackSpeed { get; set; } = 1.0;
+
+    public MacroPayload Clone()
+    {
+        return new MacroPayload
+        {
+            Events = Events.Select(e => e.Clone()).ToList(),
+            RepeatCount = RepeatCount,
+            PlaybackSpeed = PlaybackSpeed
         };
     }
 }

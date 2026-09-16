@@ -32,6 +32,7 @@ public partial class App : Application
     public IConfigRepository? Repository => _repository;
     private ILogManagerService? _logManagerService;
     private Serilog.Core.LoggingLevelSwitch _levelSwitch = new();
+    private IReadOnlyList<TriggerItem> _cachedItems = [];
 
     public static List<TriggerItem> CreateVirtualApplicationItems(AppSettings? settings)
     {
@@ -170,6 +171,21 @@ public partial class App : Application
 
         // 7. Setup Settings Window
         var contextFilterService = _serviceProvider.GetRequiredService<IContextFilterService>();
+        contextFilterService.SetAllItemsProvider(() =>
+        {
+            if (_cachedItems.Count == 0 && _repository != null)
+            {
+                try
+                {
+                    _cachedItems = _repository.LoadAsync().GetAwaiter().GetResult();
+                }
+                catch
+                {
+                    // fallback to empty if repository read fails synchronously
+                }
+            }
+            return _cachedItems;
+        });
         var workflowExecutor = _serviceProvider.GetRequiredService<IWorkflowExecutor>();
         var browserDetectionService = _serviceProvider.GetRequiredService<IBrowserDetectionService>();
 
@@ -216,7 +232,8 @@ public partial class App : Application
             return await ExecuteItemOrFolderAsync(targetItem, hwnd);
         };
 
-        _settingsWindow = new SettingsWindow(_repository, _shortcutListener, _executor, contextFilterService, _logManagerService, workflowExecutor, browserDetectionService);
+        var macroService = _serviceProvider.GetRequiredService<IMacroService>();
+        _settingsWindow = new SettingsWindow(_repository, _shortcutListener, _executor, contextFilterService, _logManagerService, workflowExecutor, browserDetectionService, macroService);
         MainWindow = _settingsWindow;
 
         // 8. Startup Recycle Bin Purge
@@ -231,6 +248,7 @@ public partial class App : Application
 
         // 9. Load and register hotkeys (including global application shortcuts)
         var items = await _repository.LoadAsync();
+        _cachedItems = items;
         var allItems = new List<TriggerItem>(items);
         allItems.AddRange(CreateVirtualApplicationItems(appSettings));
         _shortcutListener.RegisterAll(allItems);
@@ -294,6 +312,7 @@ public partial class App : Application
         services.AddSingleton<IBrowserDetectionService, BrowserDetectionService>();
         services.AddSingleton<IScriptEngineService, JintScriptEngineService>();
         services.AddSingleton<IWorkflowExecutor, WorkflowExecutor>();
+        services.AddSingleton<IMacroService, Win32MacroService>();
         services.AddSingleton<IActionExecutor, ShellActionExecutor>();
         services.AddSingleton<IToastNotificationService, ToastNotificationService>();
     }
@@ -325,13 +344,10 @@ public partial class App : Application
                 return;
             }
 
-            if (item.PresentationMode == PresentationMode.CursorMenu || item.PresentationMode == PresentationMode.CommandPalette)
+            var filterService = _serviceProvider?.GetService<IContextFilterService>();
+            if (filterService != null && !filterService.ShouldExecute(item, _cachedItems))
             {
-                var filterService = _serviceProvider?.GetService<IContextFilterService>();
-                if (filterService != null && !filterService.ShouldExecute(item))
-                {
-                    return;
-                }
+                return;
             }
 
             switch (item.PresentationMode)
@@ -364,7 +380,8 @@ public partial class App : Application
 
             await Dispatcher.InvokeAsync(() =>
             {
-                var menu = new CursorContextMenuView(allItems, _executor, triggerItem, targetHwnd);
+                var filterService = _serviceProvider?.GetService<IContextFilterService>();
+                var menu = new CursorContextMenuView(allItems, _executor, triggerItem, targetHwnd, filterService);
                 menu.Show();
                 menu.Activate();
                 try

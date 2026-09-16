@@ -205,6 +205,7 @@ public partial class ApplicationSettingsWindow : Window
             };
 
             ValidateOnStartupCheck.IsChecked = _currentSettings.ValidateShortcutsOnStartup;
+            ConfirmRevertChangesCheck.IsChecked = _currentSettings.ConfirmRevertChanges;
 
             // Populate Global Shortcuts
             OpenSettingsHotkeyRecorder.Binding = _currentSettings.OpenSettingsHotkey;
@@ -424,6 +425,7 @@ public partial class ApplicationSettingsWindow : Window
                 _ => WindowStartupPlacement.RememberLast
             };
             _currentSettings.ValidateShortcutsOnStartup = ValidateOnStartupCheck.IsChecked == true;
+            _currentSettings.ConfirmRevertChanges = ConfirmRevertChangesCheck.IsChecked == true;
             _currentSettings.OpenSettingsHotkey = openSettingsHotkey;
             _currentSettings.CommandPaletteHotkey = cmdPaletteHotkey;
             _currentSettings.RecycleBinRetentionDays = recycleDays;
