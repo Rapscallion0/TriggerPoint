@@ -1,0 +1,147 @@
+<Window x:Class="TriggerPoint.UI.Views.WorkflowTemplateEditorDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Workflow Template Editor"
+        Width="520" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        KeyDown="Window_KeyDown">
+
+    <Border Background="{DynamicResource BgSecondaryBrush}"
+            BorderBrush="{DynamicResource BorderBrush}"
+            BorderThickness="1"
+            CornerRadius="10"
+            Margin="10">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="24" ShadowDepth="4" Opacity="0.4" Direction="270"/>
+        </Border.Effect>
+
+        <Grid Margin="20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/> <!-- Title Bar -->
+                <RowDefinition Height="Auto"/> <!-- Form Fields -->
+                <RowDefinition Height="Auto"/> <!-- Action Buttons -->
+            </Grid.RowDefinitions>
+
+            <!-- Title Bar -->
+            <Grid Grid.Row="0" Margin="0,0,0,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <TextBlock x:Name="DialogTitleText"
+                               Text="Save as Workflow Template" 
+                               FontSize="16" 
+                               FontWeight="Bold" 
+                               Foreground="{DynamicResource TextPrimaryBrush}"/>
+                    <TextBlock x:Name="DialogSubtitleText"
+                               Text="Set title, category, and description for this template." 
+                               FontSize="12" 
+                               Foreground="{DynamicResource TextSecondaryBrush}" 
+                               Margin="0,2,0,0"/>
+                </StackPanel>
+                <Button Grid.Column="1" 
+                        Content="✕" 
+                        Style="{StaticResource WindowControlButtonStyle}" 
+                        Width="28" Height="28" 
+                        Click="CancelBtn_Click"/>
+            </Grid>
+
+            <!-- Form Fields -->
+            <StackPanel Grid.Row="1" Margin="0,0,0,16">
+                <!-- Title Field -->
+                <TextBlock Text="Template Title *" 
+                           FontSize="11" 
+                           FontWeight="SemiBold" 
+                           Foreground="{DynamicResource TextSecondaryBrush}" 
+                           Margin="0,0,0,4"/>
+                <TextBox x:Name="TitleBox" 
+                         Style="{StaticResource ModernTextBoxStyle}" 
+                         Height="34" 
+                         Margin="0,0,0,12"
+                         TextChanged="FormInput_Changed"/>
+
+                <!-- Category Field (Editable ComboBox) -->
+                <TextBlock Text="Category *" 
+                           FontSize="11" 
+                           FontWeight="SemiBold" 
+                           Foreground="{DynamicResource TextSecondaryBrush}" 
+                           Margin="0,0,0,4"/>
+                <ComboBox x:Name="CategoryBox" 
+                          IsEditable="True" 
+                          Height="34" 
+                          Margin="0,0,0,12"
+                          TextBoxBase.TextChanged="FormInput_Changed"/>
+                <TextBlock Text="Select an existing category from the dropdown or type a new category name." 
+                           FontSize="10.5" 
+                           Foreground="{DynamicResource TextSecondaryBrush}" 
+                           Margin="2,-8,0,12"/>
+
+                <!-- Description Field -->
+                <TextBlock Text="Description" 
+                           FontSize="11" 
+                           FontWeight="SemiBold" 
+                           Foreground="{DynamicResource TextSecondaryBrush}" 
+                           Margin="0,0,0,4"/>
+                <TextBox x:Name="DescriptionBox" 
+                         Style="{StaticResource ModernTextBoxStyle}" 
+                         Height="68" 
+                         AcceptsReturn="True" 
+                         TextWrapping="Wrap" 
+                         VerticalScrollBarVisibility="Auto"
+                         Margin="0,0,0,12"/>
+
+                <!-- Steps Information Badge & Update Option -->
+                <Border Background="{DynamicResource BgInputBrush}" 
+                        BorderBrush="{DynamicResource BorderSubtleBrush}" 
+                        BorderThickness="1" 
+                        CornerRadius="6" 
+                        Padding="10,8">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                            <TextBlock x:Name="StepSummaryText" 
+                                       Text="Pipeline: 0 steps included" 
+                                       FontSize="11" 
+                                       FontWeight="SemiBold" 
+                                       Foreground="{DynamicResource TextPrimaryBrush}"/>
+                            <TextBlock Text="Steps will be cloned into workflows when this template is used." 
+                                       FontSize="10" 
+                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        </StackPanel>
+                        <Button Grid.Column="1" 
+                                x:Name="UpdateStepsFromWorkflowBtn" 
+                                Content="Update Steps from Current" 
+                                Style="{StaticResource SecondaryButtonStyle}" 
+                                FontSize="10.5" 
+                                Padding="8,4" 
+                                Visibility="Collapsed" 
+                                Click="UpdateStepsFromWorkflowBtn_Click"/>
+                    </Grid>
+                </Border>
+            </StackPanel>
+
+            <!-- Action Buttons -->
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Cancel" 
+                        Style="{StaticResource SecondaryButtonStyle}" 
+                        Width="85" Height="32" 
+                        Margin="0,0,8,0" 
+                        Click="CancelBtn_Click"/>
+                <Button x:Name="SaveBtn" 
+                        Content="Save Template" 
+                        Style="{StaticResource AccentButtonStyle}" 
+                        Width="120" Height="32" 
+                        Click="SaveBtn_Click"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

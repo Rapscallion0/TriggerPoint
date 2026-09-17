@@ -7,19 +7,83 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using Microsoft.Win32;
 using TriggerPoint.Core.Models;
 using TriggerPoint.Core.Services;
+using TriggerPoint.Infrastructure.Services;
+using TriggerPoint.Infrastructure.Win32;
 using TriggerPoint.UI.Theme;
 using ICSharpCode.AvalonEdit;
 using ICSharpCode.AvalonEdit.Highlighting;
 
 namespace TriggerPoint.UI.Views;
 
+public class WorkflowStepDragData
+{
+    public WorkflowStep Step { get; }
+    public List<WorkflowStep> SourceList { get; }
+    public WorkflowStep? ParentIfStep { get; }
+
+    public WorkflowStepDragData(WorkflowStep step, List<WorkflowStep> sourceList, WorkflowStep? parentIfStep = null)
+    {
+        Step = step;
+        SourceList = sourceList;
+        ParentIfStep = parentIfStep;
+    }
+}
+
 public partial class SettingsWindow
 {
+    public static readonly DependencyProperty IsWorkflowDropTargetProperty =
+        DependencyProperty.RegisterAttached(
+            "IsWorkflowDropTarget",
+            typeof(bool),
+            typeof(SettingsWindow),
+            new PropertyMetadata(false));
+
+    public static void SetIsWorkflowDropTarget(UIElement element, bool value) =>
+        element.SetValue(IsWorkflowDropTargetProperty, value);
+
+    public static bool GetIsWorkflowDropTarget(UIElement element) =>
+        (bool)element.GetValue(IsWorkflowDropTargetProperty);
+
+    private static bool IsCursorPhysicallyOver(FrameworkElement element)
+    {
+        if (!element.IsLoaded || !element.IsVisible || element.ActualWidth <= 0 || element.ActualHeight <= 0)
+            return false;
+
+        if (!NativeMethods.GetCursorPos(out var pt)) return false;
+
+        try
+        {
+            Point local = element.PointFromScreen(new Point(pt.X, pt.Y));
+            return local.X >= 0 && local.Y >= 0 && local.X < element.ActualWidth && local.Y < element.ActualHeight;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private Guid? _activeWorkflowStepId;
+
+    // Step Clipboard State
+    private static WorkflowStep? _stepClipboard;
+    private static bool _stepClipboardIsCut;
+    private static List<WorkflowStep>? _stepClipboardSourceList;
+    private static WorkflowStep? _stepClipboardParentIfStep;
+
+    // Drag and Drop tracking for Workflow Steps
+    private Point? _workflowStepDragStartPoint;
+    private WorkflowStepDragData? _draggedStepData;
+    private System.Windows.Threading.DispatcherTimer? _workflowDragScrollTimer;
+    private Point _lastWorkflowDragScreenPoint;
+
+    private static readonly Geometry _arrowUpGeometry = Geometry.Parse("M 7 14 L 7 5 L 3.5 8.5 L 2 7 L 8 1 L 14 7 L 12.5 8.5 L 9 5 L 9 14 Z");
+    private static readonly Geometry _arrowDownGeometry = Geometry.Parse("M 7 2 L 7 11 L 3.5 7.5 L 2 9 L 8 15 L 14 9 L 12.5 7.5 L 9 11 L 9 2 Z");
+    private static readonly Geometry _arrowBranchGeometry = Geometry.Parse("M 3 3 L 3 10 A 3 3 0 0 0 6 13 L 11 13 L 9 15 L 10.5 16.5 L 15 12 L 10.5 7.5 L 9 9 L 11 11 L 6 11 A 1 1 0 0 1 5 10 L 5 3 Z");
 
     private void SwitchToVisualMode()
     {
@@ -138,11 +202,11 @@ public partial class SettingsWindow
 
     private void UpdateWorkflowPresetsVisibility()
     {
-        if (WorkflowPresetsBtn == null) return;
         bool hasSteps = _selectedItem?.Payload.WorkflowSteps != null && _selectedItem.Payload.WorkflowSteps.Count > 0;
-        bool hasScript = !string.IsNullOrWhiteSpace(_selectedItem?.Payload.ScriptSource);
-        bool hasContent = hasSteps || hasScript;
-        WorkflowPresetsBtn.Visibility = hasContent ? Visibility.Collapsed : Visibility.Visible;
+        if (SaveWorkflowAsTemplateBtn != null)
+        {
+            SaveWorkflowAsTemplateBtn.Visibility = hasSteps ? Visibility.Visible : Visibility.Collapsed;
+        }
     }
 
     private void WorkflowToggleAllExpandBtn_Click(object sender, RoutedEventArgs e)
@@ -275,6 +339,7 @@ public partial class SettingsWindow
     private void RebuildWorkflowStepCards(Guid? stepIdToFocus = null)
     {
         UpdateWorkflowPresetsVisibility();
+        RebuildWorkflowVariablesUI();
         if (WorkflowStepsHost == null) return;
         WorkflowStepsHost.Children.Clear();
 
@@ -289,6 +354,19 @@ public partial class SettingsWindow
 
         var steps = _selectedItem.Payload.WorkflowSteps;
         var definedVariables = new List<string>();
+
+        // Pre-populate with workflow-level constants/variables
+        if (_selectedItem?.Payload?.WorkflowVariables != null)
+        {
+            foreach (var v in _selectedItem.Payload.WorkflowVariables)
+            {
+                if (!string.IsNullOrWhiteSpace(v.Name))
+                {
+                    definedVariables.Add(v.Name.Trim());
+                }
+            }
+        }
+
         FrameworkElement? elementToFocus = null;
 
         if (stepIdToFocus.HasValue)
@@ -314,6 +392,23 @@ public partial class SettingsWindow
             card.Tag = step;
             card.Margin = new Thickness(0, 10, 0, 10);
             stepWrapperGrid.Children.Add(card);
+
+            // Drop indicators for visual feedback without card border jump
+            var accentBrush = Application.Current.TryFindResource("WorkflowBrush") as Brush ?? Brushes.Purple;
+            var topIndicator = CreateDropIndicatorLine(accentBrush);
+            topIndicator.VerticalAlignment = VerticalAlignment.Top;
+            topIndicator.Margin = new Thickness(0, 7, 0, 0);
+            stepWrapperGrid.Children.Add(topIndicator);
+
+            var bottomIndicator = CreateDropIndicatorLine(accentBrush);
+            bottomIndicator.VerticalAlignment = VerticalAlignment.Bottom;
+            bottomIndicator.Margin = new Thickness(0, 0, 0, 7);
+            stepWrapperGrid.Children.Add(bottomIndicator);
+
+            if (_selectedItem?.Payload.WorkflowSteps != null)
+            {
+                WireWorkflowStepDropTarget(card, step, _selectedItem.Payload.WorkflowSteps, null, topIndicator, bottomIndicator, accentBrush);
+            }
 
             // 2. Top insertion pill: "+ Add step before" (intersects top border line)
             var topPill = CreateStepInsertionPill("Add step before", i, step.Id);
@@ -354,6 +449,13 @@ public partial class SettingsWindow
                     definedVariables.Add(step.VariableName.Trim());
                 }
             }
+            else if (step.StepType == WorkflowStepType.SetVariable)
+            {
+                if (!string.IsNullOrWhiteSpace(step.SetVariableName))
+                {
+                    definedVariables.Add(step.SetVariableName.Trim());
+                }
+            }
             else if (step.StepType == WorkflowStepType.EnsureDirectory)
             {
                 var folderVar = string.IsNullOrWhiteSpace(step.VariableName) ? "folder" : step.VariableName.Trim();
@@ -363,6 +465,29 @@ public partial class SettingsWindow
             {
                 var dlgVar = string.IsNullOrWhiteSpace(step.VariableName) ? "dialogResult" : step.VariableName.Trim();
                 definedVariables.Add(dlgVar);
+            }
+            else if (step.StepType == WorkflowStepType.IfCondition)
+            {
+                if (step.ThenSteps != null)
+                {
+                    foreach (var sub in step.ThenSteps)
+                    {
+                        if (sub.StepType == WorkflowStepType.SetVariable && !string.IsNullOrWhiteSpace(sub.SetVariableName))
+                        {
+                            definedVariables.Add(sub.SetVariableName.Trim());
+                        }
+                    }
+                }
+                if (step.ElseSteps != null)
+                {
+                    foreach (var sub in step.ElseSteps)
+                    {
+                        if (sub.StepType == WorkflowStepType.SetVariable && !string.IsNullOrWhiteSpace(sub.SetVariableName))
+                        {
+                            definedVariables.Add(sub.SetVariableName.Trim());
+                        }
+                    }
+                }
             }
         }
 
@@ -440,6 +565,63 @@ public partial class SettingsWindow
             }
         };
 
+        pill.AllowDrop = true;
+        SetIsWorkflowDropTarget(pill, true);
+        pill.PreviewDragEnter += (s, e) =>
+        {
+            if (e.Data.GetDataPresent("WorkflowStepDragData"))
+            {
+                UpdateWorkflowGhostPosition(e);
+                e.Effects = DragDropEffects.Move;
+                e.Handled = true;
+            }
+        };
+        pill.PreviewDragOver += (s, e) =>
+        {
+            if (e.Data.GetDataPresent("WorkflowStepDragData"))
+            {
+                UpdateWorkflowGhostPosition(e);
+                var accent = Application.Current.TryFindResource("WorkflowBrush") as Brush ?? Brushes.Purple;
+                pill.BorderBrush = accent;
+                pill.BorderThickness = new Thickness(2);
+                text.Foreground = accent;
+                SetWorkflowGhostAction($"Insert at position #{insertIndex + 1}", _arrowDownGeometry, accent);
+                e.Effects = DragDropEffects.Move;
+                e.Handled = true;
+            }
+        };
+
+        pill.PreviewDragLeave += (s, e) =>
+        {
+            if (!IsCursorPhysicallyOver(pill))
+            {
+                pill.BorderThickness = new Thickness(1);
+                bool active = _activeWorkflowStepId == stepId;
+                pill.BorderBrush = active
+                    ? (Application.Current.TryFindResource("WorkflowBrush") as Brush ?? Brushes.Purple)
+                    : (Application.Current.TryFindResource("BorderSubtleBrush") as Brush ?? Brushes.Gray);
+                text.Foreground = active
+                    ? (Application.Current.TryFindResource("WorkflowBrush") as Brush ?? Brushes.Purple)
+                    : (Application.Current.TryFindResource("TextSecondaryBrush") as Brush ?? Brushes.Gray);
+                ClearWorkflowGhostAction();
+            }
+        };
+
+        pill.PreviewDrop += (s, e) =>
+        {
+            pill.BorderThickness = new Thickness(1);
+            ClearWorkflowGhostAction();
+            if (e.Data.GetDataPresent("WorkflowStepDragData"))
+            {
+                var dragData = e.Data.GetData("WorkflowStepDragData") as WorkflowStepDragData;
+                if (dragData != null && _selectedItem?.Payload.WorkflowSteps != null)
+                {
+                    ExecuteStepDrop(dragData, _selectedItem.Payload.WorkflowSteps, insertIndex);
+                    e.Handled = true;
+                }
+            }
+        };
+
         pill.MouseLeftButtonDown += (s, e) =>
         {
             e.Handled = true;
@@ -452,8 +634,26 @@ public partial class SettingsWindow
     private void ShowAddStepContextMenu(FrameworkElement target, int insertIndex)
     {
         var menu = new ContextMenu();
+
+        if (_stepClipboard != null && _selectedItem?.Payload.WorkflowSteps != null)
+        {
+            var parts = SplitIconAndName(GetStepTypeIconAndName(_stepClipboard.StepType));
+            var pasteItem = new MenuItem
+            {
+                Header = $"📋  Paste Step: \"{_stepClipboard.Name}\" ({parts.Icon})",
+                FontSize = 12,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = Application.Current.TryFindResource("WorkflowBrush") as Brush ?? Brushes.Purple
+            };
+            pasteItem.Click += (s, e) => PasteStepAt(_selectedItem.Payload.WorkflowSteps, insertIndex);
+            menu.Items.Add(pasteItem);
+            menu.Items.Add(new Separator());
+        }
+
         var types = new (string Title, WorkflowStepType Type, string Icon)[]
         {
+            ("Set Variable", WorkflowStepType.SetVariable, "🔤"),
+            ("If / Condition Branch", WorkflowStepType.IfCondition, "🔀"),
             ("Prompt for User Input", WorkflowStepType.Prompt, "💬"),
             ("Show Dialog / Confirmation", WorkflowStepType.Dialog, "💬"),
             ("Open URL / Web Page", WorkflowStepType.OpenUrl, "🌐"),
@@ -506,7 +706,24 @@ public partial class SettingsWindow
             IsCollapsed = false
         };
 
-        if (stepType == WorkflowStepType.Prompt)
+        if (stepType == WorkflowStepType.SetVariable)
+        {
+            step.Name = "Set Variable";
+            step.SetVariableName = "myVar";
+            step.SetVariableValue = string.Empty;
+        }
+        else if (stepType == WorkflowStepType.IfCondition)
+        {
+            step.Name = "If Condition";
+            step.ConditionLeft = string.Empty;
+            step.ConditionOperator = ConditionOperator.Equals;
+            step.ConditionRight = string.Empty;
+            step.ConditionIgnoreCase = true;
+            step.HasElseBranch = false;
+            step.ThenSteps = [];
+            step.ElseSteps = [];
+        }
+        else if (stepType == WorkflowStepType.Prompt)
         {
             step.PromptTitle = "User Input Required";
             step.PromptSubtitle = "Provide the values below to proceed:";
@@ -593,13 +810,30 @@ public partial class SettingsWindow
         headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        // Left Header: Index badge + Type icon + Summary badge
+        // Left Header: Drag grip + Index badge + Type icon + Summary badge
         var leftHeader = new StackPanel 
         { 
             Orientation = Orientation.Horizontal, 
             VerticalAlignment = VerticalAlignment.Center,
             ToolTip = "Double-click to " + (step.IsCollapsed ? "expand" : "collapse")
         };
+
+        if (_selectedItem?.Payload.WorkflowSteps != null)
+        {
+            var dragGrip = new TextBlock
+            {
+                Text = "⠿",
+                FontSize = 13.5,
+                FontWeight = FontWeights.Bold,
+                Foreground = Application.Current.TryFindResource("TextMutedBrush") as Brush ?? Brushes.Gray,
+                Cursor = Cursors.SizeAll,
+                Margin = new Thickness(0, 0, 6, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                ToolTip = "Drag to reorder or move into/out of conditions"
+            };
+            WireWorkflowStepDragSource(dragGrip, step, _selectedItem.Payload.WorkflowSteps, null);
+            leftHeader.Children.Add(dragGrip);
+        }
 
         // Index badge: Prominent purple pill sequence indicator
         var indexBadge = new Border
@@ -686,16 +920,71 @@ public partial class SettingsWindow
         // ⋮ Kebab overflow menu
         var kebabMenu = new ContextMenu();
 
-        var testItem = new MenuItem { Header = "▶  Test Step", FontSize = 12 };
-        testItem.Click += async (s, e) => await TestSingleWorkflowStepAsync(step, stepIndex);
-        kebabMenu.Items.Add(testItem);
+        if (step.StepType == WorkflowStepType.IfCondition)
+        {
+            var testCondItem = new MenuItem { Header = "▶  Test Condition Live", FontSize = 12 };
+            testCondItem.Click += (s, e) => TestConditionLive(step);
+            kebabMenu.Items.Add(testCondItem);
+        }
+        else
+        {
+            var testItem = new MenuItem { Header = "▶  Test Step", FontSize = 12 };
+            testItem.Click += async (s, e) => await TestSingleWorkflowStepAsync(step, stepIndex);
+            kebabMenu.Items.Add(testItem);
+        }
 
-        var dupItem = new MenuItem { Header = "⧉  Duplicate", FontSize = 12 };
+        // Cut / Copy
+        if (_selectedItem?.Payload.WorkflowSteps != null)
+        {
+            var cutItem = new MenuItem { Header = "✂  Cut Step", FontSize = 12 };
+            cutItem.Click += (s, e) => CutStep(step, _selectedItem.Payload.WorkflowSteps, null);
+            kebabMenu.Items.Add(cutItem);
+
+            var copyItem = new MenuItem { Header = "⧉  Copy Step", FontSize = 12 };
+            copyItem.Click += (s, e) => CopyStep(step);
+            kebabMenu.Items.Add(copyItem);
+        }
+
+        var dupItem = new MenuItem { Header = "📄  Duplicate", FontSize = 12 };
         dupItem.Click += (s, e) => DuplicateStep(step);
         kebabMenu.Items.Add(dupItem);
 
-        // Convert to Inline Script — hidden for RunScript steps (already a script)
-        if (step.StepType != WorkflowStepType.RunScript)
+        // Move into Condition ▾ (if any other condition steps exist)
+        if (_selectedItem?.Payload.WorkflowSteps != null)
+        {
+            var ifSteps = _selectedItem.Payload.WorkflowSteps
+                .Select((s, i) => (Step: s, Index: i + 1))
+                .Where(x => x.Step.StepType == WorkflowStepType.IfCondition && x.Step.Id != step.Id)
+                .ToList();
+
+            if (ifSteps.Count > 0)
+            {
+                var moveCondSub = new MenuItem { Header = "↳  Move into Condition ▾", FontSize = 12 };
+                foreach (var ifItem in ifSteps)
+                {
+                    var targetIf = ifItem.Step;
+                    var condMenu = new MenuItem
+                    {
+                        Header = $"Step {ifItem.Index}: {GetStepLiveSummary(targetIf)}",
+                        FontSize = 11.5
+                    };
+
+                    var intoThen = new MenuItem { Header = "↳ Into THEN Branch", FontSize = 11.5 };
+                    intoThen.Click += (s, e) => MoveStepToConditionBranch(step, _selectedItem.Payload.WorkflowSteps, targetIf, isElse: false);
+                    condMenu.Items.Add(intoThen);
+
+                    var intoElse = new MenuItem { Header = "↳ Into ELSE Branch", FontSize = 11.5 };
+                    intoElse.Click += (s, e) => MoveStepToConditionBranch(step, _selectedItem.Payload.WorkflowSteps, targetIf, isElse: true);
+                    condMenu.Items.Add(intoElse);
+
+                    moveCondSub.Items.Add(condMenu);
+                }
+                kebabMenu.Items.Add(moveCondSub);
+            }
+        }
+
+        // Convert to Inline Script — hidden for RunScript steps (already a script) and IfCondition
+        if (step.StepType != WorkflowStepType.RunScript && step.StepType != WorkflowStepType.IfCondition)
         {
             var convertItem = new MenuItem { Header = "📜  Convert to Inline Script", FontSize = 12 };
             convertItem.Click += (s, e) => ConvertStepToScript(step);
@@ -2072,43 +2361,300 @@ public partial class SettingsWindow
                 container.Children.Add(macroEditor);
                 break;
             }
+
+            case WorkflowStepType.SetVariable:
+            {
+                var grid = new Grid { Margin = new Thickness(0, 4, 0, 8) };
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(200) });
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+                // Variable Name
+                var nameStack = new StackPanel();
+                nameStack.Children.Add(new TextBlock 
+                { 
+                    Text = "Variable Name", 
+                    FontSize = 11, 
+                    FontWeight = FontWeights.SemiBold, 
+                    Margin = new Thickness(0, 0, 0, 3) 
+                });
+                var nameBox = new TextBox
+                {
+                    Text = step.SetVariableName ?? string.Empty,
+                    Height = 34,
+                    Padding = new Thickness(8, 4, 8, 4),
+                    VerticalContentAlignment = VerticalAlignment.Center,
+                    Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style,
+                    Tag = "e.g. buildDir, ticket"
+                };
+                nameBox.TextChanged += (s, e) =>
+                {
+                    step.SetVariableName = nameBox.Text.Trim();
+                    summaryText.Text = GetStepLiveSummary(step);
+                    OnFormEdited();
+                };
+                nameStack.Children.Add(nameBox);
+                Grid.SetColumn(nameStack, 0);
+                grid.Children.Add(nameStack);
+
+                // Variable Value
+                var valStack = new StackPanel();
+                valStack.Children.Add(new TextBlock 
+                { 
+                    Text = "Value Expression (%ENV% and {tokens} supported)", 
+                    FontSize = 11, 
+                    FontWeight = FontWeights.SemiBold, 
+                    Margin = new Thickness(0, 0, 0, 3) 
+                });
+                var valBox = new TextBox
+                {
+                    Text = step.SetVariableValue ?? string.Empty,
+                    Height = 34,
+                    Padding = new Thickness(8, 4, 8, 4),
+                    VerticalContentAlignment = VerticalAlignment.Center,
+                    Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style,
+                    Tag = "e.g. %USERPROFILE%\\Projects or {clipboard:trim}"
+                };
+                valBox.TextChanged += (s, e) =>
+                {
+                    step.SetVariableValue = valBox.Text;
+                    summaryText.Text = GetStepLiveSummary(step);
+                    OnFormEdited();
+                };
+                valStack.Children.Add(valBox);
+                RenderVariableChips(valStack, valBox, availableVariables);
+
+                Grid.SetColumn(valStack, 2);
+                grid.Children.Add(valStack);
+
+                container.Children.Add(grid);
+                break;
+            }
+
+            case WorkflowStepType.IfCondition:
+            {
+                RenderIfConditionControls(container, step, summaryText, availableVariables);
+                break;
+            }
+        }
+    }
+
+    private void ShowVariablePickerDialog(TextBox targetBox, List<string>? availableVariables = null)
+    {
+        var dialog = new VariablePickerDialog(availableVariables)
+        {
+            Owner = Window.GetWindow(this) ?? Application.Current.MainWindow
+        };
+
+        if (dialog.ShowDialog() == true && !string.IsNullOrEmpty(dialog.SelectedToken))
+        {
+            InsertTokenIntoBox(targetBox, dialog.SelectedToken);
         }
     }
 
     private void RenderVariableChips(StackPanel container, TextBox targetBox, List<string> availableVariables)
     {
-        if (availableVariables == null || availableVariables.Count == 0) return;
-
         var wrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 6) };
-        wrap.Children.Add(new TextBlock
-        {
-            Text = "Insert variable: ",
-            FontSize = 10.5,
-            Foreground = Application.Current.TryFindResource("TextSecondaryBrush") as Brush ?? Brushes.Gray,
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 4, 0)
-        });
 
-        foreach (var varName in availableVariables)
+        // Unified Token & Environment Variable Dropdown Button
+        var tokenBtn = new Button
         {
-            var pill = new Button
+            Content = "{x} Insert Token / Env ▾",
+            Style = Application.Current.TryFindResource("SecondaryButtonStyle") as Style,
+            FontSize = 10.5,
+            Padding = new Thickness(6, 2, 6, 2),
+            Margin = new Thickness(0, 0, 4, 0),
+            ToolTip = "Insert Windows Environment Variables, Date/Time tokens, Clipboard, or Workflow variables (Click to search & filter, right-click for quick menu)"
+        };
+        tokenBtn.Click += (s, e) => ShowVariablePickerDialog(targetBox, availableVariables);
+        tokenBtn.MouseRightButtonUp += (s, e) =>
+        {
+            ShowTokenAndEnvMenu(tokenBtn, targetBox, availableVariables);
+            e.Handled = true;
+        };
+        wrap.Children.Add(tokenBtn);
+
+        // One-click quick pills for available workflow variables (if any)
+        if (availableVariables != null && availableVariables.Count > 0)
+        {
+            foreach (var varName in availableVariables.Take(5))
             {
-                Content = $"+{{{varName}}}",
-                Tag = $"{{{varName}}}",
-                Style = Application.Current.TryFindResource("SecondaryButtonStyle") as Style,
-                FontSize = 10.5,
-                Padding = new Thickness(6, 2, 6, 2),
-                Margin = new Thickness(2, 0, 2, 0),
-                ToolTip = $"Insert {{{varName}}} into this field"
-            };
-            pill.Click += (s, e) =>
-            {
-                InsertTokenIntoBox(targetBox, $"{{{varName}}}");
-            };
-            wrap.Children.Add(pill);
+                var pill = new Button
+                {
+                    Content = $"+{{{varName}}}",
+                    Tag = $"{{{varName}}}",
+                    Style = Application.Current.TryFindResource("SecondaryButtonStyle") as Style,
+                    FontSize = 10.5,
+                    Padding = new Thickness(5, 2, 5, 2),
+                    Margin = new Thickness(2, 0, 2, 0),
+                    ToolTip = $"Insert {{{varName}}} into this field"
+                };
+                pill.Click += (s, e) =>
+                {
+                    InsertTokenIntoBox(targetBox, $"{{{varName}}}");
+                };
+                wrap.Children.Add(pill);
+            }
         }
 
         container.Children.Add(wrap);
+    }
+
+    private void ShowTokenAndEnvMenu(FrameworkElement target, TextBox targetBox, List<string>? availableVariables = null)
+    {
+        var contextMenu = new ContextMenu();
+
+        var searchItem = new MenuItem
+        {
+            Header = "🔍 Search & Filter Variables / Tokens...",
+            FontWeight = FontWeights.SemiBold
+        };
+        searchItem.Click += (s, e) => ShowVariablePickerDialog(targetBox, availableVariables);
+        contextMenu.Items.Add(searchItem);
+        contextMenu.Items.Add(new Separator());
+
+        var envMenu = new MenuItem { Header = "Windows Environment Variables (%VAR%)" };
+
+        // Submenu 1: User & Profile Paths
+        var userPathsMenu = new MenuItem { Header = "User & Profile Paths" };
+        var userPathVars = new (string Token, string Description)[]
+        {
+            ("%USERPROFILE%", "User home profile directory (C:\\Users\\<user>)"),
+            ("%APPDATA%", "Roaming AppData directory (%APPDATA%)"),
+            ("%LOCALAPPDATA%", "Local AppData directory (%LOCALAPPDATA%)"),
+            ("%TEMP%", "Temporary files directory (%TEMP%)"),
+            ("%TMP%", "Temporary files directory (%TMP%)"),
+            ("%HOMEDRIVE%", "Host drive for user profile (e.g. C:)"),
+            ("%HOMEPATH%", "Home path relative to drive (e.g. \\Users\\<user>)"),
+            ("%PUBLIC%", "Public shared profile directory (C:\\Users\\Public)"),
+            ("%USERNAME%", "Current logon username"),
+            ("%USERDOMAIN%", "Domain or workgroup name")
+        };
+        foreach (var (tok, desc) in userPathVars)
+        {
+            string liveVal = Environment.ExpandEnvironmentVariables(tok);
+            var mItem = new MenuItem { Header = $"{tok}  ({desc})" };
+            if (!string.Equals(liveVal, tok, StringComparison.OrdinalIgnoreCase))
+            {
+                mItem.ToolTip = $"Current Value:\n{liveVal}";
+            }
+            mItem.Click += (s, e) => InsertTokenIntoBox(targetBox, tok);
+            userPathsMenu.Items.Add(mItem);
+        }
+        envMenu.Items.Add(userPathsMenu);
+
+        // Submenu 2: Windows & System Directories
+        var sysPathsMenu = new MenuItem { Header = "Windows & System Directories" };
+        var sysPathVars = new (string Token, string Description)[]
+        {
+            ("%WINDIR%", "Windows installation directory (C:\\Windows)"),
+            ("%SYSTEMROOT%", "Windows root directory (C:\\Windows)"),
+            ("%SYSTEMDRIVE%", "Windows operating system drive (C:)"),
+            ("%PROGRAMFILES%", "64-bit Program Files (C:\\Program Files)"),
+            ("%PROGRAMFILES(X86)%", "32-bit Program Files (C:\\Program Files (x86))"),
+            ("%PROGRAMDATA%", "Shared Application Data directory (C:\\ProgramData)"),
+            ("%ALLUSERSPROFILE%", "All Users Profile directory (C:\\ProgramData)"),
+            ("%COMMONPROGRAMFILES%", "Common Files directory"),
+            ("%COMSPEC%", "Executable path to Command Prompt (cmd.exe)"),
+            ("%PATH%", "Search path for executable files")
+        };
+        foreach (var (tok, desc) in sysPathVars)
+        {
+            string liveVal = Environment.ExpandEnvironmentVariables(tok);
+            var mItem = new MenuItem { Header = $"{tok}  ({desc})" };
+            if (!string.Equals(liveVal, tok, StringComparison.OrdinalIgnoreCase))
+            {
+                mItem.ToolTip = $"Current Value:\n{liveVal}";
+            }
+            mItem.Click += (s, e) => InsertTokenIntoBox(targetBox, tok);
+            sysPathsMenu.Items.Add(mItem);
+        }
+        envMenu.Items.Add(sysPathsMenu);
+
+        // Submenu 3: Hardware & System Info
+        var hardwareMenu = new MenuItem { Header = "Hardware & System Info" };
+        var hwVars = new (string Token, string Description)[]
+        {
+            ("%COMPUTERNAME%", "Host computer network name"),
+            ("%PROCESSOR_ARCHITECTURE%", "CPU architecture (AMD64, ARM64, x86)"),
+            ("%NUMBER_OF_PROCESSORS%", "Logical processor count"),
+            ("%OS%", "Operating system identification")
+        };
+        foreach (var (tok, desc) in hwVars)
+        {
+            string liveVal = Environment.ExpandEnvironmentVariables(tok);
+            var mItem = new MenuItem { Header = $"{tok}  ({desc})" };
+            if (!string.Equals(liveVal, tok, StringComparison.OrdinalIgnoreCase))
+            {
+                mItem.ToolTip = $"Current Value:\n{liveVal}";
+            }
+            mItem.Click += (s, e) => InsertTokenIntoBox(targetBox, tok);
+            hardwareMenu.Items.Add(mItem);
+        }
+        envMenu.Items.Add(hardwareMenu);
+
+        // Submenu 4: Dynamic Live System Environment Variables (alphabetized)
+        try
+        {
+            var liveVars = Environment.GetEnvironmentVariables();
+            var sortedKeys = liveVars.Keys.Cast<string>().OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToList();
+            if (sortedKeys.Count > 0)
+            {
+                envMenu.Items.Add(new Separator());
+                var allLiveMenu = new MenuItem { Header = $"All System Environment Variables ({sortedKeys.Count})" };
+                foreach (var key in sortedKeys)
+                {
+                    string val = liveVars[key]?.ToString() ?? string.Empty;
+                    string token = $"%{key}%";
+                    string preview = val.Length > 40 ? val.Substring(0, 37) + "..." : val;
+                    var mItem = new MenuItem { Header = $"{token}  ({preview})" };
+                    mItem.ToolTip = $"Name: {key}\nValue: {val}";
+                    mItem.Click += (s, e) => InsertTokenIntoBox(targetBox, token);
+                    allLiveMenu.Items.Add(mItem);
+                }
+                envMenu.Items.Add(allLiveMenu);
+            }
+        }
+        catch { }
+
+        contextMenu.Items.Add(envMenu);
+
+        var sysMenu = new MenuItem { Header = "System & Dynamic Tokens" };
+        var sysTokens = new (string Token, string Description)[]
+        {
+            ("{date:yyyy-MM-dd}", "Current date (ISO format)"),
+            ("{date:MM/dd/yyyy}", "Current date (US format)"),
+            ("{time:HH:mm:ss}", "Current time (24h)"),
+            ("{datetime:yyyyMMdd_HHmmss}", "Timestamp for files/backups"),
+            ("{clipboard}", "Current clipboard content"),
+            ("{clipboard:trim}", "Trimmed clipboard content"),
+            ("{guid}", "Unique GUID"),
+            ("{username}", "Windows username ({username})"),
+            ("{machine}", "Computer name ({machine})")
+        };
+        foreach (var (tok, desc) in sysTokens)
+        {
+            var mItem = new MenuItem { Header = $"{tok}  ({desc})" };
+            mItem.Click += (s, e) => InsertTokenIntoBox(targetBox, tok);
+            sysMenu.Items.Add(mItem);
+        }
+        contextMenu.Items.Add(sysMenu);
+
+        if (availableVariables != null && availableVariables.Count > 0)
+        {
+            contextMenu.Items.Add(new Separator());
+            var varMenu = new MenuItem { Header = "Workflow Variables" };
+            foreach (var v in availableVariables)
+            {
+                var mItem = new MenuItem { Header = $"{{{v}}}" };
+                mItem.Click += (s, e) => InsertTokenIntoBox(targetBox, $"{{{v}}}");
+                varMenu.Items.Add(mItem);
+            }
+            contextMenu.Items.Add(varMenu);
+        }
+
+        contextMenu.PlacementTarget = target;
+        contextMenu.IsOpen = true;
     }
 
     private void InsertTokenIntoBox(TextBox box, string token)
@@ -2134,12 +2680,44 @@ public partial class SettingsWindow
 
         box.Text = current.Insert(insertPos, token);
         box.Focus();
-        box.Select(insertPos, token.Length);
+        box.CaretIndex = insertPos + token.Length;
+        box.SelectionLength = 0;
+        FlashHighlightBox(box);
         OnFormEdited();
+    }
+
+    private static void FlashHighlightBox(TextBox box)
+    {
+        if (box == null) return;
+        try
+        {
+            var origBorder = box.BorderBrush;
+            var highlightBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0x8B, 0x5C, 0xF6));
+            box.BorderBrush = highlightBrush;
+
+            var anim = new ColorAnimation
+            {
+                From = Color.FromArgb(0xFF, 0x8B, 0x5C, 0xF6),
+                To = (origBorder as SolidColorBrush)?.Color ?? Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF),
+                Duration = TimeSpan.FromMilliseconds(450),
+                FillBehavior = FillBehavior.Stop
+            };
+            anim.Completed += (s, e) =>
+            {
+                box.BorderBrush = origBorder;
+            };
+            highlightBrush.BeginAnimation(SolidColorBrush.ColorProperty, anim);
+        }
+        catch
+        {
+            // Non-critical animation fallback
+        }
     }
 
     private static string GetStepTypeIconAndName(WorkflowStepType stepType) => stepType switch
     {
+        WorkflowStepType.SetVariable => "🔤 Set Variable",
+        WorkflowStepType.IfCondition => "🔀 If / Branch",
         WorkflowStepType.Prompt => "💬 Prompt for Input",
         WorkflowStepType.Dialog => "💬 Show Confirmation Dialog",
         WorkflowStepType.OpenUrl => "🌐 Open Web URL",
@@ -2155,6 +2733,12 @@ public partial class SettingsWindow
 
     private string GetStepLiveSummary(WorkflowStep step) => step.StepType switch
     {
+        WorkflowStepType.IfCondition => string.IsNullOrWhiteSpace(step.ConditionLeft)
+            ? "No condition specified"
+            : $"If {step.ConditionLeft} {GetOperatorSymbol(step.ConditionOperator)} \"{step.ConditionRight}\" → {step.ThenSteps?.Count ?? 0} then{(step.HasElseBranch ? $", {step.ElseSteps?.Count ?? 0} else" : "")}",
+        WorkflowStepType.SetVariable => string.IsNullOrWhiteSpace(step.SetVariableName)
+            ? "No variable name"
+            : $"{{{step.SetVariableName}}} = {step.SetVariableValue}",
         WorkflowStepType.Prompt => (step.PromptFields != null && step.PromptFields.Count > 0)
             ? (step.PromptFields.Count == 1 
                 ? $"stores into ${{{step.PromptFields[0].VariableName}}}" 
@@ -2178,6 +2762,27 @@ public partial class SettingsWindow
             : "No action or folder selected",
         WorkflowStepType.RunScript => string.IsNullOrWhiteSpace(step.InlineScript) ? "Empty script" : "Custom JavaScript",
         _ => string.Empty
+    };
+
+    private static string GetOperatorSymbol(ConditionOperator op) => op switch
+    {
+        ConditionOperator.Equals => "==",
+        ConditionOperator.NotEquals => "!=",
+        ConditionOperator.Contains => "contains",
+        ConditionOperator.NotContains => "!contains",
+        ConditionOperator.StartsWith => "startsWith",
+        ConditionOperator.EndsWith => "endsWith",
+        ConditionOperator.MatchesRegex => "matches",
+        ConditionOperator.IsEmpty => "is empty",
+        ConditionOperator.IsNotEmpty => "is not empty",
+        ConditionOperator.GreaterThan => ">",
+        ConditionOperator.LessThan => "<",
+        ConditionOperator.GreaterOrEqual => ">=",
+        ConditionOperator.LessOrEqual => "<=",
+        ConditionOperator.FileExists => "file exists",
+        ConditionOperator.DirectoryExists => "folder exists",
+        ConditionOperator.ProcessIsRunning => "process running",
+        _ => "=="
     };
 
     private void MoveStep(WorkflowStep step, int direction)
@@ -2239,12 +2844,36 @@ public partial class SettingsWindow
         OnFormEdited();
     }
 
-    private void AddStepBtn_Click(object sender, RoutedEventArgs e)
+    private void AddFirstStepBtn_Click(object sender, RoutedEventArgs e)
     {
-        if (AddStepContextMenu != null)
+        if (AddFirstStepContextMenu != null && AddFirstStepBtn != null)
         {
-            AddStepContextMenu.PlacementTarget = AddStepBtn;
-            AddStepContextMenu.IsOpen = true;
+            for (int i = AddFirstStepContextMenu.Items.Count - 1; i >= 0; i--)
+            {
+                if (AddFirstStepContextMenu.Items[i] is FrameworkElement fe && Equals(fe.Tag, "DynamicPasteItem"))
+                {
+                    AddFirstStepContextMenu.Items.RemoveAt(i);
+                }
+            }
+
+            if (_stepClipboard != null && _selectedItem?.Payload.WorkflowSteps != null)
+            {
+                var parts = SplitIconAndName(GetStepTypeIconAndName(_stepClipboard.StepType));
+                var pasteItem = new MenuItem
+                {
+                    Header = $"📋  Paste Step: \"{_stepClipboard.Name}\" ({parts.Icon})",
+                    FontSize = 12,
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = Application.Current.TryFindResource("WorkflowBrush") as Brush ?? Brushes.Purple,
+                    Tag = "DynamicPasteItem"
+                };
+                pasteItem.Click += (s, ev) => PasteStepAt(_selectedItem.Payload.WorkflowSteps, 0);
+                AddFirstStepContextMenu.Items.Insert(0, pasteItem);
+                AddFirstStepContextMenu.Items.Insert(1, new Separator { Tag = "DynamicPasteItem" });
+            }
+
+            AddFirstStepContextMenu.PlacementTarget = AddFirstStepBtn;
+            AddFirstStepContextMenu.IsOpen = true;
         }
     }
 
@@ -2256,6 +2885,8 @@ public partial class SettingsWindow
         var tag = (sender as MenuItem)?.Tag?.ToString() ?? "Prompt";
         var stepType = tag switch
         {
+            "SetVariable" => WorkflowStepType.SetVariable,
+            "IfCondition" => WorkflowStepType.IfCondition,
             "OpenUrl" => WorkflowStepType.OpenUrl,
             "EnsureDirectory" => WorkflowStepType.EnsureDirectory,
             "LaunchApp" => WorkflowStepType.LaunchApp,
@@ -2361,64 +2992,27 @@ public partial class SettingsWindow
         UpdateReturnToVisualBtnVisibility();
     }
 
-    private void WorkflowPresetsBtn_Click(object sender, RoutedEventArgs e)
+    private void ChoosePresetTemplateBtn_Click(object sender, RoutedEventArgs e)
     {
-        if (WorkflowPresetsMenu == null) return;
-        WorkflowPresetsMenu.Items.Clear();
+        if (_selectedItem == null) return;
 
-        var presets = WorkflowPresets.GetAll();
-
-        // 1. General & Everyday Productivity Category
-        var genHeader = new MenuItem
+        var dialog = new WorkflowTemplatePickerDialog(
+            _workflowTemplateService,
+            new ConfirmationDialog(),
+            _selectedItem.Payload.WorkflowSteps)
         {
-            Header = "📁 General & Everyday Productivity",
-            FontWeight = FontWeights.Bold,
-            IsEnabled = false
+            Owner = this
         };
-        WorkflowPresetsMenu.Items.Add(genHeader);
 
-        foreach (var preset in presets.Where(p => p.Category == WorkflowPresets.CategoryGeneral))
+        if (dialog.ShowDialog() == true && dialog.SelectedTemplate != null)
         {
-            var item = new MenuItem
-            {
-                Header = preset.Title,
-                ToolTip = preset.Description,
-                Tag = preset
-            };
-            item.Click += PresetMenuItem_Click;
-            WorkflowPresetsMenu.Items.Add(item);
+            ApplyTemplate(dialog.SelectedTemplate);
         }
-
-        WorkflowPresetsMenu.Items.Add(new Separator());
-
-        // 2. Developer & Advanced Category
-        var devHeader = new MenuItem
-        {
-            Header = "⚡ Developer & Advanced Workspaces",
-            FontWeight = FontWeights.Bold,
-            IsEnabled = false
-        };
-        WorkflowPresetsMenu.Items.Add(devHeader);
-
-        foreach (var preset in presets.Where(p => p.Category == WorkflowPresets.CategoryDeveloper))
-        {
-            var item = new MenuItem
-            {
-                Header = preset.Title,
-                ToolTip = preset.Description,
-                Tag = preset
-            };
-            item.Click += PresetMenuItem_Click;
-            WorkflowPresetsMenu.Items.Add(item);
-        }
-
-        WorkflowPresetsMenu.PlacementTarget = WorkflowPresetsBtn;
-        WorkflowPresetsMenu.IsOpen = true;
     }
 
-    private void PresetMenuItem_Click(object sender, RoutedEventArgs e)
+    private void ApplyTemplate(WorkflowPreset preset)
     {
-        if (_selectedItem == null || (sender as MenuItem)?.Tag is not WorkflowPreset preset) return;
+        if (_selectedItem == null) return;
 
         _selectedItem.Payload.WorkflowSteps = preset.Steps.ConvertAll(s => s.Clone());
         _selectedItem.Payload.WorkflowMode = WorkflowMode.Visual;
@@ -2432,7 +3026,33 @@ public partial class SettingsWindow
 
         RebuildWorkflowStepCards();
         UpdateReturnToVisualBtnVisibility();
+        UpdateWorkflowPresetsVisibility();
         OnFormEdited();
+    }
+
+    private void SaveWorkflowAsTemplateBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedItem?.Payload.WorkflowSteps == null || _selectedItem.Payload.WorkflowSteps.Count == 0)
+        {
+            MessageBox.Show("Add at least one visual step to save as a template.", "No Steps", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        CommitCurrentFormChanges();
+
+        var dialog = new WorkflowTemplateEditorDialog(
+            _workflowTemplateService,
+            existingTemplate: null,
+            stepsFromActiveWorkflow: _selectedItem.Payload.WorkflowSteps,
+            suggestedTitle: _selectedItem.Name)
+        {
+            Owner = this
+        };
+
+        if (dialog.ShowDialog() == true && dialog.ResultTemplate != null)
+        {
+            StatusText.Text = $"Workflow template '{dialog.ResultTemplate.Title}' saved.";
+        }
     }
 
     private void ToggleApiDrawerBtn_Click(object sender, RoutedEventArgs e)
@@ -2566,6 +3186,125 @@ public partial class SettingsWindow
         });
     }
 
+    private void RebuildWorkflowVariablesUI()
+    {
+        if (WorkflowVariablesListHost == null || WorkflowVariablesCountText == null) return;
+        WorkflowVariablesListHost.Children.Clear();
+
+        if (_selectedItem?.Payload == null) return;
+        _selectedItem.Payload.WorkflowVariables ??= [];
+
+        var vars = _selectedItem.Payload.WorkflowVariables;
+        WorkflowVariablesCountText.Text = $"Workflow Variables ({vars.Count})";
+
+        for (int i = 0; i < vars.Count; i++)
+        {
+            var v = vars[i];
+            var row = new Grid { Margin = new Thickness(0, 2, 0, 4) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(140) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(8) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(8) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(4) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var nameBox = new TextBox
+            {
+                Text = v.Name ?? string.Empty,
+                Height = 30,
+                Padding = new Thickness(6, 3, 6, 3),
+                VerticalContentAlignment = VerticalAlignment.Center,
+                Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style,
+                Tag = "Variable name"
+            };
+            nameBox.TextChanged += (s, e) =>
+            {
+                v.Name = nameBox.Text.Trim();
+                OnFormEdited();
+            };
+            Grid.SetColumn(nameBox, 0);
+            row.Children.Add(nameBox);
+
+            var valBox = new TextBox
+            {
+                Text = v.Value ?? string.Empty,
+                Height = 30,
+                Padding = new Thickness(6, 3, 6, 3),
+                VerticalContentAlignment = VerticalAlignment.Center,
+                Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style,
+                Tag = "Value (e.g. %USERPROFILE%\\Docs or constant)"
+            };
+            valBox.TextChanged += (s, e) =>
+            {
+                v.Value = valBox.Text;
+                OnFormEdited();
+            };
+            Grid.SetColumn(valBox, 2);
+            row.Children.Add(valBox);
+
+            // Token / Env helper button for this row
+            var helperBtn = new Button
+            {
+                Content = "{x} ▾",
+                Style = Application.Current.TryFindResource("SecondaryButtonStyle") as Style,
+                Height = 30,
+                Padding = new Thickness(6, 0, 6, 0),
+                FontSize = 11,
+                ToolTip = "Insert environment variable or token"
+            };
+            helperBtn.Click += (s, e) =>
+            {
+                ShowTokenAndEnvMenu(helperBtn, valBox);
+            };
+            Grid.SetColumn(helperBtn, 4);
+            row.Children.Add(helperBtn);
+
+            // Delete variable button
+            var delBtn = new Button
+            {
+                Content = "✕",
+                Style = Application.Current.TryFindResource("SecondaryButtonStyle") as Style,
+                Height = 30,
+                Width = 30,
+                Padding = new Thickness(0),
+                Foreground = Application.Current.TryFindResource("ErrorBrush") as Brush ?? Brushes.Red,
+                ToolTip = "Delete variable"
+            };
+            var capturedVar = v;
+            delBtn.Click += (s, e) =>
+            {
+                _selectedItem.Payload.WorkflowVariables.Remove(capturedVar);
+                RebuildWorkflowVariablesUI();
+                RebuildWorkflowStepCards();
+                OnFormEdited();
+            };
+            Grid.SetColumn(delBtn, 6);
+            row.Children.Add(delBtn);
+
+            WorkflowVariablesListHost.Children.Add(row);
+        }
+    }
+
+    private void AddWorkflowVariableBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedItem?.Payload == null) return;
+        _selectedItem.Payload.WorkflowVariables ??= [];
+        int count = _selectedItem.Payload.WorkflowVariables.Count + 1;
+        _selectedItem.Payload.WorkflowVariables.Add(new WorkflowVariableDefinition
+        {
+            Name = $"var{count}",
+            Value = string.Empty
+        });
+        if (WorkflowVariablesExpander != null)
+        {
+            WorkflowVariablesExpander.IsExpanded = true;
+        }
+        RebuildWorkflowVariablesUI();
+        RebuildWorkflowStepCards();
+        OnFormEdited();
+    }
+
     private static void SyncPrimaryPromptField(WorkflowStep step)
     {
         if (step.PromptFields != null && step.PromptFields.Count > 0)
@@ -2580,5 +3319,1470 @@ public partial class SettingsWindow
             step.PromptMaxNumber = first.MaxNumber;
             step.PromptDateFormat = first.DateFormat;
         }
+    }
+
+    private void RenderIfConditionControls(StackPanel container, WorkflowStep step, TextBlock summaryText, List<string> availableVariables)
+    {
+        step.ThenSteps ??= [];
+        step.ElseSteps ??= [];
+
+        // 1. Condition Rule Expression Card
+        var condCard = new Border
+        {
+            Background = Application.Current.TryFindResource("CardBgBrush") as Brush ?? Brushes.Transparent,
+            BorderBrush = Application.Current.TryFindResource("CardBorderBrush") as Brush ?? Brushes.Gray,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(12, 10, 12, 10),
+            Margin = new Thickness(0, 0, 0, 10)
+        };
+
+        var condStack = new StackPanel();
+        condCard.Child = condStack;
+
+        var condTitleRow = new DockPanel { Margin = new Thickness(0, 0, 0, 8), LastChildFill = false };
+        var condTitle = new TextBlock
+        {
+            Text = "Condition Rule",
+            FontWeight = FontWeights.SemiBold,
+            FontSize = 11.5,
+            Foreground = Application.Current.TryFindResource("WorkflowBrush") as Brush ?? Brushes.CornflowerBlue,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        DockPanel.SetDock(condTitle, Dock.Left);
+        condTitleRow.Children.Add(condTitle);
+
+        var testBtn = new Button
+        {
+            Content = "▶ Test Condition Live",
+            Style = Application.Current.TryFindResource("SecondaryButtonStyle") as Style,
+            FontSize = 11,
+            Padding = new Thickness(8, 2, 8, 2),
+            ToolTip = "Evaluate this condition against current workflow variables and system state"
+        };
+        testBtn.Click += (s, e) => TestConditionLive(step);
+        DockPanel.SetDock(testBtn, Dock.Right);
+        condTitleRow.Children.Add(testBtn);
+
+        condStack.Children.Add(condTitleRow);
+
+        // Expression Grid: Left Operand | Operator | Right Operand
+        var exprGrid = new Grid { Margin = new Thickness(0, 0, 0, 6) };
+        exprGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        exprGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(10, GridUnitType.Pixel) });
+        exprGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(180, GridUnitType.Pixel) });
+        exprGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(10, GridUnitType.Pixel) });
+        var rightCol = new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) };
+        exprGrid.ColumnDefinitions.Add(rightCol);
+
+        // Left Operand Stack
+        var leftStack = new StackPanel();
+        leftStack.Children.Add(new TextBlock { Text = "Value / Variable / Path", FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 3) });
+        var leftBox = new TextBox
+        {
+            Text = step.ConditionLeft ?? string.Empty,
+            Height = 32,
+            Padding = new Thickness(8, 4, 8, 4),
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style,
+            Tag = "e.g. {status}, %TEMP%\\app.lock, or myVar"
+        };
+        leftStack.Children.Add(leftBox);
+        RenderVariableChips(leftStack, leftBox, availableVariables);
+        Grid.SetColumn(leftStack, 0);
+        exprGrid.Children.Add(leftStack);
+
+        // Operator Stack
+        var opStack = new StackPanel();
+        opStack.Children.Add(new TextBlock { Text = "Operator", FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 3) });
+        var opCombo = new ComboBox
+        {
+            Height = 32,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Style = Application.Current.TryFindResource("ModernComboBoxStyle") as Style,
+            ItemContainerStyle = Application.Current.TryFindResource("ModernComboBoxItemStyle") as Style
+        };
+
+        var operators = new (ConditionOperator Op, string Label)[]
+        {
+            (ConditionOperator.Equals, "Equals (=)"),
+            (ConditionOperator.NotEquals, "Does Not Equal (≠)"),
+            (ConditionOperator.Contains, "Contains"),
+            (ConditionOperator.NotContains, "Does Not Contain"),
+            (ConditionOperator.StartsWith, "Starts With"),
+            (ConditionOperator.EndsWith, "Ends With"),
+            (ConditionOperator.MatchesRegex, "Matches Regex"),
+            (ConditionOperator.IsEmpty, "Is Empty"),
+            (ConditionOperator.IsNotEmpty, "Is Not Empty"),
+            (ConditionOperator.GreaterThan, "Greater Than (>)"),
+            (ConditionOperator.LessThan, "Less Than (<)"),
+            (ConditionOperator.GreaterOrEqual, "Greater or Equal (≥)"),
+            (ConditionOperator.LessOrEqual, "Less or Equal (≤)"),
+            (ConditionOperator.FileExists, "File Exists"),
+            (ConditionOperator.DirectoryExists, "Directory Exists"),
+            (ConditionOperator.ProcessIsRunning, "Process is Running")
+        };
+
+        int selIdx = 0;
+        for (int i = 0; i < operators.Length; i++)
+        {
+            opCombo.Items.Add(new ComboBoxItem 
+            { 
+                Content = operators[i].Label, 
+                Tag = operators[i].Op,
+                FontSize = 12.5,
+                Padding = new Thickness(8, 4, 8, 4)
+            });
+            if (operators[i].Op == step.ConditionOperator)
+            {
+                selIdx = i;
+            }
+        }
+        opCombo.SelectedIndex = selIdx;
+
+        opStack.Children.Add(opCombo);
+        Grid.SetColumn(opStack, 2);
+        exprGrid.Children.Add(opStack);
+
+        // Right Operand Stack
+        var rightStack = new StackPanel();
+        var rightLabel = new TextBlock { Text = "Compare Against", FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 3) };
+        rightStack.Children.Add(rightLabel);
+        var rightBox = new TextBox
+        {
+            Text = step.ConditionRight ?? string.Empty,
+            Height = 32,
+            Padding = new Thickness(8, 4, 8, 4),
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style,
+            Tag = "e.g. completed, 100, or {target}"
+        };
+        rightStack.Children.Add(rightBox);
+        RenderVariableChips(rightStack, rightBox, availableVariables);
+        Grid.SetColumn(rightStack, 4);
+        exprGrid.Children.Add(rightStack);
+
+        // Helper to update right operand visibility for unary operators
+        void UpdateRightOperandVisibility()
+        {
+            bool isUnary = ConditionEvaluator.IsUnary(step.ConditionOperator);
+            rightStack.Visibility = isUnary ? Visibility.Collapsed : Visibility.Visible;
+            rightCol.Width = isUnary ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
+        }
+        UpdateRightOperandVisibility();
+
+        leftBox.TextChanged += (s, e) =>
+        {
+            step.ConditionLeft = leftBox.Text;
+            summaryText.Text = GetStepLiveSummary(step);
+            OnFormEdited();
+        };
+
+        rightBox.TextChanged += (s, e) =>
+        {
+            step.ConditionRight = rightBox.Text;
+            summaryText.Text = GetStepLiveSummary(step);
+            OnFormEdited();
+        };
+
+        opCombo.SelectionChanged += (s, e) =>
+        {
+            if (opCombo.SelectedItem is ComboBoxItem item && item.Tag is ConditionOperator op)
+            {
+                step.ConditionOperator = op;
+                UpdateRightOperandVisibility();
+                summaryText.Text = GetStepLiveSummary(step);
+                OnFormEdited();
+            }
+        };
+
+        condStack.Children.Add(exprGrid);
+
+        // Options row: Ignore case checkbox
+        var optsRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 0) };
+        var ignoreCaseCheck = new CheckBox
+        {
+            Content = "Ignore Case (case-insensitive comparison)",
+            IsChecked = step.ConditionIgnoreCase,
+            VerticalAlignment = VerticalAlignment.Center,
+            ToolTip = "Treat uppercase and lowercase letters as equal during comparison"
+        };
+        ignoreCaseCheck.Checked += (s, e) => { step.ConditionIgnoreCase = true; OnFormEdited(); };
+        ignoreCaseCheck.Unchecked += (s, e) => { step.ConditionIgnoreCase = false; OnFormEdited(); };
+        optsRow.Children.Add(ignoreCaseCheck);
+        condStack.Children.Add(optsRow);
+
+        container.Children.Add(condCard);
+
+        // 2. Render THEN Branch Container
+        RenderBranchContainer(container, step, step.ThenSteps, "THEN", "When Condition is True", Color.FromRgb(0x10, 0xB9, 0x81), availableVariables, summaryText, isElse: false);
+
+        // 3. Render ELSE Branch Container
+        if (step.HasElseBranch)
+        {
+            RenderBranchContainer(container, step, step.ElseSteps, "ELSE", "When Condition is False", Color.FromRgb(0xF5, 0x9E, 0x0B), availableVariables, summaryText, isElse: true);
+        }
+        else
+        {
+            var addElseCard = new Border
+            {
+                BorderBrush = Application.Current.TryFindResource("CardBorderBrush") as Brush ?? Brushes.Gray,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(10, 8, 10, 8),
+                Margin = new Thickness(0, 4, 0, 4),
+                Background = Brushes.Transparent,
+                AllowDrop = true
+            };
+            SetIsWorkflowDropTarget(addElseCard, true);
+
+            var defaultAddElseBorder = addElseCard.BorderBrush;
+            addElseCard.PreviewDragEnter += (s, e) =>
+            {
+                if (e.Data.GetDataPresent("WorkflowStepDragData"))
+                {
+                    UpdateWorkflowGhostPosition(e);
+                    e.Effects = DragDropEffects.Move;
+                    e.Handled = true;
+                }
+            };
+            addElseCard.PreviewDragOver += (s, e) =>
+            {
+                UpdateWorkflowGhostPosition(e);
+                if (e.Data.GetDataPresent("WorkflowStepDragData"))
+                {
+                    var dragData = e.Data.GetData("WorkflowStepDragData") as WorkflowStepDragData;
+                    if (dragData != null && dragData.Step.Id != step.Id)
+                    {
+                        var amber = new SolidColorBrush(Color.FromRgb(0xF5, 0x9E, 0x0B));
+                        addElseCard.BorderBrush = amber;
+                        addElseCard.BorderThickness = new Thickness(2);
+                        SetWorkflowGhostAction("Move into ELSE branch (Enable)", _arrowBranchGeometry, amber);
+                        e.Effects = DragDropEffects.Move;
+                        e.Handled = true;
+                        return;
+                    }
+                }
+                addElseCard.BorderBrush = defaultAddElseBorder;
+                addElseCard.BorderThickness = new Thickness(1);
+                ClearWorkflowGhostAction();
+                e.Effects = DragDropEffects.None;
+            };
+
+            addElseCard.PreviewDragLeave += (s, e) =>
+            {
+                if (!IsCursorPhysicallyOver(addElseCard))
+                {
+                    addElseCard.BorderBrush = defaultAddElseBorder;
+                    addElseCard.BorderThickness = new Thickness(1);
+                    ClearWorkflowGhostAction();
+                }
+            };
+
+            addElseCard.PreviewDrop += (s, e) =>
+            {
+                addElseCard.BorderBrush = defaultAddElseBorder;
+                addElseCard.BorderThickness = new Thickness(1);
+                ClearWorkflowGhostAction();
+                if (e.Data.GetDataPresent("WorkflowStepDragData"))
+                {
+                    var dragData = e.Data.GetData("WorkflowStepDragData") as WorkflowStepDragData;
+                    if (dragData != null && dragData.Step.Id != step.Id)
+                    {
+                        step.HasElseBranch = true;
+                        step.ElseSteps ??= [];
+                        ExecuteStepDrop(dragData, step.ElseSteps, 0, step);
+                        e.Handled = true;
+                    }
+                }
+            };
+
+            var addElseStack = new StackPanel { Orientation = Orientation.Horizontal };
+            var addElseBtn = new Button
+            {
+                Content = "+ Add Else Branch (Optional)",
+                Style = Application.Current.TryFindResource("SecondaryButtonStyle") as Style,
+                FontSize = 11.5,
+                Padding = new Thickness(10, 4, 10, 4),
+                ToolTip = "Add steps to execute when the condition evaluates to False"
+            };
+            addElseBtn.Click += (s, e) =>
+            {
+                step.HasElseBranch = true;
+                summaryText.Text = GetStepLiveSummary(step);
+                RebuildWorkflowStepCards();
+                OnFormEdited();
+            };
+            addElseStack.Children.Add(addElseBtn);
+            var noteText = new TextBlock
+            {
+                Text = "If condition is False and no Else branch is defined, the workflow continues to the next step.",
+                FontSize = 11,
+                Foreground = Application.Current.TryFindResource("TextMutedBrush") as Brush ?? Brushes.Gray,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(12, 0, 0, 0)
+            };
+            addElseStack.Children.Add(noteText);
+            addElseCard.Child = addElseStack;
+            container.Children.Add(addElseCard);
+        }
+    }
+
+    private void RenderBranchContainer(
+        StackPanel parentContainer,
+        WorkflowStep parentStep,
+        List<WorkflowStep> branchSteps,
+        string branchTitle,
+        string branchSubtitle,
+        Color accentColor,
+        List<string> availableVariables,
+        TextBlock summaryText,
+        bool isElse)
+    {
+        var accentBrush = new SolidColorBrush(accentColor);
+        var subtleBg = new SolidColorBrush(Color.FromArgb(0x0C, accentColor.R, accentColor.G, accentColor.B));
+
+        var branchCard = new Border
+        {
+            Background = subtleBg,
+            BorderBrush = Application.Current.TryFindResource("CardBorderBrush") as Brush ?? Brushes.Gray,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(10, 8, 10, 10),
+            Margin = new Thickness(0, 4, 0, 6),
+            AllowDrop = true
+        };
+        SetIsWorkflowDropTarget(branchCard, true);
+
+        var defaultBranchBorder = branchCard.BorderBrush;
+        branchCard.PreviewDragEnter += (s, e) =>
+        {
+            if (IsOverChildDropTarget(branchCard, e.OriginalSource))
+            {
+                return;
+            }
+
+            if (e.Data.GetDataPresent("WorkflowStepDragData"))
+            {
+                UpdateWorkflowGhostPosition(e);
+                e.Effects = DragDropEffects.Move;
+                e.Handled = true;
+            }
+        };
+        branchCard.PreviewDragOver += (s, e) =>
+        {
+            UpdateWorkflowGhostPosition(e);
+
+            if (e.Data.GetDataPresent("WorkflowStepDragData"))
+            {
+                var dragData = e.Data.GetData("WorkflowStepDragData") as WorkflowStepDragData;
+                if (dragData != null && dragData.Step.Id != parentStep.Id)
+                {
+                    branchCard.BorderBrush = accentBrush;
+                    branchCard.BorderThickness = new Thickness(2);
+
+                    if (IsOverChildDropTarget(branchCard, e.OriginalSource))
+                    {
+                        // Over a nested child step card: let the child step handle the drop line indicator & ghost action
+                        return;
+                    }
+
+                    SetWorkflowGhostAction($"Move into {branchTitle} branch", _arrowBranchGeometry, accentBrush);
+                    e.Effects = DragDropEffects.Move;
+                    e.Handled = true;
+                    return;
+                }
+            }
+            branchCard.BorderBrush = defaultBranchBorder;
+            branchCard.BorderThickness = new Thickness(1);
+            ClearWorkflowGhostAction();
+            e.Effects = DragDropEffects.None;
+        };
+
+        branchCard.PreviewDragLeave += (s, e) =>
+        {
+            if (!IsCursorPhysicallyOver(branchCard))
+            {
+                branchCard.BorderBrush = defaultBranchBorder;
+                branchCard.BorderThickness = new Thickness(1);
+                ClearWorkflowGhostAction();
+            }
+        };
+
+        branchCard.PreviewDrop += (s, e) =>
+        {
+            if (IsOverChildDropTarget(branchCard, e.OriginalSource))
+            {
+                branchCard.BorderBrush = defaultBranchBorder;
+                branchCard.BorderThickness = new Thickness(1);
+                return;
+            }
+
+            branchCard.BorderBrush = defaultBranchBorder;
+            branchCard.BorderThickness = new Thickness(1);
+            ClearWorkflowGhostAction();
+            if (e.Data.GetDataPresent("WorkflowStepDragData"))
+            {
+                var dragData = e.Data.GetData("WorkflowStepDragData") as WorkflowStepDragData;
+                if (dragData != null && dragData.Step.Id != parentStep.Id)
+                {
+                    ExecuteStepDrop(dragData, branchSteps, branchSteps.Count, parentStep);
+                    e.Handled = true;
+                }
+            }
+        };
+
+        // Left accent rail indicator
+        var railGrid = new Grid();
+        railGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(4, GridUnitType.Pixel) });
+        railGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(8, GridUnitType.Pixel) });
+        railGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        var rail = new Border
+        {
+            Background = accentBrush,
+            CornerRadius = new CornerRadius(2),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch
+        };
+        Grid.SetColumn(rail, 0);
+        railGrid.Children.Add(rail);
+
+        var contentStack = new StackPanel();
+        Grid.SetColumn(contentStack, 2);
+        railGrid.Children.Add(contentStack);
+        branchCard.Child = railGrid;
+
+        // Branch Header
+        var headerDock = new DockPanel { Margin = new Thickness(0, 0, 0, 8), LastChildFill = false };
+
+        var leftTitleStack = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        var badge = new Border
+        {
+            Background = new SolidColorBrush(Color.FromArgb(0x28, accentColor.R, accentColor.G, accentColor.B)),
+            BorderBrush = accentBrush,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(6, 2, 6, 2),
+            Margin = new Thickness(0, 0, 8, 0)
+        };
+        badge.Child = new TextBlock
+        {
+            Text = branchTitle,
+            FontWeight = FontWeights.Bold,
+            FontSize = 11,
+            Foreground = accentBrush
+        };
+        leftTitleStack.Children.Add(badge);
+
+        var descText = new TextBlock
+        {
+            Text = branchSubtitle,
+            FontSize = 11.5,
+            FontWeight = FontWeights.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = Application.Current.TryFindResource("TextPrimaryBrush") as Brush ?? Brushes.White
+        };
+        leftTitleStack.Children.Add(descText);
+
+        var countText = new TextBlock
+        {
+            Text = $"({branchSteps.Count} step{(branchSteps.Count == 1 ? "" : "s")})",
+            FontSize = 11,
+            Foreground = Application.Current.TryFindResource("TextMutedBrush") as Brush ?? Brushes.Gray,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(6, 0, 0, 0)
+        };
+        leftTitleStack.Children.Add(countText);
+
+        DockPanel.SetDock(leftTitleStack, Dock.Left);
+        headerDock.Children.Add(leftTitleStack);
+
+        if (isElse)
+        {
+            var removeElseBtn = new Button
+            {
+                Content = "✕ Remove Else",
+                Style = Application.Current.TryFindResource("SecondaryButtonStyle") as Style,
+                FontSize = 10.5,
+                Padding = new Thickness(6, 1, 6, 1),
+                ToolTip = "Remove Else branch and all steps within it"
+            };
+            removeElseBtn.Click += (s, e) =>
+            {
+                if (branchSteps.Count > 0)
+                {
+                    bool confirmed = ModernMessageDialog.ShowConfirm(this,
+                        "Remove Else Branch",
+                        $"Are you sure you want to remove the Else branch? Its {branchSteps.Count} step(s) will be deleted.",
+                        "Remove Branch",
+                        "Cancel");
+                    if (!confirmed) return;
+                }
+                parentStep.HasElseBranch = false;
+                parentStep.ElseSteps.Clear();
+                summaryText.Text = GetStepLiveSummary(parentStep);
+                RebuildWorkflowStepCards();
+                OnFormEdited();
+            };
+            DockPanel.SetDock(removeElseBtn, Dock.Right);
+            headerDock.Children.Add(removeElseBtn);
+        }
+
+        contentStack.Children.Add(headerDock);
+
+        // Branch Sub-Steps Host
+        var stepsStack = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
+
+        if (branchSteps.Count == 0)
+        {
+            var emptyPlaceholder = new Border
+            {
+                BorderBrush = Application.Current.TryFindResource("CardBorderBrush") as Brush ?? Brushes.Gray,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(5),
+                Padding = new Thickness(12, 10, 12, 10),
+                Margin = new Thickness(0, 0, 0, 6),
+                Background = Brushes.Transparent
+            };
+            var placeholderText = new TextBlock
+            {
+                Text = $"No steps in {branchTitle} branch yet. Click '+ Add Step to {branchTitle}' below.",
+                FontSize = 11.5,
+                Foreground = Application.Current.TryFindResource("TextMutedBrush") as Brush ?? Brushes.Gray,
+                FontStyle = FontStyles.Italic,
+                HorizontalAlignment = HorizontalAlignment.Center
+            };
+            emptyPlaceholder.Child = placeholderText;
+            stepsStack.Children.Add(emptyPlaceholder);
+        }
+        else
+        {
+            for (int i = 0; i < branchSteps.Count; i++)
+            {
+                var subStep = branchSteps[i];
+                var subCard = CreateNestedStepCard(subStep, i, branchSteps, availableVariables, accentColor, parentStep, summaryText);
+                stepsStack.Children.Add(subCard);
+            }
+        }
+
+        contentStack.Children.Add(stepsStack);
+
+        // Add Step to Branch button
+        var addStepBtn = new Button
+        {
+            Content = $"+ Add Step to {branchTitle} ▾",
+            Style = Application.Current.TryFindResource("SecondaryButtonStyle") as Style,
+            FontSize = 11,
+            Padding = new Thickness(10, 3, 10, 3),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            ToolTip = $"Add a new workflow action inside the {branchTitle} branch"
+        };
+        addStepBtn.Click += (s, e) => ShowAddBranchStepContextMenu(addStepBtn, branchSteps, summaryText, parentStep);
+        contentStack.Children.Add(addStepBtn);
+
+        parentContainer.Children.Add(branchCard);
+    }
+
+    private FrameworkElement CreateNestedStepCard(
+        WorkflowStep step,
+        int subIndex,
+        List<WorkflowStep> branchSteps,
+        List<string> availableVariables,
+        Color accentColor,
+        WorkflowStep parentStep,
+        TextBlock parentSummaryText)
+    {
+        bool isFirst = subIndex == 0;
+        bool isLast = subIndex == branchSteps.Count - 1;
+
+        var card = new Border
+        {
+            Background = Application.Current.TryFindResource("CardBgBrush") as Brush ?? Brushes.DarkSlateGray,
+            BorderBrush = Application.Current.TryFindResource("CardBorderBrush") as Brush ?? Brushes.Gray,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(5),
+            Padding = new Thickness(10, 8, 10, 8),
+            Margin = new Thickness(0, 4, 0, 4)
+        };
+
+        var mainStack = new StackPanel();
+        card.Child = mainStack;
+
+        // Sub-Step Header
+        var headerGrid = new Grid
+        {
+            Margin = new Thickness(0, 0, 0, step.IsCollapsed ? 0 : 8),
+            Background = Brushes.Transparent
+        };
+        headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        // Left Header: Drag grip + Sub-Index badge + Icon & Name + Live summary
+        var leftHeader = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center,
+            ToolTip = "Double-click to " + (step.IsCollapsed ? "expand" : "collapse")
+        };
+
+        var dragGrip = new TextBlock
+        {
+            Text = "⠿",
+            FontSize = 13,
+            FontWeight = FontWeights.Bold,
+            Foreground = Application.Current.TryFindResource("TextMutedBrush") as Brush ?? Brushes.Gray,
+            Cursor = Cursors.SizeAll,
+            Margin = new Thickness(0, 0, 5, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            ToolTip = "Drag to reorder or move into/out of conditions"
+        };
+        WireWorkflowStepDragSource(dragGrip, step, branchSteps, parentStep);
+        leftHeader.Children.Add(dragGrip);
+
+        var indexBadge = new Border
+        {
+            Background = new SolidColorBrush(Color.FromArgb(0x20, accentColor.R, accentColor.G, accentColor.B)),
+            BorderBrush = new SolidColorBrush(accentColor),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(10),
+            Width = 20,
+            Height = 20,
+            Margin = new Thickness(0, 0, 6, 0)
+        };
+        indexBadge.Child = new TextBlock
+        {
+            Text = (subIndex + 1).ToString(),
+            FontSize = 10.5,
+            FontWeight = FontWeights.Bold,
+            Foreground = new SolidColorBrush(accentColor),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        leftHeader.Children.Add(indexBadge);
+
+        var typeText = new TextBlock
+        {
+            Text = GetStepTypeIconAndName(step.StepType),
+            FontWeight = FontWeights.SemiBold,
+            FontSize = 11.5,
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = Application.Current.TryFindResource("TextPrimaryBrush") as Brush ?? Brushes.White,
+            Margin = new Thickness(0, 0, 8, 0)
+        };
+        leftHeader.Children.Add(typeText);
+
+        var summaryBlock = new TextBlock
+        {
+            Text = GetStepLiveSummary(step),
+            FontSize = 11,
+            Foreground = Application.Current.TryFindResource("TextMutedBrush") as Brush ?? Brushes.Gray,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            MaxWidth = 250
+        };
+        leftHeader.Children.Add(summaryBlock);
+
+        Grid.SetColumn(leftHeader, 0);
+        headerGrid.Children.Add(leftHeader);
+
+        // Right Header: Reorder up/down + Kebab menu
+        var rightHeader = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+
+        var upBtn = new Button
+        {
+            Content = "▲",
+            FontSize = 9.5,
+            Padding = new Thickness(5, 1, 5, 1),
+            Margin = new Thickness(0, 0, 2, 0),
+            IsEnabled = !isFirst,
+            Style = Application.Current.TryFindResource("SecondaryButtonStyle") as Style,
+            ToolTip = "Move step up"
+        };
+        upBtn.Click += (s, e) => MoveBranchStep(branchSteps, step, -1);
+        rightHeader.Children.Add(upBtn);
+
+        var downBtn = new Button
+        {
+            Content = "▼",
+            FontSize = 9.5,
+            Padding = new Thickness(5, 1, 5, 1),
+            Margin = new Thickness(0, 0, 4, 0),
+            IsEnabled = !isLast,
+            Style = Application.Current.TryFindResource("SecondaryButtonStyle") as Style,
+            ToolTip = "Move step down"
+        };
+        downBtn.Click += (s, e) => MoveBranchStep(branchSteps, step, 1);
+        rightHeader.Children.Add(downBtn);
+
+        // Kebab menu
+        var kebabMenu = new ContextMenu();
+        if (step.StepType == WorkflowStepType.IfCondition)
+        {
+            var testCondItem = new MenuItem { Header = "▶  Test Condition Live", FontSize = 12 };
+            testCondItem.Click += (s, e) => TestConditionLive(step);
+            kebabMenu.Items.Add(testCondItem);
+        }
+        else
+        {
+            var testItem = new MenuItem { Header = "▶  Test Step", FontSize = 12 };
+            testItem.Click += async (s, e) => await TestSingleWorkflowStepAsync(step, subIndex + 1);
+            kebabMenu.Items.Add(testItem);
+        }
+
+        // Cut / Copy
+        var cutItem = new MenuItem { Header = "✂  Cut Step", FontSize = 12 };
+        cutItem.Click += (s, e) => CutStep(step, branchSteps, parentStep);
+        kebabMenu.Items.Add(cutItem);
+
+        var copyItem = new MenuItem { Header = "⧉  Copy Step", FontSize = 12 };
+        copyItem.Click += (s, e) => CopyStep(step);
+        kebabMenu.Items.Add(copyItem);
+
+        var dupItem = new MenuItem { Header = "📄  Duplicate", FontSize = 12 };
+        dupItem.Click += (s, e) => DuplicateBranchStep(branchSteps, step, parentStep, parentSummaryText);
+        kebabMenu.Items.Add(dupItem);
+
+        // Move Out options
+        var moveOutBefore = new MenuItem { Header = "⬆  Move Out (Before Condition)", FontSize = 12 };
+        moveOutBefore.Click += (s, e) => MoveStepOutOfBranch(step, branchSteps, parentStep, before: true);
+        kebabMenu.Items.Add(moveOutBefore);
+
+        var moveOutAfter = new MenuItem { Header = "⬇  Move Out (After Condition)", FontSize = 12 };
+        moveOutAfter.Click += (s, e) => MoveStepOutOfBranch(step, branchSteps, parentStep, before: false);
+        kebabMenu.Items.Add(moveOutAfter);
+
+        // Move between branches of parent condition
+        bool isInElse = branchSteps == parentStep.ElseSteps;
+        if (isInElse)
+        {
+            var moveToThen = new MenuItem { Header = "⇄  Move to THEN Branch", FontSize = 12 };
+            moveToThen.Click += (s, e) => MoveStepBetweenBranches(step, parentStep.ElseSteps, parentStep.ThenSteps, parentStep, targetIsElse: false);
+            kebabMenu.Items.Add(moveToThen);
+        }
+        else
+        {
+            var moveToElse = new MenuItem { Header = "⇄  Move to ELSE Branch", FontSize = 12 };
+            moveToElse.Click += (s, e) => MoveStepBetweenBranches(step, parentStep.ThenSteps, parentStep.ElseSteps, parentStep, targetIsElse: true);
+            kebabMenu.Items.Add(moveToElse);
+        }
+
+        // Move into another condition (if other condition steps exist)
+        if (_selectedItem?.Payload.WorkflowSteps != null)
+        {
+            var otherIfSteps = _selectedItem.Payload.WorkflowSteps
+                .Select((s, i) => (Step: s, Index: i + 1))
+                .Where(x => x.Step.StepType == WorkflowStepType.IfCondition && x.Step.Id != parentStep.Id && x.Step.Id != step.Id)
+                .ToList();
+
+            if (otherIfSteps.Count > 0)
+            {
+                var moveOtherCondSub = new MenuItem { Header = "↳  Move into Another Condition ▾", FontSize = 12 };
+                foreach (var ifItem in otherIfSteps)
+                {
+                    var targetIf = ifItem.Step;
+                    var condMenu = new MenuItem
+                    {
+                        Header = $"Step {ifItem.Index}: {GetStepLiveSummary(targetIf)}",
+                        FontSize = 11.5
+                    };
+
+                    var intoThen = new MenuItem { Header = "↳ Into THEN Branch", FontSize = 11.5 };
+                    intoThen.Click += (s, e) => MoveStepToConditionBranch(step, branchSteps, targetIf, isElse: false);
+                    condMenu.Items.Add(intoThen);
+
+                    var intoElse = new MenuItem { Header = "↳ Into ELSE Branch", FontSize = 11.5 };
+                    intoElse.Click += (s, e) => MoveStepToConditionBranch(step, branchSteps, targetIf, isElse: true);
+                    condMenu.Items.Add(intoElse);
+
+                    moveOtherCondSub.Items.Add(condMenu);
+                }
+                kebabMenu.Items.Add(moveOtherCondSub);
+            }
+        }
+
+        kebabMenu.Items.Add(new Separator());
+
+        var deleteItem = new MenuItem
+        {
+            Header = "🗑  Delete",
+            FontSize = 12,
+            Foreground = Application.Current.TryFindResource("ErrorBrush") as Brush ?? Brushes.Red
+        };
+        deleteItem.Click += (s, e) => DeleteBranchStep(branchSteps, step, parentStep, parentSummaryText);
+        kebabMenu.Items.Add(deleteItem);
+
+        var kebabBtn = new Button
+        {
+            Content = "⋮",
+            FontSize = 13,
+            Padding = new Thickness(6, 1, 6, 1),
+            Style = Application.Current.TryFindResource("SecondaryButtonStyle") as Style,
+            ToolTip = "Sub-step actions",
+            ContextMenu = kebabMenu
+        };
+        kebabBtn.Click += (s, e) =>
+        {
+            kebabMenu.PlacementTarget = kebabBtn;
+            kebabMenu.IsOpen = true;
+        };
+        rightHeader.Children.Add(kebabBtn);
+
+        Grid.SetColumn(rightHeader, 1);
+        headerGrid.Children.Add(rightHeader);
+
+        // Double click header to collapse/expand
+        headerGrid.MouseLeftButtonDown += (s, e) =>
+        {
+            if (e.ClickCount == 2)
+            {
+                if (e.OriginalSource is DependencyObject dep && rightHeader.IsAncestorOf(dep)) return;
+                step.IsCollapsed = !step.IsCollapsed;
+                RebuildWorkflowStepCards();
+                OnFormEdited();
+            }
+        };
+
+        mainStack.Children.Add(headerGrid);
+
+        // Sub-Step Body (when expanded)
+        if (!step.IsCollapsed)
+        {
+            var bodyContainer = new StackPanel { Margin = new Thickness(0, 4, 0, 0) };
+            PopulateStepTypeControls(bodyContainer, step, summaryBlock, availableVariables);
+            mainStack.Children.Add(bodyContainer);
+        }
+
+        var nestedWrapperGrid = new Grid { Margin = new Thickness(0, 2, 0, 4) };
+        nestedWrapperGrid.Children.Add(card);
+
+        var accentBrush = new SolidColorBrush(accentColor);
+        var topIndicator = CreateDropIndicatorLine(accentBrush);
+        topIndicator.VerticalAlignment = VerticalAlignment.Top;
+        topIndicator.Margin = new Thickness(0, 1, 0, 0);
+        nestedWrapperGrid.Children.Add(topIndicator);
+
+        var bottomIndicator = CreateDropIndicatorLine(accentBrush);
+        bottomIndicator.VerticalAlignment = VerticalAlignment.Bottom;
+        bottomIndicator.Margin = new Thickness(0, 0, 0, 1);
+        nestedWrapperGrid.Children.Add(bottomIndicator);
+
+        WireWorkflowStepDropTarget(card, step, branchSteps, parentStep, topIndicator, bottomIndicator, accentBrush);
+
+        return nestedWrapperGrid;
+    }
+
+    private void MoveBranchStep(List<WorkflowStep> branchSteps, WorkflowStep step, int direction)
+    {
+        int idx = branchSteps.IndexOf(step);
+        if (idx < 0) return;
+        int newIdx = idx + direction;
+        if (newIdx >= 0 && newIdx < branchSteps.Count)
+        {
+            branchSteps.RemoveAt(idx);
+            branchSteps.Insert(newIdx, step);
+            RebuildWorkflowStepCards();
+            OnFormEdited();
+        }
+    }
+
+    private void DuplicateBranchStep(List<WorkflowStep> branchSteps, WorkflowStep step, WorkflowStep parentStep, TextBlock parentSummaryText)
+    {
+        int idx = branchSteps.IndexOf(step);
+        if (idx < 0) return;
+        var cloned = step.Clone();
+        branchSteps.Insert(idx + 1, cloned);
+        if (parentSummaryText != null && parentStep != null)
+        {
+            parentSummaryText.Text = GetStepLiveSummary(parentStep);
+        }
+        RebuildWorkflowStepCards();
+        OnFormEdited();
+    }
+
+    private void DeleteBranchStep(List<WorkflowStep> branchSteps, WorkflowStep step, WorkflowStep parentStep, TextBlock parentSummaryText)
+    {
+        branchSteps.Remove(step);
+        if (parentSummaryText != null && parentStep != null)
+        {
+            parentSummaryText.Text = GetStepLiveSummary(parentStep);
+        }
+        RebuildWorkflowStepCards();
+        OnFormEdited();
+    }
+
+    private void ShowAddBranchStepContextMenu(Button targetBtn, List<WorkflowStep> branchSteps, TextBlock summaryText, WorkflowStep parentStep)
+    {
+        var menu = new ContextMenu();
+
+        if (_stepClipboard != null)
+        {
+            var parts = SplitIconAndName(GetStepTypeIconAndName(_stepClipboard.StepType));
+            var pasteItem = new MenuItem
+            {
+                Header = $"📋  Paste Step: \"{_stepClipboard.Name}\" ({parts.Icon})",
+                FontSize = 12,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = Application.Current.TryFindResource("WorkflowBrush") as Brush ?? Brushes.Purple
+            };
+            pasteItem.Click += (s, e) => PasteStepAt(branchSteps, branchSteps.Count, parentStep);
+            menu.Items.Add(pasteItem);
+            menu.Items.Add(new Separator());
+        }
+
+        var stepTypes = new (string Title, WorkflowStepType Type, string Icon)[]
+        {
+            ("Set Variable", WorkflowStepType.SetVariable, "🔤"),
+            ("If / Condition Branch", WorkflowStepType.IfCondition, "🔀"),
+            ("Prompt for User Input", WorkflowStepType.Prompt, "💬"),
+            ("Show Dialog / Confirmation", WorkflowStepType.Dialog, "💬"),
+            ("Open URL / Web Page", WorkflowStepType.OpenUrl, "🌐"),
+            ("Launch Application / Command", WorkflowStepType.LaunchApp, "⚡"),
+            ("Ensure Folder Exists", WorkflowStepType.EnsureDirectory, "📁"),
+            ("Paste / Insert Text Snippet", WorkflowStepType.InjectSnippet, "📝"),
+            ("Recorded Macro Sequence", WorkflowStepType.Macro, "🔴"),
+            ("Delay / Pause Execution", WorkflowStepType.Delay, "⏱"),
+            ("Execute Action / Folder", WorkflowStepType.ExecuteAction, "⚡"),
+            ("Inline JavaScript", WorkflowStepType.RunScript, "📜")
+        };
+
+        foreach (var (title, stepType, icon) in stepTypes)
+        {
+            var item = new MenuItem
+            {
+                Header = $"{icon}  {title}",
+                FontSize = 12
+            };
+            item.Click += (s, e) =>
+            {
+                var newStep = CreateDefaultStep(stepType);
+                branchSteps.Add(newStep);
+                summaryText.Text = GetStepLiveSummary(parentStep);
+                RebuildWorkflowStepCards();
+                OnFormEdited();
+            };
+            menu.Items.Add(item);
+        }
+
+        menu.PlacementTarget = targetBtn;
+        menu.IsOpen = true;
+    }
+
+    private void TestConditionLive(WorkflowStep step)
+    {
+        if (_selectedItem?.Payload == null) return;
+        CommitCurrentFormChanges();
+
+        var vars = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (_selectedItem.Payload.WorkflowVariables != null)
+        {
+            foreach (var v in _selectedItem.Payload.WorkflowVariables)
+            {
+                if (!string.IsNullOrWhiteSpace(v.Name))
+                {
+                    vars[v.Name] = v.Value ?? string.Empty;
+                }
+            }
+        }
+
+        string leftResolved = WorkflowExecutor.ResolveVariables(step.ConditionLeft ?? string.Empty, vars);
+        string rightResolved = WorkflowExecutor.ResolveVariables(step.ConditionRight ?? string.Empty, vars);
+
+        bool result = ConditionEvaluator.Evaluate(
+            leftResolved,
+            step.ConditionOperator,
+            rightResolved,
+            step.ConditionIgnoreCase);
+
+        string branch = result ? "THEN branch" : (step.HasElseBranch ? "ELSE branch" : "None (condition False, no ELSE branch)");
+        int stepCount = result ? (step.ThenSteps?.Count ?? 0) : (step.HasElseBranch ? (step.ElseSteps?.Count ?? 0) : 0);
+
+        string rightLine = ConditionEvaluator.IsUnary(step.ConditionOperator)
+            ? string.Empty
+            : $"• Right Operand: \"{step.ConditionRight}\" → \"{rightResolved}\"\n";
+
+        string msg = $"Condition Evaluation Live Result:\n\n" +
+                     $"• Left Operand: \"{step.ConditionLeft}\" → \"{leftResolved}\"\n" +
+                     $"• Operator: {step.ConditionOperator} (Ignore Case: {step.ConditionIgnoreCase})\n" +
+                     rightLine +
+                     $"\n▶ Evaluated Result: {(result ? "✔ TRUE" : "✖ FALSE")}\n" +
+                     $"▶ Branch Selected: {branch} ({stepCount} sub-step{(stepCount == 1 ? "" : "s")})";
+
+        ModernMessageDialog.ShowAlert(this, "Live Condition Test", msg, ModernDialogType.Info);
+    }
+
+    private static (string Icon, string Name) SplitIconAndName(string full)
+    {
+        if (string.IsNullOrWhiteSpace(full)) return ("⚡", "Step");
+        int space = full.IndexOf(' ');
+        if (space > 0)
+        {
+            return (full.Substring(0, space).Trim(), full.Substring(space + 1).Trim());
+        }
+        return ("⚡", full);
+    }
+
+    private static FrameworkElement CreateDropIndicatorLine(Brush lineBrush)
+    {
+        var grid = new Grid
+        {
+            Height = 8,
+            Visibility = Visibility.Collapsed,
+            IsHitTestVisible = false
+        };
+        Panel.SetZIndex(grid, 20);
+
+        var line = new Border
+        {
+            Height = 3,
+            Background = lineBrush,
+            CornerRadius = new CornerRadius(1.5),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(6, 0, 0, 0)
+        };
+
+        var bead = new System.Windows.Shapes.Ellipse
+        {
+            Width = 8,
+            Height = 8,
+            Fill = lineBrush,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+
+        grid.Children.Add(line);
+        grid.Children.Add(bead);
+        return grid;
+    }
+
+    private void SetWorkflowGhostAction(string actionText, Geometry iconGeo, Brush? iconBrush = null)
+    {
+        if (WorkflowStepDragActionBadge == null || WorkflowStepDragActionIcon == null || WorkflowStepDragActionText == null) return;
+        WorkflowStepDragActionBadge.Visibility = Visibility.Visible;
+        WorkflowStepDragActionIcon.Data = iconGeo;
+        if (iconBrush != null)
+        {
+            WorkflowStepDragActionIcon.Fill = iconBrush;
+        }
+        WorkflowStepDragActionText.Text = actionText;
+    }
+
+    private void ClearWorkflowGhostAction()
+    {
+        if (WorkflowStepDragActionBadge != null)
+        {
+            WorkflowStepDragActionBadge.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private void CheckWorkflowDragAutoScroll()
+    {
+        if (EditorScrollViewer == null) return;
+        try
+        {
+            var svPos = EditorScrollViewer.PointFromScreen(_lastWorkflowDragScreenPoint);
+            double height = EditorScrollViewer.ActualHeight;
+            if (height <= 0) return;
+
+            const double threshold = 50.0;
+            if (svPos.Y >= 0 && svPos.Y < threshold)
+            {
+                double intensity = 1.0 - (svPos.Y / threshold);
+                double scrollDelta = Math.Max(2, intensity * 20);
+                EditorScrollViewer.ScrollToVerticalOffset(Math.Max(0, EditorScrollViewer.VerticalOffset - scrollDelta));
+            }
+            else if (svPos.Y > height - threshold && svPos.Y <= height)
+            {
+                double intensity = 1.0 - ((height - svPos.Y) / threshold);
+                double scrollDelta = Math.Max(2, intensity * 20);
+                EditorScrollViewer.ScrollToVerticalOffset(Math.Min(EditorScrollViewer.ScrollableHeight, EditorScrollViewer.VerticalOffset + scrollDelta));
+            }
+        }
+        catch
+        {
+            // Ignore coordinate mapping errors if window state changed
+        }
+    }
+
+    private void EditorScrollViewer_PreviewDragEnter(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetDataPresent("WorkflowStepDragData"))
+        {
+            UpdateWorkflowGhostPosition(e);
+            e.Effects = DragDropEffects.Move;
+        }
+    }
+
+    private void EditorScrollViewer_PreviewDragOver(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetDataPresent("WorkflowStepDragData"))
+        {
+            UpdateWorkflowGhostPosition(e);
+            e.Effects = DragDropEffects.Move;
+        }
+    }
+
+    private void UpdateWorkflowGhostPosition(DragEventArgs e)
+    {
+        var screenPt = PointToScreen(e.GetPosition(this));
+        _lastWorkflowDragScreenPoint = screenPt;
+        if (WorkflowStepDragGhostPopup != null && WorkflowStepDragGhostPopup.IsOpen)
+        {
+            WorkflowStepDragGhostPopup.HorizontalOffset = screenPt.X + 14;
+            WorkflowStepDragGhostPopup.VerticalOffset = screenPt.Y + 14;
+        }
+    }
+
+    private void ClearWorkflowGhost()
+    {
+        _workflowDragScrollTimer?.Stop();
+        _workflowDragScrollTimer = null;
+        if (WorkflowStepDragGhostPopup != null)
+        {
+            WorkflowStepDragGhostPopup.IsOpen = false;
+        }
+        ClearWorkflowGhostAction();
+        _workflowStepDragStartPoint = null;
+        _draggedStepData = null;
+    }
+
+    private void WireWorkflowStepDragSource(FrameworkElement dragElement, WorkflowStep step, List<WorkflowStep> sourceList, WorkflowStep? parentIfStep)
+    {
+        dragElement.PreviewMouseLeftButtonDown += (s, e) =>
+        {
+            _workflowStepDragStartPoint = e.GetPosition(this);
+            _draggedStepData = new WorkflowStepDragData(step, sourceList, parentIfStep);
+        };
+
+        dragElement.PreviewMouseMove += (s, e) =>
+        {
+            if (e.LeftButton != MouseButtonState.Pressed || _workflowStepDragStartPoint == null || _draggedStepData == null)
+            {
+                return;
+            }
+
+            var currentPoint = e.GetPosition(this);
+            var diff = _workflowStepDragStartPoint.Value - currentPoint;
+
+            if (Math.Abs(diff.X) > SystemParameters.MinimumHorizontalDragDistance ||
+                Math.Abs(diff.Y) > SystemParameters.MinimumVerticalDragDistance)
+            {
+                if (WorkflowStepDragGhostPopup != null)
+                {
+                    string fullType = GetStepTypeIconAndName(_draggedStepData.Step.StepType);
+                    var parts = SplitIconAndName(fullType);
+                    WorkflowStepDragGhostIcon.Text = parts.Icon;
+                    WorkflowStepDragGhostText.Text = !string.IsNullOrWhiteSpace(_draggedStepData.Step.Name) ? _draggedStepData.Step.Name : parts.Name;
+
+                    var screenPt = PointToScreen(e.GetPosition(this));
+                    _lastWorkflowDragScreenPoint = screenPt;
+                    WorkflowStepDragGhostPopup.HorizontalOffset = screenPt.X + 14;
+                    WorkflowStepDragGhostPopup.VerticalOffset = screenPt.Y + 14;
+                    WorkflowStepDragGhostPopup.IsOpen = true;
+                }
+
+                _workflowDragScrollTimer = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(25)
+                };
+                _workflowDragScrollTimer.Tick += (timerSender, timerArgs) => CheckWorkflowDragAutoScroll();
+                _workflowDragScrollTimer.Start();
+
+                var data = new DataObject("WorkflowStepDragData", _draggedStepData);
+                GiveFeedbackEventHandler giveFeedbackHandler = (s, e) =>
+                {
+                    if (_draggedStepData != null)
+                    {
+                        e.UseDefaultCursors = false;
+                        Mouse.SetCursor(Cursors.Arrow);
+                        e.Handled = true;
+                    }
+                };
+                dragElement.GiveFeedback += giveFeedbackHandler;
+                try
+                {
+                    DragDrop.DoDragDrop(dragElement, data, DragDropEffects.Move);
+                }
+                finally
+                {
+                    dragElement.GiveFeedback -= giveFeedbackHandler;
+                    _workflowDragScrollTimer?.Stop();
+                    _workflowDragScrollTimer = null;
+                    ClearWorkflowGhost();
+                }
+            }
+        };
+    }
+
+    internal static bool IsOverChildDropTarget(FrameworkElement currentTarget, object? hitSource)
+    {
+        DependencyObject? current = hitSource as DependencyObject;
+        if (current is FrameworkContentElement fce)
+        {
+            current = fce.Parent;
+        }
+        while (current != null && current != currentTarget)
+        {
+            if (current is FrameworkElement fe && fe != currentTarget && GetIsWorkflowDropTarget(fe))
+            {
+                return true;
+            }
+            if (current is Visual || current is System.Windows.Media.Media3D.Visual3D)
+            {
+                current = VisualTreeHelper.GetParent(current);
+            }
+            else if (current is FrameworkContentElement contentElem)
+            {
+                current = contentElem.Parent;
+            }
+            else
+            {
+                break;
+            }
+        }
+        return false;
+    }
+
+    private void WireWorkflowStepDropTarget(
+        FrameworkElement hitElement,
+        WorkflowStep targetStep,
+        List<WorkflowStep> targetList,
+        WorkflowStep? parentIfStep,
+        FrameworkElement topIndicator,
+        FrameworkElement bottomIndicator,
+        Brush accentBrush)
+    {
+        hitElement.AllowDrop = true;
+        SetIsWorkflowDropTarget(hitElement, true);
+
+        hitElement.PreviewDragEnter += (s, e) =>
+        {
+            if (IsOverChildDropTarget(hitElement, e.OriginalSource))
+            {
+                return;
+            }
+
+            if (e.Data.GetDataPresent("WorkflowStepDragData"))
+            {
+                UpdateWorkflowGhostPosition(e);
+                e.Effects = DragDropEffects.Move;
+                e.Handled = true;
+            }
+        };
+
+        hitElement.PreviewDragOver += (s, e) =>
+        {
+            UpdateWorkflowGhostPosition(e);
+
+            if (IsOverChildDropTarget(hitElement, e.OriginalSource))
+            {
+                topIndicator.Visibility = Visibility.Collapsed;
+                bottomIndicator.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            if (!e.Data.GetDataPresent("WorkflowStepDragData"))
+            {
+                topIndicator.Visibility = Visibility.Collapsed;
+                bottomIndicator.Visibility = Visibility.Collapsed;
+                ClearWorkflowGhostAction();
+                e.Effects = DragDropEffects.None;
+                return;
+            }
+
+            var dragData = e.Data.GetData("WorkflowStepDragData") as WorkflowStepDragData;
+            if (dragData == null || dragData.Step.Id == targetStep.Id)
+            {
+                topIndicator.Visibility = Visibility.Collapsed;
+                bottomIndicator.Visibility = Visibility.Collapsed;
+                ClearWorkflowGhostAction();
+                e.Effects = DragDropEffects.None;
+                return;
+            }
+
+            // Prevent dragging an IfCondition into its own sub-branches
+            if (dragData.Step.StepType == WorkflowStepType.IfCondition && (targetList == dragData.Step.ThenSteps || targetList == dragData.Step.ElseSteps))
+            {
+                topIndicator.Visibility = Visibility.Collapsed;
+                bottomIndicator.Visibility = Visibility.Collapsed;
+                ClearWorkflowGhostAction();
+                e.Effects = DragDropEffects.None;
+                return;
+            }
+
+            Point p = e.GetPosition(hitElement);
+            bool dropBefore = p.Y < (hitElement.ActualHeight / 2);
+
+            topIndicator.Visibility = dropBefore ? Visibility.Visible : Visibility.Collapsed;
+            bottomIndicator.Visibility = dropBefore ? Visibility.Collapsed : Visibility.Visible;
+
+            string stepName = !string.IsNullOrWhiteSpace(targetStep.Name) ? targetStep.Name : GetStepTypeIconAndName(targetStep.StepType);
+            string actionText = dropBefore ? $"Drop before \"{stepName}\"" : $"Drop after \"{stepName}\"";
+            var arrowGeo = dropBefore ? _arrowUpGeometry : _arrowDownGeometry;
+            SetWorkflowGhostAction(actionText, arrowGeo, accentBrush);
+
+            e.Effects = DragDropEffects.Move;
+            e.Handled = true;
+        };
+
+        hitElement.PreviewDragLeave += (s, e) =>
+        {
+            if (!IsCursorPhysicallyOver(hitElement))
+            {
+                topIndicator.Visibility = Visibility.Collapsed;
+                bottomIndicator.Visibility = Visibility.Collapsed;
+                ClearWorkflowGhostAction();
+            }
+        };
+
+        hitElement.PreviewDrop += (s, e) =>
+        {
+            if (IsOverChildDropTarget(hitElement, e.OriginalSource))
+            {
+                topIndicator.Visibility = Visibility.Collapsed;
+                bottomIndicator.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            topIndicator.Visibility = Visibility.Collapsed;
+            bottomIndicator.Visibility = Visibility.Collapsed;
+            ClearWorkflowGhostAction();
+
+            if (e.Data.GetDataPresent("WorkflowStepDragData"))
+            {
+                var dragData = e.Data.GetData("WorkflowStepDragData") as WorkflowStepDragData;
+                if (dragData != null && dragData.Step.Id != targetStep.Id)
+                {
+                    int targetIdx = targetList.IndexOf(targetStep);
+                    Point p = e.GetPosition(hitElement);
+                    bool dropBefore = p.Y < (hitElement.ActualHeight / 2);
+                    if (!dropBefore) targetIdx++;
+                    ExecuteStepDrop(dragData, targetList, targetIdx, parentIfStep);
+                    e.Handled = true;
+                }
+            }
+        };
+    }
+
+    private void ExecuteStepDrop(WorkflowStepDragData dragData, List<WorkflowStep> targetList, int targetIndex, WorkflowStep? targetIfStep = null)
+    {
+        if (dragData?.Step == null || targetList == null) return;
+        var step = dragData.Step;
+
+        // Prevent dragging an IfCondition into its own sub-branches
+        if (step.StepType == WorkflowStepType.IfCondition && (targetList == step.ThenSteps || targetList == step.ElseSteps))
+        {
+            return;
+        }
+
+        // Remove from source list
+        int sourceIdx = dragData.SourceList.IndexOf(step);
+        if (sourceIdx >= 0)
+        {
+            if (dragData.SourceList == targetList && sourceIdx < targetIndex)
+            {
+                targetIndex--;
+            }
+            dragData.SourceList.RemoveAt(sourceIdx);
+        }
+
+        targetIndex = Math.Clamp(targetIndex, 0, targetList.Count);
+        targetList.Insert(targetIndex, step);
+
+        if (targetIfStep != null && targetList == targetIfStep.ElseSteps)
+        {
+            targetIfStep.HasElseBranch = true;
+        }
+
+        RebuildWorkflowStepCards(step.Id);
+        OnFormEdited();
+    }
+
+    private void MoveStepToConditionBranch(WorkflowStep step, List<WorkflowStep> sourceList, WorkflowStep targetIfStep, bool isElse)
+    {
+        if (step.Id == targetIfStep.Id) return;
+        var targetList = isElse ? targetIfStep.ElseSteps : targetIfStep.ThenSteps;
+        targetList ??= [];
+        if (isElse) targetIfStep.ElseSteps = targetList;
+        else targetIfStep.ThenSteps = targetList;
+
+        ExecuteStepDrop(new WorkflowStepDragData(step, sourceList), targetList, targetList.Count, targetIfStep);
+    }
+
+    private void MoveStepOutOfBranch(WorkflowStep step, List<WorkflowStep> branchSteps, WorkflowStep parentIfStep, bool before)
+    {
+        if (_selectedItem?.Payload.WorkflowSteps == null) return;
+        var rootSteps = _selectedItem.Payload.WorkflowSteps;
+        int parentIdx = rootSteps.IndexOf(parentIfStep);
+        if (parentIdx < 0) return;
+
+        int targetIdx = before ? Math.Max(0, parentIdx) : parentIdx + 1;
+        ExecuteStepDrop(new WorkflowStepDragData(step, branchSteps, parentIfStep), rootSteps, targetIdx);
+    }
+
+    private void MoveStepBetweenBranches(WorkflowStep step, List<WorkflowStep> sourceBranch, List<WorkflowStep> targetBranch, WorkflowStep parentIfStep, bool targetIsElse)
+    {
+        if (targetIsElse)
+        {
+            parentIfStep.HasElseBranch = true;
+            parentIfStep.ElseSteps ??= [];
+            targetBranch = parentIfStep.ElseSteps;
+        }
+        else
+        {
+            parentIfStep.ThenSteps ??= [];
+            targetBranch = parentIfStep.ThenSteps;
+        }
+
+        ExecuteStepDrop(new WorkflowStepDragData(step, sourceBranch, parentIfStep), targetBranch, targetBranch.Count, parentIfStep);
+    }
+
+    private void CutStep(WorkflowStep step, List<WorkflowStep> sourceList, WorkflowStep? parentIfStep)
+    {
+        _stepClipboard = step;
+        _stepClipboardIsCut = true;
+        _stepClipboardSourceList = sourceList;
+        _stepClipboardParentIfStep = parentIfStep;
+        StatusText.Text = $"Cut \"{step.Name}\" to clipboard. Paste it at any insertion point.";
+    }
+
+    private void CopyStep(WorkflowStep step)
+    {
+        _stepClipboard = step.Clone();
+        _stepClipboardIsCut = false;
+        _stepClipboardSourceList = null;
+        _stepClipboardParentIfStep = null;
+        StatusText.Text = $"Copied \"{step.Name}\" to clipboard.";
+    }
+
+    private void PasteStepAt(List<WorkflowStep> targetList, int targetIndex, WorkflowStep? targetIfStep = null)
+    {
+        if (_stepClipboard == null || targetList == null) return;
+
+        WorkflowStep stepToInsert;
+        if (_stepClipboardIsCut)
+        {
+            stepToInsert = _stepClipboard;
+            _stepClipboardSourceList?.Remove(stepToInsert);
+            _stepClipboard = null;
+            _stepClipboardIsCut = false;
+            _stepClipboardSourceList = null;
+            _stepClipboardParentIfStep = null;
+        }
+        else
+        {
+            stepToInsert = _stepClipboard.Clone();
+        }
+
+        targetIndex = Math.Clamp(targetIndex, 0, targetList.Count);
+        targetList.Insert(targetIndex, stepToInsert);
+
+        if (targetIfStep != null && targetList == targetIfStep.ElseSteps)
+        {
+            targetIfStep.HasElseBranch = true;
+        }
+
+        RebuildWorkflowStepCards(stepToInsert.Id);
+        OnFormEdited();
     }
 }

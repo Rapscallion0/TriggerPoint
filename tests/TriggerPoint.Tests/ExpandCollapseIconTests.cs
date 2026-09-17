@@ -83,13 +83,12 @@ public class ExpandCollapseIconTests
                     var executor = new DummyExecutor();
 
                     var window = new SettingsWindow(repo, shortcutListener, executor);
-                    Assert.NotNull(window.ToggleExpandAllBtn);
-                    Assert.NotNull(window.TreeExpandAllIcon);
+                    Assert.NotNull(window.TreeOptionsMenuBtn);
+                    Assert.NotNull(window.MenuToggleExpandAll);
                     Assert.NotNull(window.WorkflowToggleAllExpandBtn);
                     Assert.NotNull(window.WorkflowToggleAllIcon);
 
-                    // Both should use the unified CollapseAll vector geometry on initial load
-                    Assert.Equal(SettingsWindow.CollapseAllGeometry.ToString(), window.TreeExpandAllIcon.Data.ToString());
+                    // Workflow toggle should use the unified CollapseAll vector geometry on initial load
                     Assert.Equal(SettingsWindow.CollapseAllGeometry.ToString(), window.WorkflowToggleAllIcon.Data.ToString());
                 }
                 catch (Exception ex)

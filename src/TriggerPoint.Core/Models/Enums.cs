@@ -52,7 +52,29 @@ public enum WorkflowStepType
     RunScript = 6,
     ExecuteAction = 7,
     Dialog = 8,
-    Macro = 9
+    Macro = 9,
+    SetVariable = 10,
+    IfCondition = 11
+}
+
+public enum ConditionOperator
+{
+    Equals = 0,
+    NotEquals = 1,
+    Contains = 2,
+    NotContains = 3,
+    StartsWith = 4,
+    EndsWith = 5,
+    MatchesRegex = 6,
+    IsEmpty = 7,
+    IsNotEmpty = 8,
+    GreaterThan = 9,
+    LessThan = 10,
+    GreaterOrEqual = 11,
+    LessOrEqual = 12,
+    FileExists = 13,
+    DirectoryExists = 14,
+    ProcessIsRunning = 15
 }
 
 public enum WorkflowDialogButtons

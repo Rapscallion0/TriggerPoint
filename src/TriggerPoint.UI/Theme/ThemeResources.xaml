@@ -219,6 +219,9 @@
         </Setter>
     </Style>
 
+    <!-- Modern Primary Button Style Alias -->
+    <Style x:Key="PrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}"/>
+
     <!-- Modern Secondary Button Style -->
     <Style x:Key="SecondaryButtonStyle" TargetType="Button">
         <Setter Property="Background" Value="{DynamicResource BgTertiaryBrush}"/>
@@ -261,31 +264,45 @@
     <!-- ================================================================= -->
     <!-- High-Contrast Modern ComboBox Style                              -->
     <!-- ================================================================= -->
-    <Style TargetType="ComboBoxItem">
-        <Setter Property="SnapsToDevicePixels" Value="True"/>
+    <Style x:Key="ModernComboBoxItemStyle" TargetType="ComboBoxItem">
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
         <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="Padding" Value="10,8"/>
-        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="Padding" Value="10,6"/>
+        <Setter Property="Margin" Value="0,1"/>
+        <Setter Property="FontSize" Value="12.5"/>
+        <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ComboBoxItem">
                     <Border x:Name="itemBorder"
                             Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
                             CornerRadius="5"
-                            Margin="2,1"
                             Padding="{TemplateBinding Padding}"
+                            Margin="{TemplateBinding Margin}"
                             SnapsToDevicePixels="True">
-                        <ContentPresenter/>
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="itemBorder" Property="Background" Value="{DynamicResource ItemHoverBrush}"/>
-                            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                            <Setter TargetName="itemBorder" Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
                         </Trigger>
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="itemBorder" Property="Background" Value="{DynamicResource AccentSubtleBrush}"/>
-                            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                            <Setter TargetName="itemBorder" Property="Background" Value="{DynamicResource ItemHoverBrush}"/>
+                            <Setter TargetName="itemBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                            <Setter Property="FontWeight" Value="SemiBold"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -293,13 +310,17 @@
         </Setter>
     </Style>
 
-    <Style TargetType="ComboBox">
+    <Style TargetType="ComboBoxItem" BasedOn="{StaticResource ModernComboBoxItemStyle}"/>
+
+    <Style x:Key="ModernComboBoxStyle" TargetType="ComboBox">
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
         <Setter Property="Background" Value="{DynamicResource BgInputBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Padding" Value="10,6"/>
         <Setter Property="FontSize" Value="13"/>
+        <Setter Property="MaxDropDownHeight" Value="320"/>
+        <Setter Property="ItemContainerStyle" Value="{DynamicResource ModernComboBoxItemStyle}"/>
         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="Template">
             <Setter.Value>
@@ -385,7 +406,7 @@
                                 <Border.Effect>
                                     <DropShadowEffect BlurRadius="16" ShadowDepth="4" Opacity="0.35" Direction="270"/>
                                 </Border.Effect>
-                                <ScrollViewer SnapsToDevicePixels="True">
+                                <ScrollViewer SnapsToDevicePixels="True" MaxHeight="{TemplateBinding MaxDropDownHeight}" VerticalScrollBarVisibility="Auto">
                                     <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained" />
                                 </ScrollViewer>
                             </Border>
@@ -401,6 +422,8 @@
             </Trigger>
         </Style.Triggers>
     </Style>
+
+    <Style TargetType="ComboBox" BasedOn="{StaticResource ModernComboBoxStyle}"/>
 
     <!-- ================================================================= -->
     <!-- High-Contrast Modern TreeViewItem Style                          -->
@@ -794,7 +817,12 @@
                         <Border.Effect>
                             <DropShadowEffect BlurRadius="20" ShadowDepth="4" Opacity="0.45" Direction="270"/>
                         </Border.Effect>
-                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                        <ScrollViewer MaxHeight="450" 
+                                      VerticalScrollBarVisibility="Auto" 
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      Focusable="False">
+                            <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                        </ScrollViewer>
                     </Border>
                 </ControlTemplate>
             </Setter.Value>
@@ -867,7 +895,12 @@
                                 <Border.Effect>
                                     <DropShadowEffect BlurRadius="20" ShadowDepth="4" Opacity="0.45" Direction="270"/>
                                 </Border.Effect>
-                                <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                                <ScrollViewer MaxHeight="450" 
+                                              VerticalScrollBarVisibility="Auto" 
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              Focusable="False">
+                                    <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                                </ScrollViewer>
                             </Border>
                         </Popup>
                     </Grid>

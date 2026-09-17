@@ -5,9 +5,9 @@
 
 [![.NET](https://img.shields.io/badge/.NET-9.0--windows-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011%20x64-0078D6?logo=windows)](https://microsoft.com/windows)
-[![Version](https://img.shields.io/badge/Version-v2.0.7-blue.svg)](https://github.com/Rapscallion0/TriggerPoint/releases/tag/v2.0.6)
+[![Version](https://img.shields.io/badge/Version-v2.0.8-blue.svg)](https://github.com/Rapscallion0/TriggerPoint/releases/tag/v2.0.8)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-186%20Passed%20(100%25)-brightgreen)]()
+[![Tests](https://img.shields.io/badge/Tests-265%20Passed%20(100%25)-brightgreen)]()
 
 ---
 
@@ -19,26 +19,21 @@ Designed to stay out of your way, TriggerPoint runs quietly in your system tray 
 
 ---
 
-## What's New in v2.0.6 🚀
+## What's New in v2.0.8 🚀
 
-- **Visual Step Builder & JavaScript Workflows**:
-  - Build chained automation workflows combining interactive dialogs, application launches, URL navigation, directory checks, keystroke injections, delays, and action executions.
-  - **Full-Powered JavaScript Engine**: Powered by Jint with native `tp` runtime APIs (`tp.prompt()`, `tp.openUrl()`, `tp.launch()`, `tp.fs`, `tp.delay()`, `tp.injectSnippet()`, `tp.executeAction()`, `tp.vars`).
-  - **Contextual Mode Navigation**: Seamlessly switch between the Visual Step Builder and Script Editor with safe 3-option re-compilation modals ("Re-compile from Steps", "Keep My Script", or "Cancel") to guarantee your custom scripts are never accidentally lost.
-  - **Per-Step Inline Script Conversion**: Convert any structured visual step into an inline script with a single click.
-  - **Dual AvalonEdit Code Editors**: Both full-flow and inline JavaScript step editors feature syntax highlighting, line numbers, code typography, and dynamic theme switching.
-- **Spotlight-Style Command Palette**:
-  - Instant fuzzy search across all actions and folders with quick-launch hotkeys, breadcrumbs, autocomplete suggestions, and sorting modes (Alphabetical, Frequency, or Custom Tree Order).
-- **Menu Quick-Key Auto-Numbering**:
-  - Configurable accelerator keys (`1–9`, `A–Z`) for popup menus with `Off`, `Smart Fill`, and `Strict Positional` modes, including visually distinct badges for manual vs. auto-assigned keys.
-- **Top-Aligned Multiline Text Editing**:
-  - Clean top vertical alignment across all multiline template editors, snippet inputs, and interactive dialogs.
-- **Precision Drag-and-Drop & Tree Organization**:
-  - 3-zone visual drop targeting with ghost preview badges, spring-loaded folder expansion, tree state persistence, inline renaming (`<F2>`), and compact/comfortable tree density toggles.
-- **Adaptive Vector UI & High-DPI Theming**:
-  - Unified vector iconography, dark/light theme adaptive high-contrast reticle tray icons, and native Win32 multi-frame taskbar scaling.
-- **Dual-Scope Installer & Atomic Safety**:
-  - Inno Setup installer supporting standard Per-User (no UAC prompt) and All-Users administrative installations with atomic configuration backups.
+- **Conditional Branching Workflows**:
+  - Full support for `IfCondition` steps with dedicated `THEN` and `ELSE` branches.
+  - Evaluator supports text comparisons, case-insensitivity, numeric comparison (`>`, `<`, `≥`, `≤`), regular expressions, `File Exists`, `Directory Exists`, and `Process is Running` checks with live evaluation testing.
+- **Workflow Drag-and-Drop Overhaul**:
+  - Reorder workflow steps effortlessly, move steps into or out of `THEN`/`ELSE` branches, or transfer between branches.
+  - Zero-flicker targeting across textboxes and nested controls with physical cursor bounds detection.
+  - Insertion drop lines (`●───────`), directional ghost badges with SVG arrows, and edge auto-scrolling.
+- **Searchable Variable Picker Dialog**:
+  - Modern themed variable picker with real-time search, category filter chips (`System`, `Workflow`, `Clipboard`, `Date`), quick presets, and clipboard preview tokens.
+- **Workflow Step Context Menu & Operations**:
+  - Context menu on step cards for easy step manipulation: Move into Then/Else, Move out of Branch, Cut, Copy, Paste, Duplicate, and Delete.
+- **Smart Undo & Dirty State Tracking**:
+  - Deep-comparison snapshot verification automatically resets the `isDirty` state and disables Save/Revert when edits are manually reversed.
 
 ---
 
@@ -142,7 +137,7 @@ dotnet run --project src/TriggerPoint.UI
 #### Package Installer (`TriggerPointSetup.exe`)
 To package the app into a standalone installer:
 ```powershell
-powershell -ExecutionPolicy Bypass -File build/package.ps1 -AppVersion "2.0.7"
+powershell -ExecutionPolicy Bypass -File build/package.ps1 -AppVersion "2.0.8"
 ```
 The output installer will be produced at `artifacts/TriggerPointSetup.exe`.
 

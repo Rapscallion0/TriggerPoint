@@ -140,6 +140,17 @@ public class WorkflowExecutor : IWorkflowExecutor
         _logger.Information("Executing workflow '{Name}' in Visual Mode with {Count} steps", item.Name, item.Payload.WorkflowSteps.Count);
         var contextVariables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
+        if (item.Payload.WorkflowVariables != null)
+        {
+            foreach (var v in item.Payload.WorkflowVariables)
+            {
+                if (!string.IsNullOrWhiteSpace(v.Name))
+                {
+                    contextVariables[v.Name.Trim()] = ResolveVariables(v.Value, contextVariables);
+                }
+            }
+        }
+
         int stepNum = 0;
         foreach (var step in item.Payload.WorkflowSteps)
         {
@@ -458,6 +469,58 @@ public class WorkflowExecutor : IWorkflowExecutor
                 return false;
             }
 
+            case WorkflowStepType.SetVariable:
+            {
+                var val = ResolveVariables(step.SetVariableValue, contextVariables);
+                var varName = string.IsNullOrWhiteSpace(step.SetVariableName) ? "var" : step.SetVariableName.Trim();
+                contextVariables[varName] = val;
+                _logger.Information("Set workflow variable '{Name}' = '{Value}'", varName, val);
+                return true;
+            }
+
+            case WorkflowStepType.IfCondition:
+            {
+                var left = ResolveVariables(step.ConditionLeft, contextVariables);
+                var right = ResolveVariables(step.ConditionRight, contextVariables);
+                bool conditionPassed = ConditionEvaluator.Evaluate(left, step.ConditionOperator, right, step.ConditionIgnoreCase);
+                _logger.Information("Evaluated condition [{Left}] {Op} [{Right}] (ignoreCase={IgnoreCase}) => {Result}",
+                    left, step.ConditionOperator, right, step.ConditionIgnoreCase, conditionPassed);
+
+                var branchSteps = conditionPassed ? step.ThenSteps : (step.HasElseBranch ? step.ElseSteps : null);
+                if (branchSteps != null && branchSteps.Count > 0)
+                {
+                    int subNum = 0;
+                    foreach (var subStep in branchSteps)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        subNum++;
+                        if (!subStep.IsEnabled) continue;
+
+                        try
+                        {
+                            var subSuccess = await ExecuteStepAsync(subStep, contextVariables, isElevated, effectiveHwnd, cancellationToken);
+                            if (!subSuccess)
+                            {
+                                if (subStep.OnError == StepErrorPolicy.StopWorkflow)
+                                {
+                                    _logger.Information("Conditional branch stopped at sub-step {Num} ('{StepName}') per OnError policy.", subNum, subStep.Name);
+                                    return false;
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.Error(ex, "Exception executing conditional sub-step {Num} ('{StepName}')", subNum, subStep.Name);
+                            if (subStep.OnError == StepErrorPolicy.StopWorkflow)
+                            {
+                                throw;
+                            }
+                        }
+                    }
+                }
+                return true;
+            }
+
             default:
                 return true;
         }
@@ -473,8 +536,20 @@ public class WorkflowExecutor : IWorkflowExecutor
 
         var contextVariables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
+        // Seed workflow-level variables if available
+        if (parentItem?.Payload?.WorkflowVariables != null)
+        {
+            foreach (var v in parentItem.Payload.WorkflowVariables)
+            {
+                if (!string.IsNullOrWhiteSpace(v.Name))
+                {
+                    contextVariables[v.Name.Trim()] = ResolveVariables(v.Value, contextVariables);
+                }
+            }
+        }
+
         // If step references placeholders (e.g. {ticket}), extract and prompt for test values if prompt dialog service is available
-        var textToCheck = $"{step.Url} {step.Command} {step.Arguments} {step.WorkingDirectory} {step.DirectoryPath} {step.SnippetTemplate}";
+        var textToCheck = $"{step.Url} {step.Command} {step.Arguments} {step.WorkingDirectory} {step.DirectoryPath} {step.SnippetTemplate} {step.SetVariableValue}";
         var matches = System.Text.RegularExpressions.Regex.Matches(textToCheck, @"\{([a-zA-Z0-9_]+)\}");
         var neededTokens = new List<PromptToken>();
         foreach (System.Text.RegularExpressions.Match match in matches)
@@ -506,16 +581,19 @@ public class WorkflowExecutor : IWorkflowExecutor
         }
 
         var effectiveHwnd = targetHwnd ?? _contextFilterService.LastExternalForegroundHwnd;
-        return await ExecuteStepAsync(step, contextVariables, parentItem.Payload.RunAsAdmin, effectiveHwnd, cancellationToken);
+        return await ExecuteStepAsync(step, contextVariables, parentItem?.Payload?.RunAsAdmin ?? false, effectiveHwnd, cancellationToken);
     }
 
     public static string ResolveVariables(string? template, IReadOnlyDictionary<string, string> variables)
     {
         if (string.IsNullOrEmpty(template)) return string.Empty;
 
-        // Uses PlaceholderParser to resolve static tokens ({date}, {clipboard}, {env:...}) as well as user variables
+        // 1. Expand standard Windows environment variables (%USERPROFILE%, %TEMP%, %APPDATA%, %COMPUTERNAME%, etc.)
+        var expandedEnv = Environment.ExpandEnvironmentVariables(template);
+
+        // 2. Uses PlaceholderParser to resolve dynamic tokens ({date}, {clipboard}, {env:...}) as well as user variables
         return PlaceholderParser.EvaluateAsync(
-            template,
+            expandedEnv,
             clipboardProvider: null,
             promptResponses: variables).GetAwaiter().GetResult();
     }

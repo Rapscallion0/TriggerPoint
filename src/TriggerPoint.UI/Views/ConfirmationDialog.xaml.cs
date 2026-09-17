@@ -33,7 +33,7 @@ public partial class ConfirmationDialog : Window, IConfirmationDialogService
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
-        CenterOnActiveScreen();
+        CenterOnOwnerOrActiveScreen();
         var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
         if (hwnd != IntPtr.Zero)
         {
@@ -43,6 +43,7 @@ public partial class ConfirmationDialog : Window, IConfirmationDialogService
 
     private void Window_Loaded(object sender, RoutedEventArgs e)
     {
+        CenterOnOwnerOrActiveScreen();
         Activate();
         Focus();
         ConfirmBtn.Focus();
@@ -55,25 +56,71 @@ public partial class ConfirmationDialog : Window, IConfirmationDialogService
         }
     }
 
-    private void CenterOnActiveScreen()
+    private void CenterOnOwnerOrActiveScreen()
     {
-        if (!NativeMethods.GetCursorPos(out var pt)) return;
-
-        var hMonitor = NativeMethods.MonitorFromPoint(pt, NativeMethods.MONITOR_DEFAULTTONEAREST);
-        var monitorInfo = new NativeMethods.MONITORINFO { cbSize = Marshal.SizeOf<NativeMethods.MONITORINFO>() };
-        if (!NativeMethods.GetMonitorInfo(hMonitor, ref monitorInfo)) return;
-
-        double dpiScale = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
-        double workLeft = monitorInfo.rcWork.Left / dpiScale;
-        double workTop = monitorInfo.rcWork.Top / dpiScale;
-        double workWidth = (monitorInfo.rcWork.Right - monitorInfo.rcWork.Left) / dpiScale;
-        double workHeight = (monitorInfo.rcWork.Bottom - monitorInfo.rcWork.Top) / dpiScale;
-
         double winWidth = ActualWidth > 0 ? ActualWidth : Width;
-        double winHeight = ActualHeight > 0 ? ActualHeight : 180;
+        double winHeight = ActualHeight > 0 ? ActualHeight : 200;
+        if (winWidth <= 0) winWidth = 440;
+        if (winHeight <= 0) winHeight = 200;
 
-        Left = workLeft + Math.Max(0, (workWidth - winWidth) / 2.0);
-        Top = workTop + Math.Max(0, (workHeight - winHeight) / 2.0);
+        IntPtr hMonitor = IntPtr.Zero;
+        double workLeft, workTop, workWidth, workHeight;
+        double dpiScale = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
+
+        if (Owner != null && Owner.IsLoaded && Owner.WindowState != WindowState.Minimized)
+        {
+            var ownerHwnd = new System.Windows.Interop.WindowInteropHelper(Owner).Handle;
+            if (ownerHwnd != IntPtr.Zero)
+            {
+                hMonitor = NativeMethods.MonitorFromWindow(ownerHwnd, NativeMethods.MONITOR_DEFAULTTONEAREST);
+            }
+        }
+
+        if (hMonitor == IntPtr.Zero)
+        {
+            if (NativeMethods.GetCursorPos(out var pt))
+            {
+                hMonitor = NativeMethods.MonitorFromPoint(pt, NativeMethods.MONITOR_DEFAULTTONEAREST);
+            }
+        }
+
+        var monitorInfo = new NativeMethods.MONITORINFO { cbSize = Marshal.SizeOf<NativeMethods.MONITORINFO>() };
+        if (hMonitor != IntPtr.Zero && NativeMethods.GetMonitorInfo(hMonitor, ref monitorInfo))
+        {
+            workLeft = monitorInfo.rcWork.Left / dpiScale;
+            workTop = monitorInfo.rcWork.Top / dpiScale;
+            workWidth = (monitorInfo.rcWork.Right - monitorInfo.rcWork.Left) / dpiScale;
+            workHeight = (monitorInfo.rcWork.Bottom - monitorInfo.rcWork.Top) / dpiScale;
+        }
+        else
+        {
+            workLeft = SystemParameters.WorkArea.Left;
+            workTop = SystemParameters.WorkArea.Top;
+            workWidth = SystemParameters.WorkArea.Width;
+            workHeight = SystemParameters.WorkArea.Height;
+        }
+
+        double targetLeft;
+        double targetTop;
+
+        if (Owner != null && Owner.IsLoaded && Owner.WindowState == WindowState.Normal)
+        {
+            targetLeft = Owner.Left + (Owner.ActualWidth - winWidth) / 2.0;
+            targetTop = Owner.Top + (Owner.ActualHeight - winHeight) / 2.0;
+        }
+        else
+        {
+            targetLeft = workLeft + (workWidth - winWidth) / 2.0;
+            targetTop = workTop + (workHeight - winHeight) / 2.0;
+        }
+
+        if (targetLeft < workLeft) targetLeft = workLeft;
+        if (targetLeft + winWidth > workLeft + workWidth) targetLeft = workLeft + Math.Max(0, workWidth - winWidth);
+        if (targetTop < workTop) targetTop = workTop;
+        if (targetTop + winHeight > workTop + workHeight) targetTop = workTop + Math.Max(0, workHeight - winHeight);
+
+        Left = targetLeft;
+        Top = targetTop;
     }
 
     private void ConfirmButton_Click(object sender, RoutedEventArgs e)

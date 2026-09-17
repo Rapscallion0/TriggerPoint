@@ -406,6 +406,7 @@ public partial class SettingsWindow : Window
     private readonly IWorkflowExecutor? _workflowExecutor;
     private readonly IBrowserDetectionService? _browserDetectionService;
     private readonly IMacroService _macroService;
+    private readonly IWorkflowTemplateService _workflowTemplateService;
 
     public bool IsExiting { get; set; }
 
@@ -417,7 +418,8 @@ public partial class SettingsWindow : Window
         ILogManagerService? logManagerService = null,
         IWorkflowExecutor? workflowExecutor = null,
         IBrowserDetectionService? browserDetectionService = null,
-        IMacroService? macroService = null)
+        IMacroService? macroService = null,
+        IWorkflowTemplateService? workflowTemplateService = null)
     {
         InitializeComponent();
         _repository = repository;
@@ -429,6 +431,7 @@ public partial class SettingsWindow : Window
         _workflowExecutor = workflowExecutor;
         _browserDetectionService = browserDetectionService;
         _macroService = macroService ?? new TriggerPoint.Infrastructure.Services.Win32MacroService();
+        _workflowTemplateService = workflowTemplateService ?? new TriggerPoint.Infrastructure.Services.WorkflowTemplateService();
 
         MacroEditor?.Initialize(_macroService);
         if (MacroEditor != null)
@@ -812,7 +815,79 @@ public partial class SettingsWindow : Window
     {
         if (_isUpdatingForm || _selectedItem == null) return;
         CommitCurrentFormChanges();
-        SetDirty(true);
+        bool isChanged = !IsItemMatchingSnapshot(_selectedItem, _originalItemSnapshot);
+        SetDirty(isChanged);
+    }
+
+    internal static bool IsItemMatchingSnapshot(TriggerItem current, TriggerItem? snapshot)
+    {
+        if (snapshot == null) return true;
+        try
+        {
+            string currentJson = GetComparisonJson(current);
+            string snapshotJson = GetComparisonJson(snapshot);
+            return string.Equals(currentJson, snapshotJson, StringComparison.Ordinal);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string GetComparisonJson(TriggerItem item)
+    {
+        var node = System.Text.Json.JsonSerializer.SerializeToNode(item);
+        if (node is System.Text.Json.Nodes.JsonObject obj)
+        {
+            if (obj["Payload"] is System.Text.Json.Nodes.JsonObject payload)
+            {
+                if (payload["WorkflowVariables"] is System.Text.Json.Nodes.JsonArray vars)
+                {
+                    foreach (var v in vars)
+                    {
+                        if (v is System.Text.Json.Nodes.JsonObject vObj)
+                        {
+                            vObj.Remove("Id");
+                        }
+                    }
+                }
+                if (payload["WorkflowSteps"] is System.Text.Json.Nodes.JsonArray steps)
+                {
+                    StripStepAndPromptFieldIds(steps);
+                }
+            }
+            return obj.ToJsonString();
+        }
+        return System.Text.Json.JsonSerializer.Serialize(item);
+    }
+
+    private static void StripStepAndPromptFieldIds(System.Text.Json.Nodes.JsonArray steps)
+    {
+        foreach (var s in steps)
+        {
+            if (s is System.Text.Json.Nodes.JsonObject sObj)
+            {
+                sObj.Remove("Id");
+                if (sObj["PromptFields"] is System.Text.Json.Nodes.JsonArray fields)
+                {
+                    foreach (var f in fields)
+                    {
+                        if (f is System.Text.Json.Nodes.JsonObject fObj)
+                        {
+                            fObj.Remove("Id");
+                        }
+                    }
+                }
+                if (sObj["ThenSteps"] is System.Text.Json.Nodes.JsonArray thenSteps)
+                {
+                    StripStepAndPromptFieldIds(thenSteps);
+                }
+                if (sObj["ElseSteps"] is System.Text.Json.Nodes.JsonArray elseSteps)
+                {
+                    StripStepAndPromptFieldIds(elseSteps);
+                }
+            }
+        }
     }
 
     private static void RestoreItemFromSnapshot(TriggerItem target, TriggerItem snapshot)
@@ -825,15 +900,21 @@ public partial class SettingsWindow : Window
             ? new ShortcutBinding(snapshot.Hotkey.Modifiers, snapshot.Hotkey.VirtualKey, snapshot.Hotkey.KeyName) 
             : null;
         target.PresentationMode = snapshot.PresentationMode;
+        target.AutoNumberMode = snapshot.AutoNumberMode;
+        target.IsEnabled = snapshot.IsEnabled;
         target.ActionType = snapshot.ActionType;
         target.Payload.Command = snapshot.Payload.Command;
         target.Payload.Arguments = snapshot.Payload.Arguments;
         target.Payload.WorkingDirectory = snapshot.Payload.WorkingDirectory;
         target.Payload.RunAsAdmin = snapshot.Payload.RunAsAdmin;
+        target.Payload.TargetDisplay = snapshot.Payload.TargetDisplay;
+        target.Payload.OpenInNewWindow = snapshot.Payload.OpenInNewWindow;
         target.Payload.SnippetTemplate = snapshot.Payload.SnippetTemplate;
         target.Payload.WorkflowMode = snapshot.Payload.WorkflowMode;
         target.Payload.ScriptSource = snapshot.Payload.ScriptSource;
         target.Payload.WorkflowSteps = snapshot.Payload.WorkflowSteps.Select(s => s.Clone()).ToList();
+        target.Payload.WorkflowVariables = snapshot.Payload.WorkflowVariables.Select(v => v.Clone()).ToList();
+        target.Payload.Macro = snapshot.Payload.Macro.Clone();
         target.ContextFilter.AllowedProcesses = [.. snapshot.ContextFilter.AllowedProcesses];
         target.ContextFilter.ExcludedProcesses = [.. snapshot.ContextFilter.ExcludedProcesses];
         target.ContextFilter.AllowedUrls = [.. snapshot.ContextFilter.AllowedUrls];
@@ -1650,7 +1731,8 @@ public partial class SettingsWindow : Window
 
         SnippetTemplateBox.Text = current.Insert(insertPos, token);
         SnippetTemplateBox.Focus();
-        SnippetTemplateBox.Select(insertPos, token.Length);
+        SnippetTemplateBox.CaretIndex = insertPos + token.Length;
+        SnippetTemplateBox.SelectionLength = 0;
         _lastSnippetCaretIndex = insertPos + token.Length;
         _lastSnippetSelectionLength = 0;
 
@@ -2397,6 +2479,7 @@ public partial class SettingsWindow : Window
         if (actionType == ActionType.Workflow)
         {
             newItem.Payload.WorkflowSteps = [];
+            newItem.Payload.WorkflowVariables = [];
         }
         else if (actionType == ActionType.Macro)
         {
@@ -2432,6 +2515,7 @@ public partial class SettingsWindow : Window
         if (actionType == ActionType.Workflow)
         {
             newItem.Payload.WorkflowSteps = [];
+            newItem.Payload.WorkflowVariables = [];
         }
         else if (actionType == ActionType.Macro)
         {
@@ -2618,6 +2702,7 @@ public partial class SettingsWindow : Window
                 ContextExportItem.Visibility = Visibility.Collapsed;
                 ContextImportItem.Visibility = Visibility.Collapsed;
                 if (ContextExportSeparator != null) ContextExportSeparator.Visibility = Visibility.Collapsed;
+                if (ContextSaveAsWorkflowTemplateItem != null) ContextSaveAsWorkflowTemplateItem.Visibility = Visibility.Collapsed;
                 ContextRestoreItem.Visibility = Visibility.Collapsed;
                 ContextPermanentDeleteItem.Visibility = Visibility.Collapsed;
                 ContextEmptyRecycleBinItem.Visibility = Visibility.Visible;
@@ -2636,6 +2721,7 @@ public partial class SettingsWindow : Window
                 ContextExportItem.Visibility = Visibility.Collapsed;
                 ContextImportItem.Visibility = Visibility.Collapsed;
                 if (ContextExportSeparator != null) ContextExportSeparator.Visibility = Visibility.Collapsed;
+                if (ContextSaveAsWorkflowTemplateItem != null) ContextSaveAsWorkflowTemplateItem.Visibility = Visibility.Collapsed;
                 ContextEmptyRecycleBinItem.Visibility = Visibility.Collapsed;
                 ContextRestoreItem.Visibility = Visibility.Visible;
                 ContextRestoreItem.Header = $"Restore '{_rightClickedTreeVm.Name}'";
@@ -2659,6 +2745,12 @@ public partial class SettingsWindow : Window
             ContextExportItem.Visibility = Visibility.Visible;
             ContextImportItem.Visibility = Visibility.Visible;
             if (ContextExportSeparator != null) ContextExportSeparator.Visibility = Visibility.Visible;
+            if (ContextSaveAsWorkflowTemplateItem != null)
+            {
+                ContextSaveAsWorkflowTemplateItem.Visibility = _rightClickedTreeVm.Item.ActionType == ActionType.Workflow 
+                    ? Visibility.Visible 
+                    : Visibility.Collapsed;
+            }
             ContextRestoreItem.Visibility = Visibility.Collapsed;
             ContextPermanentDeleteItem.Visibility = Visibility.Collapsed;
             ContextEmptyRecycleBinItem.Visibility = Visibility.Collapsed;
@@ -2765,6 +2857,70 @@ public partial class SettingsWindow : Window
         ToggleDensity();
     }
 
+    private void TreeOptionsMenuBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (TreeOptionsMenuBtn?.ContextMenu == null) return;
+        UpdateTreeOptionsMenuUi();
+        TreeOptionsMenuBtn.ContextMenu.PlacementTarget = TreeOptionsMenuBtn;
+        TreeOptionsMenuBtn.ContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        TreeOptionsMenuBtn.ContextMenu.IsOpen = true;
+    }
+
+    private void UpdateTreeOptionsMenuUi()
+    {
+        bool isCompact = _appSettings?.CompactTreeDensity ?? true;
+        bool showBadges = _appSettings?.ShowShortcutsInTree ?? true;
+        bool showDisabled = _appSettings?.ShowDisabledItemsInTree ?? true;
+
+        if (MenuToggleDensity != null)
+        {
+            MenuToggleDensity.Header = isCompact ? "Switch to Comfortable View" : "Switch to Compact View";
+            MenuToggleDensity.Icon = new TextBlock
+            {
+                Text = isCompact ? "☷" : "≡",
+                FontSize = 13,
+                FontWeight = FontWeights.Bold,
+                Foreground = Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.DodgerBlue
+            };
+        }
+        if (MenuToggleShortcuts != null)
+        {
+            MenuToggleShortcuts.Header = "Show Hotkey Badges";
+            MenuToggleShortcuts.Icon = showBadges
+                ? new TextBlock { Text = "✓", FontSize = 13, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(0x10, 0xB9, 0x81)) }
+                : new TextBlock { Text = " ", Width = 13 };
+        }
+        if (MenuToggleShowDisabled != null)
+        {
+            MenuToggleShowDisabled.Header = "Show Disabled Items";
+            MenuToggleShowDisabled.Icon = showDisabled
+                ? new TextBlock { Text = "✓", FontSize = 13, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(0x10, 0xB9, 0x81)) }
+                : new TextBlock { Text = " ", Width = 13 };
+        }
+        if (MenuToggleExpandAll != null)
+        {
+            var folders = _items.Where(x => x.ActionType == ActionType.Folder).ToList();
+            bool anyExpanded = folders.Any(f => f.IsExpanded);
+            MenuToggleExpandAll.Header = anyExpanded ? "Collapse All Folders" : "Expand All Folders";
+        }
+
+        bool hasNonDefaultView = !isCompact || !showBadges || !showDisabled;
+        if (TreeOptionsActiveDot != null)
+        {
+            TreeOptionsActiveDot.Visibility = hasNonDefaultView ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        if (TreeOptionsMenuBtn != null)
+        {
+            TreeOptionsMenuBtn.ToolTip = $"View Options (Click to configure):\n• Tree Density: {(isCompact ? "Compact" : "Comfortable")}\n• Hotkey Badges: {(showBadges ? "ON" : "OFF")}\n• Show Disabled Items: {(showDisabled ? "ON" : "OFF")}";
+        }
+    }
+
+    private void MenuToggleDensity_Click(object sender, RoutedEventArgs e)
+    {
+        ToggleDensity();
+    }
+
     private void ToggleDensityBtn_Click(object sender, RoutedEventArgs e)
     {
         ToggleDensity();
@@ -2781,25 +2937,15 @@ public partial class SettingsWindow : Window
 
     private void UpdateToggleDensityButtonUi()
     {
-        if (ToggleDensityBtn == null) return;
-        bool compact = _appSettings?.CompactTreeDensity ?? true;
-        ToggleDensityBtn.Content = compact ? "≡" : "☷";
-        ToggleDensityBtn.ToolTip = compact ? "Switch to Comfortable View (currently Compact)" : "Switch to Compact View (currently Comfortable)";
-        if (compact)
-        {
-            ToggleDensityBtn.Background = Application.Current.TryFindResource("AccentSubtleBrush") as Brush ?? Brushes.DarkSlateBlue;
-            ToggleDensityBtn.BorderBrush = Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.DodgerBlue;
-            ToggleDensityBtn.Foreground = Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.DodgerBlue;
-        }
-        else
-        {
-            ToggleDensityBtn.Background = Application.Current.TryFindResource("BgSecondaryBrush") as Brush ?? Brushes.DarkSlateGray;
-            ToggleDensityBtn.BorderBrush = Application.Current.TryFindResource("BorderBrush") as Brush ?? Brushes.Gray;
-            ToggleDensityBtn.Foreground = Application.Current.TryFindResource("TextSecondaryBrush") as Brush ?? Brushes.Gray;
-        }
+        UpdateTreeOptionsMenuUi();
     }
 
     private void ContextToggleShowDisabled_Click(object sender, RoutedEventArgs e)
+    {
+        ToggleShowDisabled();
+    }
+
+    private void MenuToggleShowDisabled_Click(object sender, RoutedEventArgs e)
     {
         ToggleShowDisabled();
     }
@@ -2826,25 +2972,7 @@ public partial class SettingsWindow : Window
 
     private void UpdateToggleShowDisabledButtonUi()
     {
-        if (ToggleShowDisabledBtn == null) return;
-        bool show = _appSettings?.ShowDisabledItemsInTree ?? true;
-        ToggleShowDisabledBtn.ToolTip = show ? "Hide disabled items in tree" : "Show disabled items in tree";
-        if (ToggleShowDisabledIcon != null)
-        {
-            ToggleShowDisabledIcon.Data = Application.Current.FindResource(show ? "EyeVisibleGeometry" : "EyeSlashGeometry") as Geometry;
-        }
-        if (show)
-        {
-            ToggleShowDisabledBtn.Background = Application.Current.TryFindResource("AccentSubtleBrush") as Brush ?? Brushes.DarkSlateBlue;
-            ToggleShowDisabledBtn.BorderBrush = Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.DodgerBlue;
-            ToggleShowDisabledBtn.Foreground = Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.DodgerBlue;
-        }
-        else
-        {
-            ToggleShowDisabledBtn.Background = Application.Current.TryFindResource("BgSecondaryBrush") as Brush ?? Brushes.DarkSlateGray;
-            ToggleShowDisabledBtn.BorderBrush = Application.Current.TryFindResource("BorderBrush") as Brush ?? Brushes.Gray;
-            ToggleShowDisabledBtn.Foreground = Application.Current.TryFindResource("TextSecondaryBrush") as Brush ?? Brushes.Gray;
-        }
+        UpdateTreeOptionsMenuUi();
     }
 
     private void UpdateDisabledFilterChipCount()
@@ -2971,6 +3099,28 @@ public partial class SettingsWindow : Window
         {
             SelectTreeItem(vm.Item);
             vm.StartEdit();
+        }
+    }
+
+    private void ContextSaveAsWorkflowTemplateItem_Click(object sender, RoutedEventArgs e)
+    {
+        var item = _rightClickedTreeVm?.Item ?? _selectedItem;
+        if (item?.Payload?.WorkflowSteps == null) return;
+
+        CommitCurrentFormChanges();
+
+        var dialog = new WorkflowTemplateEditorDialog(
+            _workflowTemplateService,
+            existingTemplate: null,
+            stepsFromActiveWorkflow: item.Payload.WorkflowSteps,
+            suggestedTitle: item.Name)
+        {
+            Owner = this
+        };
+
+        if (dialog.ShowDialog() == true && dialog.ResultTemplate != null)
+        {
+            StatusText.Text = $"Workflow template '{dialog.ResultTemplate.Title}' saved.";
         }
     }
 
@@ -3830,7 +3980,17 @@ public partial class SettingsWindow : Window
         e.Handled = true;
     }
 
+    private void MenuToggleShortcuts_Click(object sender, RoutedEventArgs e)
+    {
+        ToggleShortcutsBadge();
+    }
+
     private void ToggleShortcutsBadgeBtn_Click(object sender, RoutedEventArgs e)
+    {
+        ToggleShortcutsBadge();
+    }
+
+    private void ToggleShortcutsBadge()
     {
         if (_appSettings == null) return;
         _appSettings.ShowShortcutsInTree = !_appSettings.ShowShortcutsInTree;
@@ -3847,24 +4007,20 @@ public partial class SettingsWindow : Window
 
     private void UpdateToggleShortcutsButtonUi()
     {
-        if (ToggleShortcutsBadgeBtn == null) return;
-        bool show = _appSettings?.ShowShortcutsInTree ?? true;
-        ToggleShortcutsBadgeBtn.ToolTip = show ? "Hide shortcut badges in tree" : "Show shortcut badges in tree";
-        if (show)
-        {
-            ToggleShortcutsBadgeBtn.Background = Application.Current.TryFindResource("AccentSubtleBrush") as Brush ?? Brushes.DarkSlateBlue;
-            ToggleShortcutsBadgeBtn.BorderBrush = Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.DodgerBlue;
-            ToggleShortcutsBadgeBtn.Foreground = Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.DodgerBlue;
-        }
-        else
-        {
-            ToggleShortcutsBadgeBtn.Background = Application.Current.TryFindResource("BgSecondaryBrush") as Brush ?? Brushes.DarkSlateGray;
-            ToggleShortcutsBadgeBtn.BorderBrush = Application.Current.TryFindResource("BorderBrush") as Brush ?? Brushes.Gray;
-            ToggleShortcutsBadgeBtn.Foreground = Application.Current.TryFindResource("TextSecondaryBrush") as Brush ?? Brushes.Gray;
-        }
+        UpdateTreeOptionsMenuUi();
+    }
+
+    private void MenuToggleExpandAll_Click(object sender, RoutedEventArgs e)
+    {
+        ToggleExpandAll();
     }
 
     private void ToggleExpandAllBtn_Click(object sender, RoutedEventArgs e)
+    {
+        ToggleExpandAll();
+    }
+
+    private void ToggleExpandAll()
     {
         var folders = _items.Where(x => x.ActionType == ActionType.Folder).ToList();
         if (folders.Count == 0) return;
@@ -3909,11 +4065,21 @@ public partial class SettingsWindow : Window
 
     private void UpdateExpandAllButtonGlyph()
     {
-        if (ToggleExpandAllBtn == null || TreeExpandAllIcon == null) return;
-        var folders = _items.Where(x => x.ActionType == ActionType.Folder).ToList();
-        bool anyExpanded = folders.Any(f => f.IsExpanded);
-        TreeExpandAllIcon.Data = anyExpanded ? CollapseAllGeometry : ExpandAllGeometry;
-        ToggleExpandAllBtn.ToolTip = anyExpanded ? "Collapse All Folders" : "Expand All Folders";
+        UpdateTreeOptionsMenuUi();
+    }
+
+    private void Window_DragEnter(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            e.Effects = DragDropEffects.Copy;
+            e.Handled = true;
+        }
+        else if (e.Data.GetDataPresent("WorkflowStepDragData"))
+        {
+            e.Effects = DragDropEffects.Move;
+            e.Handled = true;
+        }
     }
 
     private void Window_DragOver(object sender, DragEventArgs e)
@@ -3921,6 +4087,11 @@ public partial class SettingsWindow : Window
         if (e.Data.GetDataPresent(DataFormats.FileDrop))
         {
             e.Effects = DragDropEffects.Copy;
+            e.Handled = true;
+        }
+        else if (e.Data.GetDataPresent("WorkflowStepDragData"))
+        {
+            e.Effects = DragDropEffects.Move;
             e.Handled = true;
         }
     }

@@ -233,7 +233,8 @@ public partial class App : Application
         };
 
         var macroService = _serviceProvider.GetRequiredService<IMacroService>();
-        _settingsWindow = new SettingsWindow(_repository, _shortcutListener, _executor, contextFilterService, _logManagerService, workflowExecutor, browserDetectionService, macroService);
+        var workflowTemplateService = _serviceProvider.GetRequiredService<IWorkflowTemplateService>();
+        _settingsWindow = new SettingsWindow(_repository, _shortcutListener, _executor, contextFilterService, _logManagerService, workflowExecutor, browserDetectionService, macroService, workflowTemplateService);
         MainWindow = _settingsWindow;
 
         // 8. Startup Recycle Bin Purge
@@ -315,6 +316,7 @@ public partial class App : Application
         services.AddSingleton<IMacroService, Win32MacroService>();
         services.AddSingleton<IActionExecutor, ShellActionExecutor>();
         services.AddSingleton<IToastNotificationService, ToastNotificationService>();
+        services.AddSingleton<IWorkflowTemplateService, WorkflowTemplateService>();
     }
 
     private void ShortcutListener_HotkeyTriggered(object? sender, TriggerItem item)

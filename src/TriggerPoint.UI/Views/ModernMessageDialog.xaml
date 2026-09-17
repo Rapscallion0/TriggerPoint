@@ -6,7 +6,7 @@
         MaxWidth="540"
         Width="Auto"
         SizeToContent="WidthAndHeight"
-        WindowStartupLocation="CenterOwner"
+        WindowStartupLocation="Manual"
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"

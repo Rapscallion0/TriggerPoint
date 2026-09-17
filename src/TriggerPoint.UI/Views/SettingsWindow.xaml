@@ -15,6 +15,7 @@
         BorderThickness="1"
         Background="{DynamicResource BgPrimaryBrush}"
         AllowDrop="True"
+        DragEnter="Window_DragEnter"
         DragOver="Window_DragOver"
         Drop="Window_Drop"
         Closing="Window_Closing">
@@ -129,9 +130,6 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
                         <TextBox Grid.Column="0"
@@ -143,67 +141,46 @@
                                  TextChanged="TreeSearchBox_TextChanged"/>
 
                         <Button Grid.Column="1"
-                                x:Name="ToggleDensityBtn"
-                                Content="≡"
+                                x:Name="TreeOptionsMenuBtn"
                                 Style="{StaticResource SecondaryButtonStyle}"
                                 Width="32" Height="32"
-                                FontSize="14"
-                                FontWeight="Bold"
                                 Padding="0"
                                 Margin="6,0,0,0"
-                                ToolTip="Toggle tree view density (Compact / Comfortable)"
-                                Click="ToggleDensityBtn_Click"/>
+                                ToolTip="View options (Density, Hotkey badges, Hidden items, Folders)"
+                                Click="TreeOptionsMenuBtn_Click">
+                            <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock Text="⋮" FontSize="17" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Ellipse x:Name="TreeOptionsActiveDot"
+                                         Width="6" Height="6"
+                                         Fill="{DynamicResource AccentBrush}"
+                                         HorizontalAlignment="Right" VerticalAlignment="Top"
+                                         Margin="0,-3,-6,0"
+                                         Visibility="Collapsed"/>
+                            </Grid>
+                            <Button.ContextMenu>
+                                <ContextMenu x:Name="TreeOptionsMenuContextMenu">
+                                    <MenuItem x:Name="MenuToggleDensity" 
+                                              Header="Switch to Comfortable View" 
+                                              Click="MenuToggleDensity_Click"/>
+                                    <MenuItem x:Name="MenuToggleShortcuts" 
+                                              Header="Show Hotkey Badges" 
+                                              Click="MenuToggleShortcuts_Click"/>
+                                    <MenuItem x:Name="MenuToggleShowDisabled" 
+                                              Header="Show Disabled Items" 
+                                              Click="MenuToggleShowDisabled_Click"/>
+                                    <Separator/>
+                                    <MenuItem x:Name="MenuToggleExpandAll" 
+                                              Header="Collapse All Folders" 
+                                              Click="MenuToggleExpandAll_Click">
+                                        <MenuItem.Icon>
+                                            <TextBlock Text="⤢" FontSize="13"/>
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                </ContextMenu>
+                            </Button.ContextMenu>
+                        </Button>
 
                         <Button Grid.Column="2"
-                                x:Name="ToggleShowDisabledBtn"
-                                Style="{StaticResource SecondaryButtonStyle}"
-                                Width="32" Height="32"
-                                Padding="0"
-                                Margin="4,0,0,0"
-                                ToolTip="Toggle visibility of disabled items in tree"
-                                Click="ToggleShowDisabledBtn_Click">
-                            <Path x:Name="ToggleShowDisabledIcon"
-                                  Data="{DynamicResource EyeVisibleGeometry}"
-                                  Width="15" Height="15"
-                                  Stretch="Uniform"
-                                  Fill="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"
-                                  VerticalAlignment="Center"
-                                  HorizontalAlignment="Center"/>
-                        </Button>
-
-                        <Button Grid.Column="3"
-                                x:Name="ToggleShortcutsBadgeBtn"
-                                Content="⌨"
-                                Style="{StaticResource SecondaryButtonStyle}"
-                                Width="32" Height="32"
-                                FontSize="13"
-                                Padding="0"
-                                Margin="4,0,0,0"
-                                ToolTip="Toggle hotkey badges in tree"
-                                Click="ToggleShortcutsBadgeBtn_Click"/>
-
-                        <Button Grid.Column="4"
-                                x:Name="ToggleExpandAllBtn"
-                                Style="{StaticResource SecondaryButtonStyle}"
-                                Width="32" Height="32"
-                                Padding="0"
-                                Margin="4,0,0,0"
-                                ToolTip="Collapse All Folders"
-                                Click="ToggleExpandAllBtn_Click">
-                            <Path x:Name="TreeExpandAllIcon" 
-                                  Width="14" Height="14" 
-                                  Stretch="Uniform"
-                                  Stroke="{DynamicResource TextPrimaryBrush}" 
-                                  StrokeThickness="1.5"
-                                  StrokeStartLineCap="Round" 
-                                  StrokeEndLineCap="Round" 
-                                  StrokeLineJoin="Round"
-                                  Data="M 2,3.5 L 8.5,3.5 M 4,8 L 8.5,8 M 6,12.5 L 8.5,12.5 M 13,12.5 L 13,4 M 10.5,6.5 L 13,4 L 15.5,6.5"
-                                  HorizontalAlignment="Center" 
-                                  VerticalAlignment="Center"/>
-                        </Button>
-
-                        <Button Grid.Column="5"
                                 x:Name="AddMenuBtn"
                                 Content="+"
                                 Style="{StaticResource SecondaryButtonStyle}"
@@ -395,6 +372,11 @@
                                 </MenuItem.Icon>
                             </MenuItem>
                             <Separator x:Name="ContextExportSeparator"/>
+                            <MenuItem x:Name="ContextSaveAsWorkflowTemplateItem" Header="Save as Workflow Template..." Click="ContextSaveAsWorkflowTemplateItem_Click" Visibility="Collapsed">
+                                <MenuItem.Icon>
+                                    <TextBlock Text="💾" FontSize="13"/>
+                                </MenuItem.Icon>
+                            </MenuItem>
                             <MenuItem x:Name="ContextExportItem" Header="Export..." Click="ContextExportItem_Click">
                                 <MenuItem.Icon>
                                     <TextBlock Text="📤" FontSize="13"/>
@@ -773,7 +755,10 @@
                               Background="Transparent" 
                               VerticalScrollBarVisibility="Auto" 
                               HorizontalScrollBarVisibility="Disabled"
-                              Padding="24,16">
+                              Padding="24,16"
+                              AllowDrop="True"
+                              PreviewDragEnter="EditorScrollViewer_PreviewDragEnter"
+                              PreviewDragOver="EditorScrollViewer_PreviewDragOver">
                     <StackPanel x:Name="EditorPanel" Visibility="Visible">
 
                     <!-- Conflict Warning Banner (Visible if conflict exists) -->
@@ -1320,36 +1305,21 @@
                                         Style="{StaticResource AccentButtonStyle}" 
                                         Click="TestWorkflowBtn_Click"/>
 
-                                <!-- Row 1: Subtitle & Mode Switcher / Presets -->
-                                <TextBlock Grid.Row="1" Grid.Column="0" 
+                                <!-- Row 1: Subtitle -->
+                                <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
                                            Text="Chain multiple steps together with shared variables, folder checks, and script logic." 
                                            FontSize="12" 
                                            Foreground="{DynamicResource TextSecondaryBrush}" 
                                            TextWrapping="Wrap" 
                                            VerticalAlignment="Center" 
-                                           Margin="0,6,12,0"/>
-
-                                <!-- Presets Button -->
-                                <StackPanel Grid.Row="1" Grid.Column="1"
-                                            Orientation="Horizontal"
-                                            VerticalAlignment="Center"
-                                            Margin="0,6,0,0">
-                                    <Button x:Name="WorkflowPresetsBtn"
-                                            Content="🎁 Presets ▾"
-                                            Style="{StaticResource SecondaryButtonStyle}"
-                                            Click="WorkflowPresetsBtn_Click">
-                                        <Button.ContextMenu>
-                                            <ContextMenu x:Name="WorkflowPresetsMenu"/>
-                                        </Button.ContextMenu>
-                                    </Button>
-                                </StackPanel>
+                                           Margin="0,6,0,0"/>
                             </Grid>
 
                             <Border Height="1" Background="{DynamicResource BorderSubtleBrush}" Margin="0,4,0,12" SnapsToDevicePixels="True"/>
 
                             <!-- VISUAL MODE CONTAINER -->
                             <StackPanel x:Name="WorkflowVisualContainer">
-                                <!-- Visual Toolbar: Expand/Collapse All, Convert to Script, Add Step -->
+                                <!-- Visual Toolbar: Expand/Collapse All, Convert to Script, Save as Template -->
                                 <Grid Margin="0,0,0,10">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
@@ -1383,22 +1353,44 @@
                                         <Button x:Name="ConvertToJsBtn" Content="⚡ Convert to JavaScript" Style="{StaticResource SecondaryButtonStyle}" Padding="8,4" FontSize="11" ToolTip="Translate all visual steps into clean JavaScript code" Click="ConvertToJsBtn_Click"/>
                                     </StackPanel>
 
-                                    <!-- Add Step Button with Dropdown -->
-                                    <Button Grid.Column="2" x:Name="AddStepBtn" Content="+ Add Step ▾" Style="{StaticResource AccentButtonStyle}" Padding="12,5" Click="AddStepBtn_Click">
-                                        <Button.ContextMenu>
-                                            <ContextMenu x:Name="AddStepContextMenu">
-                                                <MenuItem Header="Prompt User" Click="AddStepMenuItem_Click" Tag="Prompt"/>
-                                                <MenuItem Header="Open URL / Web" Click="AddStepMenuItem_Click" Tag="OpenUrl"/>
-                                                <MenuItem Header="Ensure Folder Exists" Click="AddStepMenuItem_Click" Tag="EnsureDirectory"/>
-                                                <MenuItem Header="Launch Application" Click="AddStepMenuItem_Click" Tag="LaunchApp"/>
-                                                <MenuItem Header="Inject Snippet" Click="AddStepMenuItem_Click" Tag="InjectSnippet"/>
-                                                <MenuItem Header="Delay / Wait" Click="AddStepMenuItem_Click" Tag="Delay"/>
-                                                <MenuItem Header="Execute Action / Folder" Click="AddStepMenuItem_Click" Tag="ExecuteAction"/>
-                                                <MenuItem Header="Inline Script (JS)" Click="AddStepMenuItem_Click" Tag="RunScript"/>
-                                            </ContextMenu>
-                                        </Button.ContextMenu>
-                                    </Button>
+                                    <!-- Save as Template Button -->
+                                    <Button Grid.Column="2" 
+                                            x:Name="SaveWorkflowAsTemplateBtn" 
+                                            Content="💾 Save as Template..." 
+                                            Style="{StaticResource SecondaryButtonStyle}" 
+                                            Padding="10,4" 
+                                            FontSize="11" 
+                                            ToolTip="Save current workflow steps as a reusable template" 
+                                            Click="SaveWorkflowAsTemplateBtn_Click"/>
                                 </Grid>
+
+                                <!-- Workflow-Level Variables Panel -->
+                                <Border x:Name="WorkflowVariablesBorder" 
+                                        Background="{DynamicResource BgInputBrush}" 
+                                        BorderBrush="{DynamicResource BorderSubtleBrush}" 
+                                        BorderThickness="1" 
+                                        CornerRadius="6" 
+                                        Margin="0,0,0,10">
+                                    <Expander x:Name="WorkflowVariablesExpander" IsExpanded="False" Padding="8">
+                                        <Expander.Header>
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock Text="🔤" FontSize="13" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                                <TextBlock x:Name="WorkflowVariablesCountText" Text="Workflow Variables (0)" FontWeight="SemiBold" FontSize="11.5" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center"/>
+                                                <TextBlock Text="— Constants &amp; default tokens used across steps (%ENV% supported)" FontSize="10.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Expander.Header>
+                                        <StackPanel Margin="0,6,0,0">
+                                            <StackPanel x:Name="WorkflowVariablesListHost" Margin="0,0,0,6"/>
+                                            <Button x:Name="AddWorkflowVariableBtn" 
+                                                    Content="+ Add Variable" 
+                                                    Style="{StaticResource SecondaryButtonStyle}" 
+                                                    Padding="10,4" 
+                                                    FontSize="11" 
+                                                    HorizontalAlignment="Left" 
+                                                    Click="AddWorkflowVariableBtn_Click"/>
+                                        </StackPanel>
+                                    </Expander>
+                                </Border>
 
                                 <!-- Step Cards Host -->
                                 <StackPanel x:Name="WorkflowStepsHost" Margin="0,0,0,8"/>
@@ -1408,10 +1400,89 @@
                                     <StackPanel HorizontalAlignment="Center">
                                         <TextBlock Text="🔀" FontSize="28" HorizontalAlignment="Center" Margin="0,0,0,6"/>
                                         <TextBlock Text="No Steps Added Yet" FontWeight="Bold" FontSize="14" HorizontalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}"/>
-                                        <TextBlock Text="Click '+ Add Step' to build your pipeline or pick a starter template from 'Presets'." FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" Margin="0,4,0,12"/>
-                                        <Button Content="Choose a Preset Template..." Style="{StaticResource SecondaryButtonStyle}" HorizontalAlignment="Center" Click="WorkflowPresetsBtn_Click"/>
+                                        <TextBlock Text="Add your first step to build your pipeline or choose a starter template." FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" Margin="0,4,0,12"/>
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                            <!-- Add First Step Button with Dropdown -->
+                                            <Button x:Name="AddFirstStepBtn" 
+                                                    Content="+ Add First Step ▾" 
+                                                    Style="{StaticResource AccentButtonStyle}" 
+                                                    Padding="14,6" 
+                                                    Margin="0,0,8,0" 
+                                                    Click="AddFirstStepBtn_Click">
+                                                <Button.ContextMenu>
+                                                    <ContextMenu x:Name="AddFirstStepContextMenu">
+                                                        <MenuItem Header="Set Variable" Click="AddStepMenuItem_Click" Tag="SetVariable"/>
+                                                        <MenuItem Header="If / Condition Branch" Click="AddStepMenuItem_Click" Tag="IfCondition"/>
+                                                        <MenuItem Header="Prompt User" Click="AddStepMenuItem_Click" Tag="Prompt"/>
+                                                        <MenuItem Header="Open URL / Web" Click="AddStepMenuItem_Click" Tag="OpenUrl"/>
+                                                        <MenuItem Header="Ensure Folder Exists" Click="AddStepMenuItem_Click" Tag="EnsureDirectory"/>
+                                                        <MenuItem Header="Launch Application" Click="AddStepMenuItem_Click" Tag="LaunchApp"/>
+                                                        <MenuItem Header="Inject Snippet" Click="AddStepMenuItem_Click" Tag="InjectSnippet"/>
+                                                        <MenuItem Header="Delay / Wait" Click="AddStepMenuItem_Click" Tag="Delay"/>
+                                                        <MenuItem Header="Execute Action / Folder" Click="AddStepMenuItem_Click" Tag="ExecuteAction"/>
+                                                        <MenuItem Header="Inline Script (JS)" Click="AddStepMenuItem_Click" Tag="RunScript"/>
+                                                    </ContextMenu>
+                                                </Button.ContextMenu>
+                                            </Button>
+                                            <!-- Choose a Preset Template Button -->
+                                            <Button x:Name="ChoosePresetTemplateBtn" 
+                                                    Content="Choose a Preset Template..." 
+                                                    Style="{StaticResource SecondaryButtonStyle}" 
+                                                    Padding="14,6" 
+                                                    Click="ChoosePresetTemplateBtn_Click"/>
+                                        </StackPanel>
                                     </StackPanel>
                                 </Border>
+
+                                <!-- Floating Drag Preview Ghost for Workflow Steps -->
+                                <Popup x:Name="WorkflowStepDragGhostPopup"
+                                       AllowsTransparency="True"
+                                       Placement="AbsolutePoint"
+                                       IsOpen="False"
+                                       IsHitTestVisible="False"
+                                       Focusable="False">
+                                    <Border Background="{DynamicResource BgSecondaryBrush}"
+                                            BorderBrush="{DynamicResource WorkflowBrush}"
+                                            BorderThickness="1.5"
+                                            CornerRadius="6"
+                                            Padding="10,6"
+                                            Opacity="0.96">
+                                        <Border.Effect>
+                                            <DropShadowEffect BlurRadius="16" ShadowDepth="3" Opacity="0.45" Direction="270"/>
+                                        </Border.Effect>
+                                        <StackPanel>
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock x:Name="WorkflowStepDragGhostIcon" Text="🔤" FontSize="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                                <TextBlock x:Name="WorkflowStepDragGhostText" Text="Step" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center"/>
+                                            </StackPanel>
+
+                                            <!-- Dynamic Drop Action Helper Badge with SVG Arrow -->
+                                            <Border x:Name="WorkflowStepDragActionBadge" 
+                                                    Background="{DynamicResource WorkflowSubtleBrush}" 
+                                                    BorderBrush="{DynamicResource WorkflowBrush}" 
+                                                    BorderThickness="1" 
+                                                    CornerRadius="4" 
+                                                    Padding="6,3" 
+                                                    Margin="0,4,0,0" 
+                                                    Visibility="Collapsed">
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Path x:Name="WorkflowStepDragActionIcon" 
+                                                          Width="11" Height="11" 
+                                                          Stretch="Uniform" 
+                                                          Fill="{DynamicResource AccentBrush}" 
+                                                          Margin="0,0,5,0" 
+                                                          VerticalAlignment="Center"/>
+                                                    <TextBlock x:Name="WorkflowStepDragActionText" 
+                                                               Text="Drop before Step" 
+                                                               FontSize="11" 
+                                                               FontWeight="Medium" 
+                                                               Foreground="{DynamicResource TextPrimaryBrush}" 
+                                                               VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </StackPanel>
+                                    </Border>
+                                </Popup>
                             </StackPanel>
 
                             <!-- SCRIPT MODE CONTAINER -->

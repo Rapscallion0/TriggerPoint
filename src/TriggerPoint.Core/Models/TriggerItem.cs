@@ -56,6 +56,7 @@ public sealed class TriggerItem
                 SnippetTemplate = Payload.SnippetTemplate,
                 WorkflowMode = Payload.WorkflowMode,
                 WorkflowSteps = Payload.WorkflowSteps?.ConvertAll(s => s.Clone()) ?? [],
+                WorkflowVariables = Payload.WorkflowVariables?.ConvertAll(v => v.Clone()) ?? [],
                 ScriptSource = Payload.ScriptSource
             },
             ContextFilter = new ContextFilter

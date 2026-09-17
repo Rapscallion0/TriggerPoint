@@ -19,10 +19,30 @@ public sealed class ActionPayload
     // Workflow execution properties
     public WorkflowMode WorkflowMode { get; set; } = WorkflowMode.Visual;
     public List<WorkflowStep> WorkflowSteps { get; set; } = [];
+    public List<WorkflowVariableDefinition> WorkflowVariables { get; set; } = [];
     public string ScriptSource { get; set; } = string.Empty;
 
     // Macro execution properties
     public MacroPayload Macro { get; set; } = new();
+}
+
+public sealed class WorkflowVariableDefinition
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string Name { get; set; } = string.Empty;
+    public string Value { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+
+    public WorkflowVariableDefinition Clone()
+    {
+        return new WorkflowVariableDefinition
+        {
+            Id = Guid.NewGuid(),
+            Name = Name,
+            Value = Value,
+            Description = Description
+        };
+    }
 }
 
 public sealed class WorkflowPromptField
@@ -114,6 +134,19 @@ public sealed class WorkflowStep
     public string DialogConfirmText { get; set; } = string.Empty;
     public string DialogCancelText { get; set; } = string.Empty;
 
+    // SetVariable properties
+    public string SetVariableName { get; set; } = string.Empty;
+    public string SetVariableValue { get; set; } = string.Empty;
+
+    // IfCondition properties
+    public string ConditionLeft { get; set; } = string.Empty;
+    public ConditionOperator ConditionOperator { get; set; } = ConditionOperator.Equals;
+    public string ConditionRight { get; set; } = string.Empty;
+    public bool ConditionIgnoreCase { get; set; } = true;
+    public bool HasElseBranch { get; set; } = false;
+    public List<WorkflowStep> ThenSteps { get; set; } = [];
+    public List<WorkflowStep> ElseSteps { get; set; } = [];
+
     // Macro properties
     public MacroPayload Macro { get; set; } = new();
 
@@ -160,6 +193,15 @@ public sealed class WorkflowStep
             DialogIcon = DialogIcon,
             DialogConfirmText = DialogConfirmText,
             DialogCancelText = DialogCancelText,
+            SetVariableName = SetVariableName,
+            SetVariableValue = SetVariableValue,
+            ConditionLeft = ConditionLeft,
+            ConditionOperator = ConditionOperator,
+            ConditionRight = ConditionRight,
+            ConditionIgnoreCase = ConditionIgnoreCase,
+            HasElseBranch = HasElseBranch,
+            ThenSteps = ThenSteps?.ConvertAll(s => s.Clone()) ?? [],
+            ElseSteps = ElseSteps?.ConvertAll(s => s.Clone()) ?? [],
             Macro = Macro?.Clone() ?? new MacroPayload()
         };
     }

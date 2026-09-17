@@ -3,12 +3,37 @@ using System.Collections.Generic;
 
 namespace TriggerPoint.Core.Models;
 
-public sealed record WorkflowPreset(
-    string Id,
-    string Category,
-    string Title,
-    string Description,
-    List<WorkflowStep> Steps);
+public sealed record WorkflowPreset
+{
+    public string Id { get; set; } = string.Empty;
+    public string Category { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public List<WorkflowStep> Steps { get; set; } = [];
+
+    public WorkflowPreset() { }
+
+    public WorkflowPreset(string id, string category, string title, string description, List<WorkflowStep> steps)
+    {
+        Id = id;
+        Category = category;
+        Title = title;
+        Description = description;
+        Steps = steps;
+    }
+
+    public WorkflowPreset DeepClone()
+    {
+        return new WorkflowPreset
+        {
+            Id = Id,
+            Category = Category,
+            Title = Title,
+            Description = Description,
+            Steps = Steps?.ConvertAll(s => s.Clone()) ?? []
+        };
+    }
+}
 
 public static class WorkflowPresets
 {

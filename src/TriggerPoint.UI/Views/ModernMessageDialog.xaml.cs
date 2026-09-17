@@ -1,7 +1,10 @@
 using System;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
+using TriggerPoint.Infrastructure.Win32;
 
 namespace TriggerPoint.UI.Views;
 
@@ -78,7 +81,78 @@ public partial class ModernMessageDialog : Window
             _ => "ℹ"
         };
 
-        Loaded += (s, e) => PrimaryBtn.Focus();
+        Loaded += (s, e) =>
+        {
+            CenterOnOwnerOrActiveScreen();
+            PrimaryBtn.Focus();
+        };
+    }
+
+    private void CenterOnOwnerOrActiveScreen()
+    {
+        double winWidth = ActualWidth > 0 ? ActualWidth : Width;
+        double winHeight = ActualHeight > 0 ? ActualHeight : Height;
+        if (winWidth <= 0) winWidth = 460;
+        if (winHeight <= 0) winHeight = 220;
+
+        IntPtr hMonitor = IntPtr.Zero;
+        double workLeft, workTop, workWidth, workHeight;
+        double dpiScale = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
+
+        if (Owner != null && Owner.IsLoaded && Owner.WindowState != WindowState.Minimized)
+        {
+            var ownerHwnd = new WindowInteropHelper(Owner).Handle;
+            if (ownerHwnd != IntPtr.Zero)
+            {
+                hMonitor = NativeMethods.MonitorFromWindow(ownerHwnd, NativeMethods.MONITOR_DEFAULTTONEAREST);
+            }
+        }
+
+        if (hMonitor == IntPtr.Zero)
+        {
+            if (NativeMethods.GetCursorPos(out var pt))
+            {
+                hMonitor = NativeMethods.MonitorFromPoint(pt, NativeMethods.MONITOR_DEFAULTTONEAREST);
+            }
+        }
+
+        var monitorInfo = new NativeMethods.MONITORINFO { cbSize = Marshal.SizeOf<NativeMethods.MONITORINFO>() };
+        if (hMonitor != IntPtr.Zero && NativeMethods.GetMonitorInfo(hMonitor, ref monitorInfo))
+        {
+            workLeft = monitorInfo.rcWork.Left / dpiScale;
+            workTop = monitorInfo.rcWork.Top / dpiScale;
+            workWidth = (monitorInfo.rcWork.Right - monitorInfo.rcWork.Left) / dpiScale;
+            workHeight = (monitorInfo.rcWork.Bottom - monitorInfo.rcWork.Top) / dpiScale;
+        }
+        else
+        {
+            workLeft = SystemParameters.WorkArea.Left;
+            workTop = SystemParameters.WorkArea.Top;
+            workWidth = SystemParameters.WorkArea.Width;
+            workHeight = SystemParameters.WorkArea.Height;
+        }
+
+        double targetLeft;
+        double targetTop;
+
+        if (Owner != null && Owner.IsLoaded && Owner.WindowState == WindowState.Normal)
+        {
+            targetLeft = Owner.Left + (Owner.ActualWidth - winWidth) / 2.0;
+            targetTop = Owner.Top + (Owner.ActualHeight - winHeight) / 2.0;
+        }
+        else
+        {
+            targetLeft = workLeft + (workWidth - winWidth) / 2.0;
+            targetTop = workTop + (workHeight - winHeight) / 2.0;
+        }
+
+        if (targetLeft < workLeft) targetLeft = workLeft;
+        if (targetLeft + winWidth > workLeft + workWidth) targetLeft = workLeft + Math.Max(0, workWidth - winWidth);
+        if (targetTop < workTop) targetTop = workTop;
+        if (targetTop + winHeight > workTop + workHeight) targetTop = workTop + Math.Max(0, workHeight - winHeight);
+
+        Left = targetLeft;
+        Top = targetTop;
     }
 
     public static bool ShowConfirm(

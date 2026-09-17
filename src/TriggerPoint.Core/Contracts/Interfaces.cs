@@ -159,3 +159,15 @@ public interface IMacroService
     MacroPayload StopRecording();
     Task PlayMacroAsync(MacroPayload macro, double speedMultiplier = 1.0, System.Threading.CancellationToken cancellationToken = default);
 }
+
+public interface IWorkflowTemplateService
+{
+    string TemplatesDirectory { get; }
+    IReadOnlyList<WorkflowPreset> GetAllTemplates();
+    IReadOnlyList<string> GetCategories();
+    WorkflowPreset? GetTemplateById(string id);
+    bool SaveTemplate(WorkflowPreset template);
+    bool DeleteTemplate(string id);
+    void EnsureDefaultTemplates();
+}
+
