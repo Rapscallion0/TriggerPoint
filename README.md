@@ -37,8 +37,13 @@ Designed to stay out of your way, TriggerPoint runs quietly in your system tray 
   - Clean floating indicator HUD when typing multi-key shortcut chords (e.g., `Ctrl+K, ...`), displaying pending chords and available secondary key options.
 - **Windows DPAPI Encrypted Secrets Vault**:
   - Securely store sensitive tokens, passwords, and API keys within workflow variables with hardware-tied Windows Data Protection API (DPAPI) encryption at rest (`vault:dpapi:...`).
-- **Seamless GitHub Application Updates**:
-  - Integrated GitHub update engine with automatic background checks, release notes preview dialog, and one-click installer downloads.
+- **In-App Update Checker & Seamless Auto-Updater**:
+  - Automatically queries the GitHub Releases API to detect new versions as soon as they are published.
+  - Configurable check frequency (`Startup`, `Daily`, `Weekly`, or `Manual`) in Application Settings.
+  - Update Available notification badge and interactive dialog featuring markdown release notes, version comparisons, release dates, and file sizes.
+  - One-click in-app download with real-time progress, SHA-256 installer checksum verification, and seamless background installation and relaunch.
+  - On-demand "Check for Updates..." directly from the System Tray context menu and Application Settings.
+  - User options to "Remind Me Later" or "Skip This Version" for flexible upgrade management.
 - **Floating HUD Transparency Polish**:
   - Eliminated legacy DWM non-client frame artifacts (grey box borders) on transparent layered HUD windows, delivering pixel-perfect rounded corners and soft floating drop shadows across Windows 10 and Windows 11.
 
@@ -118,6 +123,13 @@ Designed to stay out of your way, TriggerPoint runs quietly in your system tray 
 - Dynamic runtime log level switching (`Verbose`, `Debug`, `Information`, `Warning`, `Error`, `Fatal`) with no restart required.
 - Daily rolling file sink with configurable retention days (1–90 days).
 - System tray management with quick "Snooze Hotkeys" toggle.
+
+### 🔄 In-App Update Checker & Auto-Updater
+- **Integrated GitHub Releases Engine**: Automatically queries GitHub for newly published releases and release notes.
+- **Configurable Cadence**: Check on application startup, daily, weekly, or manual only.
+- **Full Markdown Release Notes**: Read complete changelogs, version numbers, and file sizes directly in the update dialog.
+- **One-Click In-App Upgrade**: Download and verify the setup installer with real-time progress, automated SHA-256 hash checks, silent installation, and automatic application restart.
+- **Contextual Actions**: Trigger on-demand checks from the System Tray menu or Application Settings at any time.
 
 ### 📦 Dual-Scope Single-File Installer
 - Packaged with Inno Setup into a clean `TriggerPointSetup.exe`.
