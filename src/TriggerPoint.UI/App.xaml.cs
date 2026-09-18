@@ -21,6 +21,7 @@ public partial class App : Application
 {
     public static readonly Guid OpenSettingsActionId = Guid.Parse("00000000-0000-0000-0000-000000000001");
     public static readonly Guid CommandPaletteActionId = Guid.Parse("00000000-0000-0000-0000-000000000002");
+    public static readonly Guid CheatSheetActionId = Guid.Parse("00000000-0000-0000-0000-000000000003");
 
     private IServiceProvider? _serviceProvider;
     private SingleInstanceService? _singleInstanceService;
@@ -33,6 +34,7 @@ public partial class App : Application
     private ILogManagerService? _logManagerService;
     private Serilog.Core.LoggingLevelSwitch _levelSwitch = new();
     private IReadOnlyList<TriggerItem> _cachedItems = [];
+    private ChordHudView? _activeChordHud;
 
     public static List<TriggerItem> CreateVirtualApplicationItems(AppSettings? settings)
     {
@@ -58,6 +60,18 @@ public partial class App : Application
                 Id = CommandPaletteActionId,
                 Name = "Open Command Palette",
                 Hotkey = settings.CommandPaletteHotkey,
+                IsEnabled = true,
+                PresentationMode = PresentationMode.Direct
+            });
+        }
+
+        if (settings.CheatSheetHotkey != null && !settings.CheatSheetHotkey.IsEmpty)
+        {
+            list.Add(new TriggerItem
+            {
+                Id = CheatSheetActionId,
+                Name = "Shortcut Cheat Sheet HUD",
+                Hotkey = settings.CheatSheetHotkey,
                 IsEnabled = true,
                 PresentationMode = PresentationMode.Direct
             });
@@ -168,6 +182,8 @@ public partial class App : Application
         // 6. Initialize Win32 Hotkey Listener
         _shortcutListener.Start(IntPtr.Zero);
         _shortcutListener.HotkeyTriggered += ShortcutListener_HotkeyTriggered;
+        _shortcutListener.ChordWaiting += (s, e) => Dispatcher.Invoke(() => ShowChordHud(e.Leader, e.Candidates));
+        _shortcutListener.ChordCompleted += (s, e) => Dispatcher.Invoke(HideChordHud);
 
         // 7. Setup Settings Window
         var contextFilterService = _serviceProvider.GetRequiredService<IContextFilterService>();
@@ -232,22 +248,7 @@ public partial class App : Application
             return await ExecuteItemOrFolderAsync(targetItem, hwnd);
         };
 
-        var macroService = _serviceProvider.GetRequiredService<IMacroService>();
-        var workflowTemplateService = _serviceProvider.GetRequiredService<IWorkflowTemplateService>();
-        _settingsWindow = new SettingsWindow(_repository, _shortcutListener, _executor, contextFilterService, _logManagerService, workflowExecutor, browserDetectionService, macroService, workflowTemplateService);
-        MainWindow = _settingsWindow;
-
-        // 8. Startup Recycle Bin Purge
-        try
-        {
-            await _repository.PurgeRecycleBinAsync(appSettings.RecycleBinRetentionDays);
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Failed to purge recycle bin on startup.");
-        }
-
-        // 9. Load and register hotkeys (including global application shortcuts)
+        // 8. Load and register hotkeys (including global application shortcuts)
         var items = await _repository.LoadAsync();
         _cachedItems = items;
         var allItems = new List<TriggerItem>(items);
@@ -258,25 +259,7 @@ public partial class App : Application
         HotkeyRecorderControl.RecordingStarted += (s, e) => _shortcutListener.Suspend();
         HotkeyRecorderControl.RecordingStopped += (s, e) => _shortcutListener.Resume();
 
-        // Optional startup shortcut health check
-        if (appSettings.ValidateShortcutsOnStartup)
-        {
-            _ = Task.Run(() =>
-            {
-                int brokenCount = items.Where(x => x.ActionType == ActionType.Shell && x.IsEnabled).Count(x => !ShortcutValidator.Validate(x).IsValid);
-                if (brokenCount > 0)
-                {
-                    Dispatcher.Invoke(() =>
-                    {
-                        toastService.ShowWarning(
-                            "Shortcut Health Check",
-                            $"{brokenCount} action{(brokenCount == 1 ? " has a" : "s have")} missing target files. Open Settings to inspect.");
-                    });
-                }
-            });
-        }
-
-        // 10. Setup System Tray Icon
+        // 9. Setup System Tray Icon
         _trayIconService = new TrayIconService(
             _shortcutListener,
             openSettingsAction: () => Dispatcher.Invoke(() => ShowSettingsWindow()),
@@ -289,20 +272,107 @@ public partial class App : Application
             exitAction: () => Dispatcher.Invoke(ExitApplication),
             openAppSettingsAction: () => Dispatcher.Invoke(async () => await ShowApplicationSettingsWindowAsync()),
             commandPaletteHotkeyText: appSettings.CommandPaletteHotkey?.DisplayText ?? "Alt+Space",
-            openSettingsHotkeyText: appSettings.OpenSettingsHotkey?.DisplayText ?? "Ctrl+Alt+T");
+            openSettingsHotkeyText: appSettings.OpenSettingsHotkey?.DisplayText ?? "Ctrl+Alt+T",
+            checkForUpdatesAction: () => Dispatcher.Invoke(async () => await PerformManualUpdateCheckAsync()),
+            openCheatSheetAction: () => Dispatcher.Invoke(() => OpenCheatSheetHud()),
+            cheatSheetHotkeyText: appSettings.CheatSheetHotkey?.DisplayText ?? "Ctrl+Shift+/");
 
-        // If explicitly requested with --settings, show action settings window
-        if (e.Args.Contains("--settings", StringComparer.OrdinalIgnoreCase))
+        // Show action settings window if not configured to start minimized or if launched with --settings
+        if (!appSettings.StartMinimized || e.Args.Contains("--settings", StringComparer.OrdinalIgnoreCase))
         {
             ShowSettingsWindow();
         }
+
+        // 10. Defer background maintenance (recycle bin purge & shortcut health check) by 3 seconds for instant cold startup
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(3000);
+                await _repository.PurgeRecycleBinAsync(appSettings.RecycleBinRetentionDays);
+
+                if (appSettings.ValidateShortcutsOnStartup)
+                {
+                    int brokenCount = items.Where(x => x.ActionType == ActionType.Shell && x.IsEnabled).Count(x => !ShortcutValidator.Validate(x).IsValid);
+                    if (brokenCount > 0)
+                    {
+                        Dispatcher.Invoke(() =>
+                        {
+                            toastService.ShowWarning(
+                                "Shortcut Health Check",
+                                $"{brokenCount} action{(brokenCount == 1 ? " has a" : "s have")} missing target files. Open Settings to inspect.");
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Deferred background maintenance encountered an error.");
+            }
+        });
+
+        // 11. Optional delayed startup update check and "What's New" notification
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                // Delay 4 seconds so startup and UI loading remain totally instantaneous
+                await Task.Delay(4000);
+
+                var updateService = _serviceProvider?.GetService<IUpdateService>();
+                if (updateService == null) return;
+
+                // Check for "What's New" on first run after update
+                var currentVer = updateService.GetCurrentVersion();
+                if (!string.IsNullOrEmpty(appSettings.LastKnownAppVersion) &&
+                    GitHubUpdateService.CompareVersions(currentVer, appSettings.LastKnownAppVersion) > 0)
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        toastService.ShowSuccess(
+                            "TriggerPoint Updated",
+                            $"Successfully updated to v{currentVer}! Zero bloat, maximum speed.");
+                    });
+                    appSettings.LastKnownAppVersion = currentVer;
+                    try { await _repository.SaveSettingsAsync(appSettings); } catch { }
+                }
+                else if (string.IsNullOrEmpty(appSettings.LastKnownAppVersion))
+                {
+                    appSettings.LastKnownAppVersion = currentVer;
+                    try { await _repository.SaveSettingsAsync(appSettings); } catch { }
+                }
+
+                // Check if update check is scheduled
+                if (updateService.ShouldPerformScheduledCheck(appSettings))
+                {
+                    var result = await updateService.CheckForUpdatesAsync(isManualCheck: false);
+                    if (result.IsUpdateAvailable && !result.IsIgnored && result.LatestUpdate != null)
+                    {
+                        Dispatcher.Invoke(() =>
+                        {
+                            _settingsWindow?.NotifyUpdateAvailable(result);
+
+                            // Unobtrusive toast that notifies the user
+                            toastService.ShowSuccess(
+                                "TriggerPoint Update Available",
+                                $"Version v{result.LatestUpdate.Version} is available! Open Action Manager to review improvements.");
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Background update check encountered an error.");
+            }
+        });
 
         Log.Information("TriggerPoint daemon initialization complete. Running in background.");
     }
 
     private void ConfigureServices(IServiceCollection services)
     {
-        services.AddSingleton<IConfigRepository, JsonConfigRepository>();
+        services.AddSingleton<ISecretsVaultService, WindowsDpapiSecretsVaultService>();
+        services.AddSingleton<IConfigRepository>(sp => new JsonConfigRepository(null, sp.GetRequiredService<ISecretsVaultService>()));
         services.AddSingleton<IPromptDialogService, InteractivePromptDialog>();
         services.AddSingleton<IConfirmationDialogService, ConfirmationDialog>();
         services.AddSingleton<ISnippetService, Win32SnippetService>();
@@ -317,6 +387,7 @@ public partial class App : Application
         services.AddSingleton<IActionExecutor, ShellActionExecutor>();
         services.AddSingleton<IToastNotificationService, ToastNotificationService>();
         services.AddSingleton<IWorkflowTemplateService, WorkflowTemplateService>();
+        services.AddSingleton<IUpdateService, GitHubUpdateService>();
     }
 
     private void ShortcutListener_HotkeyTriggered(object? sender, TriggerItem item)
@@ -343,6 +414,12 @@ public partial class App : Application
             if (item.Id == CommandPaletteActionId)
             {
                 OpenCommandPalette(targetHwnd: targetHwnd);
+                return;
+            }
+
+            if (item.Id == CheatSheetActionId)
+            {
+                OpenCheatSheetHud(targetHwnd: targetHwnd);
                 return;
             }
 
@@ -445,14 +522,131 @@ public partial class App : Application
         });
     }
 
+    private void OpenCheatSheetHud(IntPtr targetHwnd = default)
+    {
+        if (_repository == null || _executor == null) return;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var settings = await _repository.LoadSettingsAsync();
+                var items = await _repository.LoadAsync();
+                var allItems = new List<TriggerItem>(items);
+                allItems.AddRange(CreateVirtualApplicationItems(settings));
+
+                var filterService = _serviceProvider?.GetService<IContextFilterService>();
+                string? activeProcName = filterService?.GetForegroundProcessName();
+
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    try
+                    {
+                        var hud = new CheatSheetHudView(
+                            allItems,
+                            settings,
+                            activeProcName,
+                            onExecute: async targetItem =>
+                            {
+                                if (targetItem.Id == OpenSettingsActionId)
+                                {
+                                    ShowSettingsWindow();
+                                }
+                                else if (targetItem.Id == CommandPaletteActionId)
+                                {
+                                    OpenCommandPalette(targetHwnd: targetHwnd);
+                                }
+                                else if (_executor != null)
+                                {
+                                    await _executor.ExecuteAsync(targetItem, ExecutionOverride.Standard, targetHwnd);
+                                }
+                            });
+
+                        hud.Show();
+                        hud.Activate();
+                        try
+                        {
+                            var handle = new System.Windows.Interop.WindowInteropHelper(hud).Handle;
+                            NativeMethods.SetForegroundWindow(handle);
+                        }
+                        catch { }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error(ex, "Failed to instantiate or show CheatSheetHudView.");
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to prepare Cheat Sheet HUD in background task.");
+            }
+        });
+    }
+
+    private void ShowChordHud(ShortcutBinding leader, IReadOnlyList<TriggerItem> candidates)
+    {
+        HideChordHud();
+        try
+        {
+            _activeChordHud = new ChordHudView(leader, candidates);
+            _activeChordHud.Show();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Failed to display Chord HUD.");
+        }
+    }
+
+    private void HideChordHud()
+    {
+        try
+        {
+            if (_activeChordHud != null)
+            {
+                _activeChordHud.Close();
+                _activeChordHud = null;
+            }
+        }
+        catch { }
+    }
+
     public void ShowSettingsWindowAndCreate(string initialName)
     {
         ShowSettingsWindow();
         _settingsWindow?.CreateAndEditNewItem(initialName);
     }
 
+    private void EnsureSettingsWindowCreated()
+    {
+        if (_settingsWindow != null || _serviceProvider == null || _repository == null || _shortcutListener == null || _executor == null || _logManagerService == null)
+            return;
+
+        var contextFilterService = _serviceProvider.GetRequiredService<IContextFilterService>();
+        var workflowExecutor = _serviceProvider.GetRequiredService<IWorkflowExecutor>();
+        var browserDetectionService = _serviceProvider.GetRequiredService<IBrowserDetectionService>();
+        var macroService = _serviceProvider.GetRequiredService<IMacroService>();
+        var workflowTemplateService = _serviceProvider.GetRequiredService<IWorkflowTemplateService>();
+        var updateService = _serviceProvider.GetRequiredService<IUpdateService>();
+
+        _settingsWindow = new SettingsWindow(
+            _repository,
+            _shortcutListener,
+            _executor,
+            contextFilterService,
+            _logManagerService,
+            workflowExecutor,
+            browserDetectionService,
+            macroService,
+            workflowTemplateService,
+            updateService);
+
+        MainWindow = _settingsWindow;
+    }
+
     public void ShowSettingsWindow(TriggerItem? focusedItem = null)
     {
+        EnsureSettingsWindowCreated();
         if (_settingsWindow == null) return;
 
         bool wasHidden = !_settingsWindow.IsVisible || _settingsWindow.WindowState == WindowState.Minimized;
@@ -513,7 +707,8 @@ public partial class App : Application
     {
         if (_repository == null || _logManagerService == null) return;
 
-        var appSettingsWin = new ApplicationSettingsWindow(_repository, _logManagerService);
+        var updateService = _serviceProvider?.GetService<IUpdateService>();
+        var appSettingsWin = new ApplicationSettingsWindow(_repository, _logManagerService, updateService);
         appSettingsWin.ShowDialog();
 
         await ReloadApplicationSettingsAndHotkeysAsync();
@@ -522,6 +717,35 @@ public partial class App : Application
     public void ShowApplicationSettingsWindow()
     {
         _ = ShowApplicationSettingsWindowAsync();
+    }
+
+    public async Task PerformManualUpdateCheckAsync()
+    {
+        if (_serviceProvider == null || _repository == null) return;
+        var updateService = _serviceProvider.GetRequiredService<IUpdateService>();
+        var toastService = _serviceProvider.GetRequiredService<IToastNotificationService>();
+
+        try
+        {
+            var result = await updateService.CheckForUpdatesAsync(isManualCheck: true);
+            if (result.IsUpdateAvailable)
+            {
+                var dlg = new UpdateAvailableDialog(result, updateService, _repository);
+                dlg.ShowDialog();
+            }
+            else if (result.IsSuccess)
+            {
+                toastService.ShowSuccess("TriggerPoint", $"You're up to date! TriggerPoint v{updateService.GetCurrentVersion()} is the newest release.");
+            }
+            else
+            {
+                toastService.ShowWarning("Update Check", result.ErrorMessage ?? "Could not check for updates.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Failed to perform manual update check.");
+        }
     }
 
     public async Task ReloadApplicationSettingsAndHotkeysAsync()
@@ -536,6 +760,7 @@ public partial class App : Application
             _shortcutListener.RegisterAll(allItems);
             _trayIconService?.UpdateCommandPaletteHotkey(settings.CommandPaletteHotkey?.DisplayText);
             _trayIconService?.UpdateOpenSettingsHotkey(settings.OpenSettingsHotkey?.DisplayText);
+            _trayIconService?.UpdateCheatSheetHotkey(settings.CheatSheetHotkey?.DisplayText);
         }
         catch (Exception ex)
         {

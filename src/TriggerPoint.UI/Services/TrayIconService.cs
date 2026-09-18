@@ -24,8 +24,12 @@ public class TrayIconService : IDisposable
     private readonly Action _reloadConfigAction;
     private readonly Action _exitAction;
 
+    private readonly Action? _checkForUpdatesAction;
+
+    private readonly Action? _openCheatSheetAction;
     private readonly ToolStripMenuItem _settingsMenuItem;
     private readonly ToolStripMenuItem _paletteMenuItem;
+    private readonly ToolStripMenuItem? _cheatSheetMenuItem;
     private readonly ToolStripMenuItem _snoozeMenuItem;
     private Icon? _currentGeneratedIcon;
 
@@ -37,7 +41,10 @@ public class TrayIconService : IDisposable
         Action exitAction,
         Action? openAppSettingsAction = null,
         string? commandPaletteHotkeyText = "Alt+Space",
-        string? openSettingsHotkeyText = "Ctrl+Alt+T")
+        string? openSettingsHotkeyText = "Ctrl+Alt+T",
+        Action? checkForUpdatesAction = null,
+        Action? openCheatSheetAction = null,
+        string? cheatSheetHotkeyText = "Ctrl+Shift+/")
     {
         _shortcutListener = shortcutListener;
         _openSettingsAction = openSettingsAction;
@@ -45,6 +52,8 @@ public class TrayIconService : IDisposable
         _reloadConfigAction = reloadConfigAction;
         _exitAction = exitAction;
         _openAppSettingsAction = openAppSettingsAction;
+        _checkForUpdatesAction = checkForUpdatesAction;
+        _openCheatSheetAction = openCheatSheetAction;
 
         _notifyIcon = new NotifyIcon
         {
@@ -66,8 +75,20 @@ public class TrayIconService : IDisposable
             contextMenu.Items.Add(appSettingsItem);
         }
 
+        if (_checkForUpdatesAction != null)
+        {
+            var updatesItem = new ToolStripMenuItem("Check for Updates...", null, (s, e) => _checkForUpdatesAction());
+            contextMenu.Items.Add(updatesItem);
+        }
+
         _paletteMenuItem = new ToolStripMenuItem(FormatPaletteMenuText(commandPaletteHotkeyText), null, (s, e) => _openPaletteAction());
         contextMenu.Items.Add(_paletteMenuItem);
+
+        if (_openCheatSheetAction != null)
+        {
+            _cheatSheetMenuItem = new ToolStripMenuItem(FormatCheatSheetMenuText(cheatSheetHotkeyText), null, (s, e) => _openCheatSheetAction());
+            contextMenu.Items.Add(_cheatSheetMenuItem);
+        }
 
         contextMenu.Items.Add(new ToolStripSeparator());
 
@@ -218,6 +239,21 @@ public class TrayIconService : IDisposable
         return string.IsNullOrWhiteSpace(hotkeyDisplayText)
             ? "Action Manager"
             : $"Action Manager ({hotkeyDisplayText})";
+    }
+
+    public void UpdateCheatSheetHotkey(string? hotkeyDisplayText)
+    {
+        if (_cheatSheetMenuItem != null)
+        {
+            _cheatSheetMenuItem.Text = FormatCheatSheetMenuText(hotkeyDisplayText);
+        }
+    }
+
+    private static string FormatCheatSheetMenuText(string? hotkeyDisplayText)
+    {
+        return string.IsNullOrWhiteSpace(hotkeyDisplayText)
+            ? "Shortcut Cheat Sheet"
+            : $"Shortcut Cheat Sheet ({hotkeyDisplayText})";
     }
 
     public void ShowNotification(string title, string message, ToolTipIcon icon = ToolTipIcon.Info)

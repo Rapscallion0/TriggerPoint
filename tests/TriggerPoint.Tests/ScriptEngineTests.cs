@@ -48,7 +48,7 @@ public class ScriptEngineTests
     private class MockSnippetService : ISnippetService
     {
         public List<string> Injected { get; } = [];
-        public Task InjectSnippetAsync(string template, IntPtr targetHwnd)
+        public Task InjectSnippetAsync(string template, IntPtr targetHwnd, SnippetContentType contentType = SnippetContentType.PlainText, string? rtfContent = null)
         {
             Injected.Add(template);
             return Task.CompletedTask;

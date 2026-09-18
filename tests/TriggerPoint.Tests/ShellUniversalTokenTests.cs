@@ -27,7 +27,7 @@ public class ShellUniversalTokenTests
 
     private class MockSnippetService : ISnippetService
     {
-        public Task InjectSnippetAsync(string template, IntPtr targetHwnd) => Task.CompletedTask;
+        public Task InjectSnippetAsync(string template, IntPtr targetHwnd, SnippetContentType contentType = SnippetContentType.PlainText, string? rtfContent = null) => Task.CompletedTask;
     }
 
     private class MockTelemetryService : ITelemetryService

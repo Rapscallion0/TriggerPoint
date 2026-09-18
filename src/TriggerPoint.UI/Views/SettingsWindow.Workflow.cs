@@ -276,7 +276,14 @@ public partial class SettingsWindow
             {
                 card.BorderBrush = Application.Current.TryFindResource("WorkflowBrush") as Brush ?? Brushes.Purple;
                 card.BorderThickness = new Thickness(1.5);
-                card.Background = new SolidColorBrush(Color.FromArgb(0x18, 0xA8, 0x55, 0xF7));
+                card.Background = new SolidColorBrush(Color.FromArgb(0x20, 0xA8, 0x55, 0xF7));
+                card.Effect = new System.Windows.Media.Effects.DropShadowEffect
+                {
+                    Color = Color.FromRgb(0xA8, 0x55, 0xF7),
+                    BlurRadius = 10,
+                    ShadowDepth = 0,
+                    Opacity = 0.35
+                };
 
                 if (focusFirstInput)
                 {
@@ -288,6 +295,7 @@ public partial class SettingsWindow
                 card.BorderBrush = Application.Current.TryFindResource("CardBorderBrush") as Brush ?? Brushes.Gray;
                 card.BorderThickness = new Thickness(1);
                 card.Background = Application.Current.TryFindResource("CardBgBrush") as Brush ?? Brushes.DarkSlateGray;
+                card.Effect = null;
             }
 
             // Update insertion pills on this step wrapper
@@ -311,6 +319,8 @@ public partial class SettingsWindow
                 }
             }
         }
+
+        UpdateWorkflowMiniMapActiveStep();
     }
 
     private static void FocusFirstInputInCard(Border card)
@@ -505,6 +515,8 @@ public partial class SettingsWindow
                 elementToFocus.BringIntoView();
             }, System.Windows.Threading.DispatcherPriority.Loaded);
         }
+
+        RebuildWorkflowMiniMap();
     }
 
     private FrameworkElement CreateStepInsertionPill(string label, int insertIndex, Guid stepId)
@@ -3186,6 +3198,240 @@ public partial class SettingsWindow
         });
     }
 
+    private void DebugWorkflowBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedItem == null || _workflowExecutor == null) return;
+        CommitCurrentFormChanges();
+
+        var dialog = new WorkflowDebugDialog(_selectedItem, _workflowExecutor)
+        {
+            Owner = this
+        };
+        dialog.ShowDialog();
+    }
+
+    private bool _isWorkflowMiniMapOpen = false;
+
+    private void WorkflowToggleMiniMapBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _isWorkflowMiniMapOpen = !_isWorkflowMiniMapOpen;
+        SyncWorkflowMiniMapVisibility(isWorkflow: _selectedItem?.ActionType == ActionType.Workflow);
+    }
+
+    private void WorkflowMiniMapCloseBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _isWorkflowMiniMapOpen = false;
+        SyncWorkflowMiniMapVisibility(isWorkflow: _selectedItem?.ActionType == ActionType.Workflow);
+    }
+
+    public void SyncWorkflowMiniMapVisibility(bool isWorkflow)
+    {
+        if (WorkflowMiniMapBorder == null) return;
+
+        if (isWorkflow && _isWorkflowMiniMapOpen)
+        {
+            WorkflowMiniMapBorder.Visibility = Visibility.Visible;
+            RebuildWorkflowMiniMap();
+        }
+        else
+        {
+            WorkflowMiniMapBorder.Visibility = Visibility.Collapsed;
+        }
+
+        UpdateMiniMapToggleVisualState();
+    }
+
+    private void UpdateMiniMapToggleVisualState()
+    {
+        if (WorkflowToggleMiniMapBtn == null) return;
+
+        if (_isWorkflowMiniMapOpen)
+        {
+            WorkflowToggleMiniMapBtn.Content = "🗺️ Mini-Map ✓";
+            WorkflowToggleMiniMapBtn.Background = Application.Current.TryFindResource("WorkflowSubtleBrush") as Brush 
+                ?? new SolidColorBrush(Color.FromArgb(0x30, 0xA8, 0x55, 0xF7));
+            WorkflowToggleMiniMapBtn.BorderBrush = Application.Current.TryFindResource("WorkflowBrush") as Brush 
+                ?? Brushes.Purple;
+            WorkflowToggleMiniMapBtn.BorderThickness = new Thickness(1.5);
+            WorkflowToggleMiniMapBtn.FontWeight = FontWeights.SemiBold;
+            WorkflowToggleMiniMapBtn.ToolTip = "Workflow Mini-Map is ON. Click to hide.";
+        }
+        else
+        {
+            WorkflowToggleMiniMapBtn.Content = "🗺️ Mini-Map";
+            WorkflowToggleMiniMapBtn.ClearValue(BackgroundProperty);
+            WorkflowToggleMiniMapBtn.ClearValue(BorderBrushProperty);
+            WorkflowToggleMiniMapBtn.ClearValue(BorderThicknessProperty);
+            WorkflowToggleMiniMapBtn.ClearValue(FontWeightProperty);
+            WorkflowToggleMiniMapBtn.ToolTip = "Workflow Mini-Map is OFF. Click to show.";
+        }
+    }
+
+    private void RebuildWorkflowMiniMap()
+    {
+        if (WorkflowMiniMapBorder == null || WorkflowMiniMapHost == null) return;
+        if (WorkflowMiniMapBorder.Visibility != Visibility.Visible) return;
+
+        WorkflowMiniMapHost.Children.Clear();
+        if (_selectedItem?.Payload?.WorkflowSteps == null || _selectedItem.Payload.WorkflowSteps.Count == 0)
+        {
+            if (WorkflowMiniMapStepCountText != null) WorkflowMiniMapStepCountText.Text = "0 steps";
+            return;
+        }
+
+        var steps = _selectedItem.Payload.WorkflowSteps;
+        if (WorkflowMiniMapStepCountText != null)
+        {
+            WorkflowMiniMapStepCountText.Text = $"{steps.Count} step{(steps.Count == 1 ? "" : "s")}";
+        }
+
+        var textPrimary = Application.Current.TryFindResource("TextPrimaryBrush") as Brush ?? Brushes.White;
+        var textSecondary = Application.Current.TryFindResource("TextSecondaryBrush") as Brush ?? Brushes.Gray;
+        var textMuted = Application.Current.TryFindResource("TextMutedBrush") as Brush ?? Brushes.DarkGray;
+        var workflowBrush = Application.Current.TryFindResource("WorkflowBrush") as Brush ?? Brushes.Purple;
+        var borderSubtle = Application.Current.TryFindResource("BorderSubtleBrush") as Brush ?? Brushes.DimGray;
+        var bgInput = Application.Current.TryFindResource("BgInputBrush") as Brush ?? Brushes.DarkSlateGray;
+
+        for (int i = 0; i < steps.Count; i++)
+        {
+            var step = steps[i];
+            int stepIndex = i + 1;
+            bool isActive = _activeWorkflowStepId == step.Id;
+
+            var card = new Border
+            {
+                CornerRadius = new CornerRadius(5),
+                Margin = new Thickness(0, 2, 0, 2),
+                Padding = new Thickness(6, 4, 6, 4),
+                Cursor = Cursors.Hand,
+                SnapsToDevicePixels = true,
+                UseLayoutRounding = true,
+                Background = isActive 
+                    ? (ThemeManager.CurrentTheme == AppTheme.Dark
+                        ? new SolidColorBrush(Color.FromArgb(0x40, 0xA8, 0x55, 0xF7))
+                        : new SolidColorBrush(Color.FromArgb(0x28, 0xA8, 0x55, 0xF7)))
+                    : Brushes.Transparent,
+                BorderBrush = isActive ? workflowBrush : Brushes.Transparent,
+                BorderThickness = new Thickness(1),
+                ToolTip = $"{stepIndex}. {GetStepTypeIconAndName(step.StepType)} - {GetStepLiveSummary(step)}"
+            };
+
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // Left indicator bar
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // Index pill
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // Name
+
+            // 1. Left indicator line (3px bar)
+            var bar = new Border
+            {
+                Width = 3,
+                Height = 16,
+                CornerRadius = new CornerRadius(1.5),
+                Background = isActive ? workflowBrush : Brushes.Transparent,
+                Margin = new Thickness(0, 0, 6, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(bar, 0);
+            grid.Children.Add(bar);
+
+            // 2. Step index badge
+            var idxPill = new Border
+            {
+                MinWidth = 18,
+                Height = 18,
+                CornerRadius = new CornerRadius(3),
+                Background = isActive ? new SolidColorBrush(Color.FromArgb(0x35, 0xA8, 0x55, 0xF7)) : bgInput,
+                Padding = new Thickness(3, 0, 3, 0),
+                Margin = new Thickness(0, 0, 6, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            var idxText = new TextBlock
+            {
+                Text = $"{stepIndex}",
+                FontSize = 9.5,
+                FontWeight = isActive ? FontWeights.Bold : FontWeights.Normal,
+                Foreground = isActive ? workflowBrush : textMuted,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            idxPill.Child = idxText;
+            Grid.SetColumn(idxPill, 1);
+            grid.Children.Add(idxPill);
+
+            // 3. Step Name
+            string stepName = !string.IsNullOrWhiteSpace(step.Name)
+                ? step.Name
+                : GetStepTypeIconAndName(step.StepType);
+
+            var titleText = new TextBlock
+            {
+                Text = stepName,
+                FontSize = 11,
+                FontWeight = isActive ? FontWeights.SemiBold : FontWeights.Normal,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                Foreground = isActive ? textPrimary : textSecondary,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(titleText, 2);
+            grid.Children.Add(titleText);
+
+            card.Child = grid;
+
+            // Hover styling
+            card.MouseEnter += (s, e) =>
+            {
+                if (_activeWorkflowStepId != step.Id)
+                {
+                    card.Background = bgInput;
+                    card.BorderBrush = borderSubtle;
+                    titleText.Foreground = textPrimary;
+                }
+            };
+            card.MouseLeave += (s, e) =>
+            {
+                if (_activeWorkflowStepId != step.Id)
+                {
+                    card.Background = Brushes.Transparent;
+                    card.BorderBrush = Brushes.Transparent;
+                    titleText.Foreground = textSecondary;
+                }
+            };
+
+            // Click action
+            card.PreviewMouseLeftButtonDown += (s, e) =>
+            {
+                SetActiveWorkflowStep(step.Id, focusFirstInput: false);
+
+                if (WorkflowStepsHost != null)
+                {
+                    foreach (UIElement child in WorkflowStepsHost.Children)
+                    {
+                        if (child is Grid wrapperGrid)
+                        {
+                            foreach (UIElement elem in wrapperGrid.Children)
+                            {
+                                if (elem is Border b && b.Tag == step)
+                                {
+                                    b.BringIntoView();
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            WorkflowMiniMapHost.Children.Add(card);
+        }
+    }
+
+    private void UpdateWorkflowMiniMapActiveStep()
+    {
+        if (WorkflowMiniMapBorder == null || WorkflowMiniMapHost == null) return;
+        if (WorkflowMiniMapBorder.Visibility != Visibility.Visible) return;
+        RebuildWorkflowMiniMap();
+    }
+
     private void RebuildWorkflowVariablesUI()
     {
         if (WorkflowVariablesListHost == null || WorkflowVariablesCountText == null) return;
@@ -3201,13 +3447,17 @@ public partial class SettingsWindow
         {
             var v = vars[i];
             var row = new Grid { Margin = new Thickness(0, 2, 0, 4) };
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(140) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(8) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(130) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(6) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(8) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(4) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // EyeBtn
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(4) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // SecretBtn
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(4) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // HelperBtn
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(4) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // DelBtn
 
             var nameBox = new TextBox
             {
@@ -3226,22 +3476,94 @@ public partial class SettingsWindow
             Grid.SetColumn(nameBox, 0);
             row.Children.Add(nameBox);
 
+            bool isRevealed = false;
             var valBox = new TextBox
             {
-                Text = v.Value ?? string.Empty,
                 Height = 30,
                 Padding = new Thickness(6, 3, 6, 3),
                 VerticalContentAlignment = VerticalAlignment.Center,
                 Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style,
-                Tag = "Value (e.g. %USERPROFILE%\\Docs or constant)"
+                Tag = v.IsSecret ? "Secret Value (Encrypted at rest)" : "Value (e.g. %USERPROFILE%\\Docs or constant)"
+            };
+
+            void UpdateValBoxDisplay()
+            {
+                if (v.IsSecret && !isRevealed && !valBox.IsFocused)
+                {
+                    valBox.Text = string.IsNullOrEmpty(v.Value) ? string.Empty : new string('•', Math.Min(v.Value.Length, 20));
+                }
+                else
+                {
+                    valBox.Text = v.Value ?? string.Empty;
+                }
+            }
+
+            UpdateValBoxDisplay();
+
+            valBox.GotFocus += (s, e) =>
+            {
+                if (v.IsSecret && !isRevealed)
+                {
+                    valBox.Text = v.Value ?? string.Empty;
+                }
+            };
+            valBox.LostFocus += (s, e) =>
+            {
+                UpdateValBoxDisplay();
             };
             valBox.TextChanged += (s, e) =>
             {
-                v.Value = valBox.Text;
-                OnFormEdited();
+                if (!v.IsSecret || isRevealed || valBox.IsFocused)
+                {
+                    v.Value = valBox.Text;
+                    OnFormEdited();
+                }
             };
             Grid.SetColumn(valBox, 2);
             row.Children.Add(valBox);
+
+            // Eye reveal button for secret variables
+            var eyeBtn = new Button
+            {
+                Content = "👁",
+                Style = Application.Current.TryFindResource("SecondaryButtonStyle") as Style,
+                Height = 30,
+                Width = 28,
+                Padding = new Thickness(0),
+                FontSize = 11,
+                ToolTip = "Reveal secret value",
+                Visibility = v.IsSecret ? Visibility.Visible : Visibility.Collapsed
+            };
+            eyeBtn.Click += (s, e) =>
+            {
+                isRevealed = !isRevealed;
+                eyeBtn.Content = isRevealed ? "🙈" : "👁";
+                eyeBtn.ToolTip = isRevealed ? "Hide secret value" : "Reveal secret value";
+                UpdateValBoxDisplay();
+            };
+            Grid.SetColumn(eyeBtn, 4);
+            row.Children.Add(eyeBtn);
+
+            // Secret toggle button (Lock / Unlock)
+            var secretBtn = new Button
+            {
+                Content = v.IsSecret ? "🔒" : "🔓",
+                Style = Application.Current.TryFindResource("SecondaryButtonStyle") as Style,
+                Height = 30,
+                Width = 28,
+                Padding = new Thickness(0),
+                FontSize = 11,
+                ToolTip = v.IsSecret ? "Secret Variable (Encrypted at rest with DPAPI). Click to make standard." : "Standard Variable. Click to mark as Secret (Encrypted at rest with DPAPI).",
+                Foreground = v.IsSecret ? (Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.DodgerBlue) : (Application.Current.TryFindResource("TextSecondaryBrush") as Brush ?? Brushes.Gray)
+            };
+            secretBtn.Click += (s, e) =>
+            {
+                v.IsSecret = !v.IsSecret;
+                OnFormEdited();
+                RebuildWorkflowVariablesUI();
+            };
+            Grid.SetColumn(secretBtn, 6);
+            row.Children.Add(secretBtn);
 
             // Token / Env helper button for this row
             var helperBtn = new Button
@@ -3257,7 +3579,7 @@ public partial class SettingsWindow
             {
                 ShowTokenAndEnvMenu(helperBtn, valBox);
             };
-            Grid.SetColumn(helperBtn, 4);
+            Grid.SetColumn(helperBtn, 8);
             row.Children.Add(helperBtn);
 
             // Delete variable button
@@ -3266,7 +3588,7 @@ public partial class SettingsWindow
                 Content = "✕",
                 Style = Application.Current.TryFindResource("SecondaryButtonStyle") as Style,
                 Height = 30,
-                Width = 30,
+                Width = 28,
                 Padding = new Thickness(0),
                 Foreground = Application.Current.TryFindResource("ErrorBrush") as Brush ?? Brushes.Red,
                 ToolTip = "Delete variable"
@@ -3279,7 +3601,7 @@ public partial class SettingsWindow
                 RebuildWorkflowStepCards();
                 OnFormEdited();
             };
-            Grid.SetColumn(delBtn, 6);
+            Grid.SetColumn(delBtn, 10);
             row.Children.Add(delBtn);
 
             WorkflowVariablesListHost.Children.Add(row);
@@ -3743,7 +4065,14 @@ public partial class SettingsWindow
             Background = accentBrush,
             CornerRadius = new CornerRadius(2),
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            VerticalAlignment = VerticalAlignment.Stretch
+            VerticalAlignment = VerticalAlignment.Stretch,
+            Effect = new System.Windows.Media.Effects.DropShadowEffect
+            {
+                Color = accentColor,
+                BlurRadius = 6,
+                ShadowDepth = 0,
+                Opacity = 0.5
+            }
         };
         Grid.SetColumn(rail, 0);
         railGrid.Children.Add(rail);

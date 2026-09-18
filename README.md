@@ -5,9 +5,9 @@
 
 [![.NET](https://img.shields.io/badge/.NET-9.0--windows-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011%20x64-0078D6?logo=windows)](https://microsoft.com/windows)
-[![Version](https://img.shields.io/badge/Version-v2.0.8-blue.svg)](https://github.com/Rapscallion0/TriggerPoint/releases/tag/v2.0.8)
+[![Version](https://img.shields.io/badge/Version-v2.0.9-blue.svg)](https://github.com/Rapscallion0/TriggerPoint/releases/tag/v2.0.9)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-265%20Passed%20(100%25)-brightgreen)]()
+[![Tests](https://img.shields.io/badge/Tests-383%20Passed%20(100%25)-brightgreen)]()
 
 ---
 
@@ -19,21 +19,28 @@ Designed to stay out of your way, TriggerPoint runs quietly in your system tray 
 
 ---
 
-## What's New in v2.0.8 🚀
+## What's New in v2.0.9 🚀
 
-- **Conditional Branching Workflows**:
-  - Full support for `IfCondition` steps with dedicated `THEN` and `ELSE` branches.
-  - Evaluator supports text comparisons, case-insensitivity, numeric comparison (`>`, `<`, `≥`, `≤`), regular expressions, `File Exists`, `Directory Exists`, and `Process is Running` checks with live evaluation testing.
-- **Workflow Drag-and-Drop Overhaul**:
-  - Reorder workflow steps effortlessly, move steps into or out of `THEN`/`ELSE` branches, or transfer between branches.
-  - Zero-flicker targeting across textboxes and nested controls with physical cursor bounds detection.
-  - Insertion drop lines (`●───────`), directional ghost badges with SVG arrows, and edge auto-scrolling.
-- **Searchable Variable Picker Dialog**:
-  - Modern themed variable picker with real-time search, category filter chips (`System`, `Workflow`, `Clipboard`, `Date`), quick presets, and clipboard preview tokens.
-- **Workflow Step Context Menu & Operations**:
-  - Context menu on step cards for easy step manipulation: Move into Then/Else, Move out of Branch, Cut, Copy, Paste, Duplicate, and Delete.
-- **Smart Undo & Dirty State Tracking**:
-  - Deep-comparison snapshot verification automatically resets the `isDirty` state and disables Save/Revert when edits are manually reversed.
+- **Rich Text Snippets & Visual Formatting Ribbon**:
+  - Full support for Rich Text snippets with dual Plain Text and Rich Text editor switching.
+  - Visual formatting ribbon featuring font size presets (`9pt` to `18pt`), Bold (`Ctrl+B`), Italic (`Ctrl+I`), Underline (`Ctrl+U`), Strikethrough, Text Color with custom color picker flyout, Text Highlight, Bulleted Lists, Numbered Lists, Left/Center/Right alignments, and Clear Formatting (`Ctrl+\`).
+  - **Theme-Agnostic Export**: Unstyled text automatically exports as neutral `\cf0` in RTF and clean color-neutral HTML. Snippets pasted into destination apps (Word, Outlook, Google Docs, Slack, browsers) seamlessly match the receiving application's typography and dark/light themes without baking in TriggerPoint's dark mode colors.
+  - **Paper Canvas View**: Rich text editor defaults to a crisp `#FFFFFF` document paper canvas with `#1E293B` text and synchronized live expansion preview, with a single-click ribbon toggle to switch to theme background if desired.
+  - **Comprehensive Clear Formatting**: Cleanly removes all styles, flattens bulleted and numbered lists into regular paragraphs, and resets alignment to left across selected text or the entire document.
+- **Spotlight Quick Calculator in Command Palette**:
+  - Type math expressions directly into the Command Palette (e.g., `=2+2`, `50*1.12`, `(120+45)*0.8`, `sqrt(144)`, `15% of 240`) for instant evaluation.
+  - Press Enter to copy the calculated result directly to your clipboard or inject it into your active application.
+- **Shortcut Cheat Sheet HUD (`Ctrl+Shift+/`)**:
+  - Floating high-contrast shortcut HUD displays all registered shortcuts, leaders, and actions grouped by folder or context.
+  - Instant real-time filtering, keyboard navigation, and direct trigger execution.
+- **Chorded Hotkey Indicator HUD**:
+  - Clean floating indicator HUD when typing multi-key shortcut chords (e.g., `Ctrl+K, ...`), displaying pending chords and available secondary key options.
+- **Windows DPAPI Encrypted Secrets Vault**:
+  - Securely store sensitive tokens, passwords, and API keys within workflow variables with hardware-tied Windows Data Protection API (DPAPI) encryption at rest (`vault:dpapi:...`).
+- **Seamless GitHub Application Updates**:
+  - Integrated GitHub update engine with automatic background checks, release notes preview dialog, and one-click installer downloads.
+- **Floating HUD Transparency Polish**:
+  - Eliminated legacy DWM non-client frame artifacts (grey box borders) on transparent layered HUD windows, delivering pixel-perfect rounded corners and soft floating drop shadows across Windows 10 and Windows 11.
 
 ---
 
@@ -59,16 +66,24 @@ Designed to stay out of your way, TriggerPoint runs quietly in your system tray 
 - **Two-Tiered Conflict Detection**: Warns immediately if a shortcut is claimed by another TriggerPoint action or an external system process/Windows utility.
 - Interactive hotkey recorder with live visual modifier combination builder.
 
-### 🔍 Spotlight-Style Command Palette
+### 🔍 Spotlight-Style Command Palette & Quick Calculator
 - Summon a fast, floating search palette anywhere with a single global shortcut (`Ctrl+Space` or custom hotkey).
 - Fuzzy search across all actions and folders with autocomplete suggestions, sort modes (Alphabetical, Frequency, or Custom Tree Order), and folder breadcrumb paths (`📁 Tools › Development › Edit Hosts`).
+- **Instant Math Calculator**: Type arithmetic, percentages, parentheses, powers, and scientific functions directly into the search bar (`=45*1.2`, `15% of $800`, `sqrt(256)`) for real-time calculation and instant clipboard copying.
+
+### ⌨ Shortcut Cheat Sheet & Chord HUD
+- **Shortcut Cheat Sheet HUD (`Ctrl+Shift+/`)**: Instantly view all shortcuts across all folders in a sleek, non-intrusive floating HUD with real-time filtering.
+- **Chord Indicator HUD**: Clean visual HUD for multi-key chords (`Ctrl+K, ...`), showing pending leaders and next valid keystrokes.
 
 ### 📋 Floating Cursor Menus & Folder Launchers
 - Launch grouped actions directly under your mouse cursor with custom accelerator keys.
 - Organize shortcuts into folders and hierarchical launcher menus.
 - **Sequential Quick-Keys (`1–9`, `A–Z`)**: Auto-numbers popup menus up to 35 direct access keys with `Off`, `Smart Fill`, and `Strict Positional` modes.
 
-### 📝 Dynamic Snippets & Text Expansion
+### 📝 Dynamic Snippets, Plain Text & Rich Text Expansion
+- **Rich Text & Plain Text Modes**: Create rich text snippets with bold, italics, underline, strikethrough, custom text & highlight colors, font size presets, bulleted/numbered lists, and alignments.
+- **Theme-Agnostic Engine**: Unstyled text exports as host-neutral `\cf0` in RTF and clean color-free HTML, ensuring pasted text perfectly matches the receiving application's dark or light theme.
+- **True WYSIWYG Paper Canvas**: Editor defaults to a paper white document canvas with synchronized live preview.
 - Send keystrokes or clipboard-injected templates directly into the focused window.
 - **Top-Aligned Multiline Editing**: Clean top vertical alignment across snippet boxes, multiline inputs, and prompt dialogs.
 - **Dynamic Date & Time Formatting & Offsets**:
@@ -87,6 +102,9 @@ Designed to stay out of your way, TriggerPoint runs quietly in your system tray 
   - `{cursor}` (caret positioning post-expansion)
 - **Interactive Prompts with Defaults**:
   - `{text:Label|Default}`, `{multiline:Label|Default}`, `{choice:Label|Opt1=v1*,Opt2=v2}`, `{number:Label|min,max|default}`, `{date_picker:Label|Format}` (e.g. `{date_picker:Due Date|MM/dd/yyyy}`)
+
+### 🔒 Hardware-Backed Secrets Vault (DPAPI)
+- Secure sensitive tokens, API keys, and passwords within workflow variables using Windows DPAPI encryption at rest.
 
 ### 🎯 Window & Browser Target Crosshair Tool
 - Drag an interactive crosshair target onto any open application window to automatically extract its executable path and process name.
@@ -137,7 +155,7 @@ dotnet run --project src/TriggerPoint.UI
 #### Package Installer (`TriggerPointSetup.exe`)
 To package the app into a standalone installer:
 ```powershell
-powershell -ExecutionPolicy Bypass -File build/package.ps1 -AppVersion "2.0.8"
+powershell -ExecutionPolicy Bypass -File build/package.ps1 -AppVersion "2.0.9"
 ```
 The output installer will be produced at `artifacts/TriggerPointSetup.exe`.
 

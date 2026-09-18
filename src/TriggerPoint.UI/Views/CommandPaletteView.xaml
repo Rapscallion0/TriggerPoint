@@ -515,6 +515,22 @@
                                                         Foreground="{Binding TypeForegroundBrush}"/>
                                          </Border>
 
+                                         <!-- Admin Elevation Micro-Badge -->
+                                         <Border CornerRadius="4"
+                                                 BorderThickness="1"
+                                                 BorderBrush="#E5A93C"
+                                                 Background="#22E5A93C"
+                                                 Padding="5,1.5"
+                                                 Margin="0,0,6,0"
+                                                 ToolTip="Runs with elevated Windows Administrator privileges"
+                                                 Visibility="{Binding AdminBadgeVisibility}"
+                                                 VerticalAlignment="Center">
+                                             <TextBlock Text="🛡 Admin"
+                                                        FontSize="9.5"
+                                                        FontWeight="SemiBold"
+                                                        Foreground="#E5A93C"/>
+                                         </Border>
+
                                          <!-- Folder Drill-Down Chevron (Clickable for mouse users) -->
                                          <Button Visibility="{Binding IsFolder}"
                                                  Click="FolderChevron_Click"

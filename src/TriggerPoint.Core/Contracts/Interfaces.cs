@@ -37,6 +37,18 @@ public interface IConfigRepository
     string RecycleBinFilePath { get; }
 }
 
+public class ChordWaitingEventArgs : EventArgs
+{
+    public ShortcutBinding Leader { get; }
+    public IReadOnlyList<TriggerItem> Candidates { get; }
+
+    public ChordWaitingEventArgs(ShortcutBinding leader, IReadOnlyList<TriggerItem> candidates)
+    {
+        Leader = leader;
+        Candidates = candidates;
+    }
+}
+
 public interface IShortcutListener : IDisposable
 {
     void Start(IntPtr windowHandle);
@@ -49,6 +61,8 @@ public interface IShortcutListener : IDisposable
     event EventHandler<TriggerItem>? HotkeyTriggered;
     event EventHandler? ConflictsUpdated;
     event EventHandler<bool>? SnoozeChanged;
+    event EventHandler<ChordWaitingEventArgs>? ChordWaiting;
+    event EventHandler? ChordCompleted;
 }
 
 public interface IActionExecutor
@@ -58,7 +72,11 @@ public interface IActionExecutor
 
 public interface ISnippetService
 {
-    Task InjectSnippetAsync(string template, IntPtr targetHwnd);
+    Task InjectSnippetAsync(
+        string template, 
+        IntPtr targetHwnd, 
+        SnippetContentType contentType = SnippetContentType.PlainText, 
+        string? rtfContent = null);
 }
 
 public interface IIconService
@@ -170,4 +188,12 @@ public interface IWorkflowTemplateService
     bool DeleteTemplate(string id);
     void EnsureDefaultTemplates();
 }
+
+public interface ISecretsVaultService
+{
+    string Protect(string plainText);
+    string Unprotect(string cipherText);
+    bool IsProtected(string? value);
+}
+
 

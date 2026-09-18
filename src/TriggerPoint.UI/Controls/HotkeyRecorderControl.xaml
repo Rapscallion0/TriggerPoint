@@ -58,6 +58,14 @@
                                    FontSize="12"
                                    VerticalAlignment="Center"/>
                     </Border>
+
+                    <TextBlock x:Name="ChordHintText"
+                               Text="Press 2nd key for chord (or Enter to finish)"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
+                               FontSize="11"
+                               Margin="8,0,0,0"
+                               VerticalAlignment="Center"
+                               Visibility="Collapsed"/>
                 </StackPanel>
 
                 <Button Grid.Column="1"

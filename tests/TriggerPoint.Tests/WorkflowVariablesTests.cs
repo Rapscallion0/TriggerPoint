@@ -34,7 +34,7 @@ public class WorkflowVariablesTests
     private class MockSnippetService : ISnippetService
     {
         public List<string> Snippets { get; } = [];
-        public Task InjectSnippetAsync(string template, IntPtr targetHwnd)
+        public Task InjectSnippetAsync(string template, IntPtr targetHwnd, SnippetContentType contentType = SnippetContentType.PlainText, string? rtfContent = null)
         {
             Snippets.Add(template);
             return Task.CompletedTask;

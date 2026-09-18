@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using Serilog;
 using TriggerPoint.Core.Contracts;
+using TriggerPoint.Core.Models;
 using TriggerPoint.Core.Services;
 using TriggerPoint.Infrastructure.Win32;
 
@@ -20,10 +21,22 @@ public class Win32SnippetService : ISnippetService
         _promptDialogService = promptDialogService;
     }
 
-    public async Task InjectSnippetAsync(string template, IntPtr targetHwnd)
+    public async Task InjectSnippetAsync(
+        string template, 
+        IntPtr targetHwnd, 
+        SnippetContentType contentType = SnippetContentType.PlainText, 
+        string? rtfContent = null)
     {
-        if (string.IsNullOrEmpty(template)) return;
+        if (string.IsNullOrEmpty(template) && string.IsNullOrEmpty(rtfContent)) return;
 
+        // Rich Text Injection Path
+        if (contentType == SnippetContentType.RichText && !string.IsNullOrWhiteSpace(rtfContent))
+        {
+            await InjectRichSnippetAsync(template, rtfContent, targetHwnd).ConfigureAwait(false);
+            return;
+        }
+
+        // Plain Text Injection Path
         // 1. Check for interactive prompts
         var promptTokens = PlaceholderParser.ExtractPromptTokens(template);
         Dictionary<string, string>? promptResponses = null;
@@ -79,6 +92,62 @@ public class Win32SnippetService : ISnippetService
             _logger.Information("Injecting large snippet ({Length} chars) via stashed clipboard sequencing.", cleanText.Length);
             await InjectViaClipboardSequencingAsync(cleanText).ConfigureAwait(false);
         }
+
+        // 6. Reposition caret if {cursor} was present
+        if (caretOffset > 0)
+        {
+            await Task.Delay(40).ConfigureAwait(false);
+            SendLeftArrowKeys(caretOffset);
+        }
+    }
+
+    private async Task InjectRichSnippetAsync(string plainFallback, string rtf, IntPtr targetHwnd)
+    {
+        // 1. Check for interactive prompts
+        var promptTokens = PlaceholderParser.ExtractPromptTokens(plainFallback);
+        Dictionary<string, string>? promptResponses = null;
+
+        if (promptTokens.Count > 0)
+        {
+            promptResponses = await _promptDialogService.ShowPromptDialogAsync(promptTokens).ConfigureAwait(true);
+            if (promptResponses == null)
+            {
+                _logger.Information("Rich snippet injection cancelled by user during prompt dialog.");
+                return;
+            }
+        }
+
+        // 2. Context inspection
+        string? activeWinTitle = null;
+        string? activeProcName = null;
+        if (targetHwnd != IntPtr.Zero)
+        {
+            activeWinTitle = NativeMethods.GetWindowTitle(targetHwnd);
+            activeProcName = NativeMethods.GetProcessNameForWindow(targetHwnd);
+        }
+
+        // 3. Evaluate FlowDocument tokens
+        var (evalRtf, evalHtml, evalPlain, caretOffset) = RichTextService.EvaluateFlowDocument(
+            rtf,
+            plainFallback,
+            promptResponses,
+            () => Task.FromResult(GetClipboardTextSafe()),
+            DateTime.Now,
+            activeWinTitle,
+            activeProcName);
+
+        // 4. Restore focus to target window
+        if (targetHwnd != IntPtr.Zero)
+        {
+            await RestoreFocusToWindowAsync(targetHwnd).ConfigureAwait(false);
+        }
+
+        // Ensure no lingering modifier keys interfere with injection
+        ReleaseLingeringModifiers();
+
+        // 5. Inject via multi-format clipboard sequencing
+        _logger.Information("Injecting rich text snippet ({PlainLen} chars) via multi-format clipboard sequencing.", evalPlain.Length);
+        await InjectViaClipboardRichSequencingAsync(evalRtf, evalHtml, evalPlain).ConfigureAwait(false);
 
         // 6. Reposition caret if {cursor} was present
         if (caretOffset > 0)
@@ -247,6 +316,82 @@ public class Win32SnippetService : ISnippetService
         await Task.Delay(500).ConfigureAwait(false);
 
         // Restore original clipboard state if there was one (do not clear if user had empty clipboard)
+        if (previousText != null)
+        {
+            await Application.Current.Dispatcher.InvokeAsync(async () =>
+            {
+                for (int attempt = 0; attempt < 3; attempt++)
+                {
+                    try
+                    {
+                        Clipboard.SetText(previousText);
+                        return;
+                    }
+                    catch (Exception ex)
+                    {
+                        if (attempt == 2)
+                        {
+                            _logger.Warning(ex, "Failed to restore original clipboard contents after 3 attempts.");
+                        }
+                        await Task.Delay(25);
+                    }
+                }
+            });
+        }
+    }
+
+    private async Task InjectViaClipboardRichSequencingAsync(string rtf, string html, string plainText)
+    {
+        string? previousText = null;
+
+        // Backup existing clipboard text with retry and set rich data object
+        await Application.Current.Dispatcher.InvokeAsync(async () =>
+        {
+            for (int attempt = 0; attempt < 3; attempt++)
+            {
+                try
+                {
+                    if (Clipboard.ContainsText())
+                    {
+                        previousText = Clipboard.GetText();
+                    }
+
+                    var dataObject = new DataObject();
+                    if (!string.IsNullOrEmpty(rtf))
+                    {
+                        dataObject.SetData(DataFormats.Rtf, rtf);
+                    }
+                    if (!string.IsNullOrEmpty(html))
+                    {
+                        dataObject.SetData(DataFormats.Html, html);
+                    }
+                    if (!string.IsNullOrEmpty(plainText))
+                    {
+                        dataObject.SetData(DataFormats.UnicodeText, plainText);
+                        dataObject.SetData(DataFormats.Text, plainText);
+                    }
+
+                    Clipboard.SetDataObject(dataObject, true);
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    if (attempt == 2)
+                    {
+                        _logger.Warning(ex, "Failed to write rich snippet data to clipboard after 3 attempts.");
+                    }
+                    await Task.Delay(25);
+                }
+            }
+        });
+
+        // Simulate Ctrl + V
+        SendPasteCommand();
+
+        // Allow target application sufficient time to process paste
+        await Task.Delay(500).ConfigureAwait(false);
+
+        // Restore original clipboard state if there was one
         if (previousText != null)
         {
             await Application.Current.Dispatcher.InvokeAsync(async () =>

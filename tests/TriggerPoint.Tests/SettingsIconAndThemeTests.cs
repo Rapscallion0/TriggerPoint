@@ -150,4 +150,62 @@ public class SettingsIconAndThemeTests
             throw new InvalidOperationException($"ThemeManager icon test failed: {caughtEx.Message}", caughtEx);
         }
     }
+
+    [Fact]
+    public void RichTextEditorGeometries_ExistInThemeResources_AndAreValid()
+    {
+        Exception? caughtEx = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                if (Application.Current == null)
+                {
+                    new Application();
+                }
+
+                if (!Application.Current!.Resources.MergedDictionaries.Any(d => d.Source?.OriginalString?.Contains("ThemeResources.xaml") == true))
+                {
+                    Application.Current!.Resources.MergedDictionaries.Add(new ResourceDictionary
+                    {
+                        Source = new Uri("pack://application:,,,/TriggerPoint;component/Theme/ThemeResources.xaml", UriKind.Absolute)
+                    });
+                }
+
+                string[] geometryKeys =
+                [
+                    "ClearFormatGeometry",
+                    "BulletListGeometry",
+                    "NumberedListGeometry",
+                    "AlignLeftGeometry",
+                    "AlignCenterGeometry",
+                    "AlignRightGeometry",
+                    "HighlighterPenGeometry"
+                ];
+
+                foreach (var key in geometryKeys)
+                {
+                    var geom = Application.Current.FindResource(key) as Geometry;
+                    Assert.NotNull(geom);
+                    Assert.False(geom.Bounds.IsEmpty, $"Geometry {key} bounds should not be empty");
+                    Assert.True(geom.Bounds.Width > 0, $"Geometry {key} width should be > 0");
+                    Assert.True(geom.Bounds.Height > 0, $"Geometry {key} height should be > 0");
+                }
+            }
+            catch (Exception ex)
+            {
+                caughtEx = ex;
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join(5000);
+
+        if (caughtEx != null)
+        {
+            throw new InvalidOperationException($"RichTextEditorGeometries test failed: {caughtEx.Message}", caughtEx);
+        }
+    }
 }
+

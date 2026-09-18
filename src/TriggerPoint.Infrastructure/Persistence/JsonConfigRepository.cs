@@ -19,6 +19,7 @@ public class JsonConfigRepository : IConfigRepository
     private readonly string _appSettingsFilePath;
     private readonly string _appSettingsBackupFilePath;
     private readonly string _recycleBinFilePath;
+    private readonly ISecretsVaultService _secretsVault;
     private readonly SemaphoreSlim _fileLock = new(1, 1);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -30,8 +31,9 @@ public class JsonConfigRepository : IConfigRepository
         Converters = { new JsonStringEnumConverter(allowIntegerValues: true) }
     };
 
-    public JsonConfigRepository(string? customDirectory = null)
+    public JsonConfigRepository(string? customDirectory = null, ISecretsVaultService? secretsVault = null)
     {
+        _secretsVault = secretsVault ?? new Services.WindowsDpapiSecretsVaultService();
         var baseDir = customDirectory ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), 
             "TriggerPoint");
@@ -73,6 +75,50 @@ public class JsonConfigRepository : IConfigRepository
         }
     }
 
+    private void DecryptSecrets(IEnumerable<TriggerItem>? items)
+    {
+        if (items == null || _secretsVault == null) return;
+        foreach (var item in items)
+        {
+            DecryptItemSecrets(item);
+        }
+    }
+
+    private void DecryptItemSecrets(TriggerItem item)
+    {
+        if (item.Payload?.WorkflowVariables != null && _secretsVault != null)
+        {
+            foreach (var v in item.Payload.WorkflowVariables)
+            {
+                if (v.IsSecret && _secretsVault.IsProtected(v.Value))
+                {
+                    v.Value = _secretsVault.Unprotect(v.Value);
+                }
+            }
+        }
+    }
+
+    private List<TriggerItem> PrepareItemsForSerialization(IEnumerable<TriggerItem> items)
+    {
+        var list = new List<TriggerItem>();
+        foreach (var item in items)
+        {
+            var clone = item.Clone();
+            if (clone.Payload?.WorkflowVariables != null && _secretsVault != null)
+            {
+                foreach (var v in clone.Payload.WorkflowVariables)
+                {
+                    if (v.IsSecret && !_secretsVault.IsProtected(v.Value))
+                    {
+                        v.Value = _secretsVault.Protect(v.Value);
+                    }
+                }
+            }
+            list.Add(clone);
+        }
+        return list;
+    }
+
     private List<TriggerItem>? TryRecoverFromBackups()
     {
         // 1. Try triggerpoint.bak
@@ -83,6 +129,7 @@ public class JsonConfigRepository : IConfigRepository
                 File.Copy(_backupFilePath, _configFilePath, true);
             }
             catch { }
+            DecryptSecrets(backupItems);
             return backupItems;
         }
 
@@ -102,6 +149,7 @@ public class JsonConfigRepository : IConfigRepository
                         File.Copy(file, _backupFilePath, true);
                     }
                     catch { }
+                    DecryptSecrets(snapshotItems);
                     return snapshotItems;
                 }
             }
@@ -151,6 +199,7 @@ public class JsonConfigRepository : IConfigRepository
                         var items = await JsonSerializer.DeserializeAsync<List<TriggerItem>>(stream, JsonOptions).ConfigureAwait(false);
                         if (items != null && items.Count > 0)
                         {
+                            DecryptSecrets(items);
                             return items;
                         }
                     }
@@ -301,9 +350,10 @@ public class JsonConfigRepository : IConfigRepository
         var tempFilePath = _configFilePath + ".tmp";
 
         // 1. Write to temporary file and force OS flush to physical disk
+        var serializedList = PrepareItemsForSerialization(itemList);
         await using (var stream = new FileStream(tempFilePath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, true))
         {
-            await JsonSerializer.SerializeAsync(stream, itemList, JsonOptions).ConfigureAwait(false);
+            await JsonSerializer.SerializeAsync(stream, serializedList, JsonOptions).ConfigureAwait(false);
             await stream.FlushAsync().ConfigureAwait(false);
             stream.Flush(flushToDisk: true);
         }
@@ -431,14 +481,25 @@ public class JsonConfigRepository : IConfigRepository
     {
         if (string.IsNullOrWhiteSpace(filePath)) throw new ArgumentException("File path cannot be empty", nameof(filePath));
 
-        // Ensure folder and action counts are properly populated
-        package.FolderCount = package.Items.Count(x => x.ActionType == ActionType.Folder);
-        package.ActionCount = package.Items.Count(x => x.ActionType != ActionType.Folder);
+        var exportItems = PrepareItemsForSerialization(package.Items);
+
+        var exportPackage = new ConfigurationBackupPackage
+        {
+            SchemaVersion = package.SchemaVersion,
+            AppVersion = package.AppVersion,
+            ExportedAt = package.ExportedAt,
+            ContentType = package.ContentType,
+            ScopeName = package.ScopeName,
+            FolderCount = exportItems.Count(x => x.ActionType == ActionType.Folder),
+            ActionCount = exportItems.Count(x => x.ActionType != ActionType.Folder),
+            Settings = package.Settings,
+            Items = exportItems
+        };
 
         var tempFile = filePath + ".tmp";
         using (var stream = File.Create(tempFile))
         {
-            await JsonSerializer.SerializeAsync(stream, package, JsonOptions).ConfigureAwait(false);
+            await JsonSerializer.SerializeAsync(stream, exportPackage, JsonOptions).ConfigureAwait(false);
             await stream.FlushAsync().ConfigureAwait(false);
         }
 
@@ -462,6 +523,7 @@ public class JsonConfigRepository : IConfigRepository
                     package.FolderCount = package.Items.Count(x => x.ActionType == ActionType.Folder);
                     package.ActionCount = package.Items.Count(x => x.ActionType != ActionType.Folder);
                 }
+                DecryptSecrets(package.Items);
                 return package;
             }
         }
@@ -477,6 +539,7 @@ public class JsonConfigRepository : IConfigRepository
             var legacyItems = await JsonSerializer.DeserializeAsync<List<TriggerItem>>(stream, JsonOptions).ConfigureAwait(false);
             if (legacyItems != null && legacyItems.Count > 0)
             {
+                DecryptSecrets(legacyItems);
                 return new ConfigurationBackupPackage
                 {
                     SchemaVersion = 1,
@@ -510,7 +573,15 @@ public class JsonConfigRepository : IConfigRepository
                 {
                     using var stream = File.OpenRead(_recycleBinFilePath);
                     var items = await JsonSerializer.DeserializeAsync<List<RecycleBinItem>>(stream, JsonOptions).ConfigureAwait(false);
-                    return items ?? [];
+                    if (items != null)
+                    {
+                        foreach (var r in items)
+                        {
+                            if (r.Item != null) DecryptSecrets([r.Item]);
+                        }
+                        return items;
+                    }
+                    return [];
                 }
                 catch
                 {
@@ -530,7 +601,15 @@ public class JsonConfigRepository : IConfigRepository
         await _fileLock.WaitAsync().ConfigureAwait(false);
         try
         {
-            var list = items.ToList();
+            var list = items.Select(r => new RecycleBinItem
+            {
+                Id = r.Id,
+                DeletedAtUtc = r.DeletedAtUtc,
+                OriginalParentId = r.OriginalParentId,
+                OriginalPath = r.OriginalPath,
+                Item = PrepareItemsForSerialization([r.Item]).FirstOrDefault() ?? r.Item
+            }).ToList();
+
             var tempFile = _recycleBinFilePath + ".tmp";
             using (var stream = File.Create(tempFile))
             {

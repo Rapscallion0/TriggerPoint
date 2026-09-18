@@ -45,20 +45,7 @@ public sealed class TriggerItem
             AutoNumberMode = AutoNumberMode,
             ActionType = ActionType,
             IsExpanded = IsExpanded,
-            Payload = new ActionPayload
-            {
-                Command = Payload.Command,
-                Arguments = Payload.Arguments,
-                WorkingDirectory = Payload.WorkingDirectory,
-                RunAsAdmin = Payload.RunAsAdmin,
-                TargetDisplay = Payload.TargetDisplay,
-                OpenInNewWindow = Payload.OpenInNewWindow,
-                SnippetTemplate = Payload.SnippetTemplate,
-                WorkflowMode = Payload.WorkflowMode,
-                WorkflowSteps = Payload.WorkflowSteps?.ConvertAll(s => s.Clone()) ?? [],
-                WorkflowVariables = Payload.WorkflowVariables?.ConvertAll(v => v.Clone()) ?? [],
-                ScriptSource = Payload.ScriptSource
-            },
+            Payload = Payload?.Clone() ?? new ActionPayload(),
             ContextFilter = new ContextFilter
             {
                 AllowedProcesses = [.. ContextFilter.AllowedProcesses],

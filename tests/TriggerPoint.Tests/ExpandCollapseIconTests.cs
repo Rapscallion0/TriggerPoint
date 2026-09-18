@@ -22,6 +22,8 @@ public class ExpandCollapseIconTests
         public event EventHandler<TriggerItem>? HotkeyTriggered { add { } remove { } }
         public event EventHandler? ConflictsUpdated { add { } remove { } }
         public event EventHandler<bool>? SnoozeChanged { add { } remove { } }
+        public event EventHandler<ChordWaitingEventArgs>? ChordWaiting { add { } remove { } }
+        public event EventHandler? ChordCompleted { add { } remove { } }
 
         public void Start(IntPtr windowHandle) { }
         public void Stop() { }

@@ -59,6 +59,18 @@ public static class HotkeyRegistryValidator
                     item.ConflictStatus = conflict;
                     continue;
                 }
+
+                if (appSettings.CheatSheetHotkey != null && item.Hotkey == appSettings.CheatSheetHotkey)
+                {
+                    var conflict = HotkeyConflictStatus.CreateInternal(
+                        Guid.Empty,
+                        "Cheat Sheet HUD",
+                        "Application Settings",
+                        item.Hotkey.DisplayText);
+                    conflicts[item.Id] = conflict;
+                    item.ConflictStatus = conflict;
+                    continue;
+                }
             }
 
             if (registeredMap.TryGetValue(item.Hotkey, out var existingItem))
@@ -128,6 +140,15 @@ public static class HotkeyRegistryValidator
                 return HotkeyConflictStatus.CreateInternal(
                     Guid.Empty,
                     "Command Palette",
+                    "Application Settings",
+                    newBinding.DisplayText);
+            }
+
+            if (appSettings.CheatSheetHotkey != null && appSettings.CheatSheetHotkey == newBinding)
+            {
+                return HotkeyConflictStatus.CreateInternal(
+                    Guid.Empty,
+                    "Cheat Sheet HUD",
                     "Application Settings",
                     newBinding.DisplayText);
             }
@@ -210,7 +231,8 @@ public static class HotkeyRegistryValidator
     public static (bool IsValid, string? ErrorMessage) ValidateApplicationHotkeys(
         ShortcutBinding? openSettingsHotkey,
         ShortcutBinding? commandPaletteHotkey,
-        IEnumerable<TriggerItem> allItems)
+        IEnumerable<TriggerItem> allItems,
+        ShortcutBinding? cheatSheetHotkey = null)
     {
         if (openSettingsHotkey != null && !openSettingsHotkey.IsEmpty)
         {
@@ -218,7 +240,8 @@ public static class HotkeyRegistryValidator
                 "Open Action Manager", 
                 openSettingsHotkey, 
                 allItems, 
-                ("Command Palette", commandPaletteHotkey));
+                ("Command Palette", commandPaletteHotkey),
+                ("Cheat Sheet HUD", cheatSheetHotkey));
 
             if (conflict != null)
             {
@@ -232,11 +255,27 @@ public static class HotkeyRegistryValidator
                 "Command Palette", 
                 commandPaletteHotkey, 
                 allItems, 
-                ("Open Action Manager", openSettingsHotkey));
+                ("Open Action Manager", openSettingsHotkey),
+                ("Cheat Sheet HUD", cheatSheetHotkey));
 
             if (conflict != null)
             {
                 return (false, $"The shortcut '{commandPaletteHotkey.DisplayText}' for 'Command Palette' conflicts with '{conflict.ConflictingActionName}' ({conflict.ConflictingFolderName}).");
+            }
+        }
+
+        if (cheatSheetHotkey != null && !cheatSheetHotkey.IsEmpty)
+        {
+            var conflict = CheckApplicationHotkeyConflict(
+                "Cheat Sheet HUD", 
+                cheatSheetHotkey, 
+                allItems, 
+                ("Open Action Manager", openSettingsHotkey),
+                ("Command Palette", commandPaletteHotkey));
+
+            if (conflict != null)
+            {
+                return (false, $"The shortcut '{cheatSheetHotkey.DisplayText}' for 'Cheat Sheet HUD' conflicts with '{conflict.ConflictingActionName}' ({conflict.ConflictingFolderName}).");
             }
         }
 

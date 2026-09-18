@@ -70,8 +70,8 @@ public class PaletteItemViewModel
     public bool IsSelectable => !IsSectionHeader;
     public Visibility HeaderVisibility => IsSectionHeader ? Visibility.Visible : Visibility.Collapsed;
     public Visibility ActionVisibility => IsSelectable ? Visibility.Visible : Visibility.Collapsed;
-
     public bool IsSystemAction => Item != null && (Item.Id == App.OpenSettingsActionId || Item.Id == CommandPaletteView.AppSettingsVirtualId);
+    public bool IsCalculatorResult { get; init; }
 
     public string Name => Item?.Name ?? string.Empty;
     public string Description => Item?.Description ?? string.Empty;
@@ -137,6 +137,7 @@ public class PaletteItemViewModel
         get
         {
             if (IsSectionHeader) return string.Empty;
+            if (IsCalculatorResult) return "CALC";
             if (IsSystemAction) return "SYSTEM";
             return Item?.ActionType switch
             {
@@ -149,11 +150,13 @@ public class PaletteItemViewModel
         }
     }
 
+    public Visibility AdminBadgeVisibility => (!IsSectionHeader && !IsSystemAction && Item?.Payload?.RunAsAdmin == true) ? Visibility.Visible : Visibility.Collapsed;
+
     public Brush TypeForegroundBrush
     {
         get
         {
-            if (IsSystemAction) return Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.CornflowerBlue;
+            if (IsCalculatorResult || IsSystemAction) return Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.CornflowerBlue;
             return Item?.ActionType switch
             {
                 ActionType.Folder => Application.Current.TryFindResource("FolderBrush") as Brush ?? Brushes.SteelBlue,
@@ -169,7 +172,7 @@ public class PaletteItemViewModel
     {
         get
         {
-            if (IsSystemAction) return Application.Current.TryFindResource("AccentSubtleBrush") as Brush ?? new SolidColorBrush(Color.FromArgb(0x18, 0x00, 0x7A, 0xCC));
+            if (IsCalculatorResult || IsSystemAction) return Application.Current.TryFindResource("AccentSubtleBrush") as Brush ?? new SolidColorBrush(Color.FromArgb(0x18, 0x00, 0x7A, 0xCC));
             return Item?.ActionType switch
             {
                 ActionType.Folder => Application.Current.TryFindResource("FolderSubtleBrush") as Brush ?? new SolidColorBrush(Color.FromArgb(0x18, 0x3B, 0x82, 0xF6)),
@@ -202,6 +205,7 @@ public class PaletteItemViewModel
         get
         {
             if (IsSectionHeader) return string.Empty;
+            if (IsCalculatorResult) return "🧮";
             if (IsSystemAction)
             {
                 return Item.Id == App.OpenSettingsActionId ? "🎯" : "⚙️";
@@ -475,6 +479,13 @@ public partial class CommandPaletteView : Window
                 _currentSortMode = settings.CommandPaletteSortMode;
                 UpdateSortButtonText();
                 UpdateSortMenuCheckmarks();
+
+                if (settings.EnableUiAnimations)
+                {
+                    var anim = new System.Windows.Media.Animation.DoubleAnimation(0.0, 1.0, TimeSpan.FromMilliseconds(120));
+                    BeginAnimation(OpacityProperty, anim);
+                }
+
                 FilterResults();
             }
             catch { }
@@ -774,6 +785,25 @@ public partial class CommandPaletteView : Window
                 r.Item,
                 r,
                 r.Item.ParentId.HasValue && _folderPaths.TryGetValue(r.Item.ParentId.Value, out var path) ? path : null)));
+        }
+
+        // Evaluate quick math or unit conversion utility
+        var calcResult = QuickCalculatorService.TryEvaluate(rawQuery);
+        if (calcResult != null)
+        {
+            var calcItem = new TriggerItem
+            {
+                Id = Guid.NewGuid(),
+                Name = $"{calcResult.FormattedResult}  ({calcResult.Expression})",
+                Description = calcResult.Description,
+                ActionType = ActionType.Snippet,
+                Payload = new ActionPayload
+                {
+                    SnippetTemplate = calcResult.FormattedResult
+                },
+                IsEnabled = true
+            };
+            vms.Insert(0, new PaletteItemViewModel(calcItem, null) { IsCalculatorResult = true });
         }
 
         ResultsListBox.ItemsSource = vms;

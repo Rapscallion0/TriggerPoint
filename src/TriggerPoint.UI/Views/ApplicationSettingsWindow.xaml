@@ -4,8 +4,8 @@
         xmlns:controls="clr-namespace:TriggerPoint.UI.Controls"
         Title="TriggerPoint Application Settings"
         Icon="{DynamicResource AppIconSource}"
-        Width="600" Height="650"
-        MinWidth="500" MinHeight="550"
+        Width="780" Height="620"
+        MinWidth="680" MinHeight="520"
         WindowStartupLocation="Manual"
         WindowStyle="None"
         AllowsTransparency="False"
@@ -24,7 +24,49 @@
                       CornerRadius="0"/>
     </WindowChrome.WindowChrome>
 
-    <Grid Margin="20,16,20,16">
+    <Window.Resources>
+        <!-- Modern Sidebar Navigation Button Style -->
+        <Style x:Key="SettingsNavButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="Margin" Value="0,1,0,1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="NavBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="Transparent"
+                                BorderThickness="3,0,0,0"
+                                CornerRadius="5"
+                                Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="NavBorder" Property="Background" Value="{DynamicResource BgSecondaryBrush}"/>
+                            </Trigger>
+                            <Trigger Property="Tag" Value="Selected">
+                                <Setter TargetName="NavBorder" Property="Background" Value="{DynamicResource AccentSubtleBrush}"/>
+                                <Setter TargetName="NavBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="18,14,18,14">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -32,457 +74,838 @@
         </Grid.RowDefinitions>
 
         <!-- Custom Title Bar -->
-        <Grid Grid.Row="0" Margin="0,0,0,16" Background="Transparent" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+        <Grid Grid.Row="0" Margin="0,0,0,14" Background="Transparent" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <Image Source="{DynamicResource AppIconSource}" 
-                               Width="16" Height="16" 
-                               Margin="0,0,8,0" 
-                               VerticalAlignment="Center" 
-                               RenderOptions.BitmapScalingMode="HighQuality"/>
-                        <TextBlock Text="Application Settings" 
-                                   FontSize="17" 
-                                   FontWeight="Bold" 
-                                   Foreground="{DynamicResource TextPrimaryBrush}" 
-                                   VerticalAlignment="Center"/>
-                    </StackPanel>
-                    <TextBlock Text="Configure daemon behavior, logging levels, and log retention" 
-                               FontSize="12" 
-                               Foreground="{DynamicResource TextSecondaryBrush}" 
-                               Margin="0,3,0,0"/>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Image Source="{DynamicResource AppIconSource}" 
+                           Width="16" Height="16" 
+                           Margin="0,0,8,0" 
+                           VerticalAlignment="Center" 
+                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                    <TextBlock Text="Application Settings" 
+                               FontSize="16.5" 
+                               FontWeight="Bold" 
+                               Foreground="{DynamicResource TextPrimaryBrush}" 
+                               VerticalAlignment="Center"/>
                 </StackPanel>
-                <Button Grid.Column="1" 
-                        Content="✕" 
-                        Style="{StaticResource WindowControlButtonStyle}" 
-                        Width="30" Height="30" 
-                        WindowChrome.IsHitTestVisibleInChrome="True"
-                        Click="CancelBtn_Click"/>
-            </Grid>
+                <TextBlock Text="Configure daemon behavior, hotkeys, themes, updates, and maintenance" 
+                           FontSize="11.5" 
+                           Foreground="{DynamicResource TextSecondaryBrush}" 
+                           Margin="0,2,0,0"/>
+            </StackPanel>
+            <Button Grid.Column="1" 
+                    Content="✕" 
+                    Style="{StaticResource WindowControlButtonStyle}" 
+                    Width="30" Height="30" 
+                    WindowChrome.IsHitTestVisibleInChrome="True"
+                    Click="CancelBtn_Click"/>
+        </Grid>
 
-            <!-- Settings Content (Scrollable) -->
-            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,0,0,16" Padding="0,0,6,0">
-                <StackPanel>
-                    <!-- Serilog Logging Section -->
-                    <Border Background="{DynamicResource BgPrimaryBrush}"
+        <!-- Main Body: Navigation Sidebar + Content Area -->
+        <Grid Grid.Row="1" Margin="0,0,0,14">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="210"/>
+                <ColumnDefinition Width="14"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Column 0: Left Navigation Sidebar -->
+            <Border Grid.Column="0"
+                    Background="{DynamicResource BgPrimaryBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="8">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Instant Search Settings Box -->
+                    <Border Grid.Row="0"
+                            Background="{DynamicResource BgSecondaryBrush}"
                             BorderBrush="{DynamicResource BorderBrush}"
                             BorderThickness="1"
-                            CornerRadius="8"
-                            Padding="16"
-                            Margin="0,0,0,14">
-                        <StackPanel>
-                            <Grid Margin="0,0,0,6">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0">
-                                    <TextBlock Text="Serilog Diagnostics &amp; Logging" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}"/>
-                                    <TextBlock Text="Dynamic runtime log level and automatic daily rolling file retention" 
-                                               FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0"/>
-                                </StackPanel>
-                                <Button Grid.Column="1" 
-                                        Content="📁 Open Logs Folder" 
-                                        Style="{StaticResource SecondaryButtonStyle}" 
-                                        FontSize="11.5" 
-                                        Padding="8,4"
-                                        ToolTip="Open the logs directory in Windows File Explorer"
-                                        Click="OpenLogsFolderBtn_Click"/>
-                            </Grid>
-
-                            <Border Height="1" Background="{DynamicResource BorderSubtleBrush}" Margin="0,6,0,12" SnapsToDevicePixels="True"/>
-
-                            <!-- Log Level ComboBox -->
-                            <TextBlock Text="Minimum Log Level" FontWeight="SemiBold" FontSize="12.5" Margin="0,0,0,4"/>
-                            <ComboBox x:Name="LogLevelCombo" 
-                                      Height="34" 
-                                      FontSize="13" 
-                                      ToolTip="Sets the minimum severity required to emit a log event">
-                                <ComboBoxItem Content="Verbose (Everything, detailed tracing)"/>
-                                <ComboBoxItem Content="Debug (Diagnostic &amp; internal events)"/>
-                                <ComboBoxItem Content="Information (Standard application events - Recommended)" IsSelected="True"/>
-                                <ComboBoxItem Content="Warning (Conflicts and non-fatal warnings)"/>
-                                <ComboBoxItem Content="Error (Exceptions and execution failures)"/>
-                                <ComboBoxItem Content="Fatal (Critical daemon errors only)"/>
-                            </ComboBox>
-
-                            <!-- Log Retention Days -->
-                            <Grid Margin="0,12,0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Log Retention Period (Days)" FontWeight="SemiBold" FontSize="12.5" VerticalAlignment="Center"/>
-                                <TextBlock Grid.Column="1" x:Name="RetentionDaysText" Text="7 days" FontWeight="Bold" FontSize="12.5" Foreground="{DynamicResource AccentBrush}"/>
-                            </Grid>
-                            <ComboBox x:Name="RetentionDaysCombo" 
-                                      Height="34" 
-                                      FontSize="13"
-                                      SelectionChanged="RetentionDaysCombo_SelectionChanged"
-                                      ToolTip="Daily rolling log files older than this will be automatically deleted">
-                                <ComboBoxItem Content="1 Day (Minimal disk usage)"/>
-                                <ComboBoxItem Content="3 Days"/>
-                                <ComboBoxItem Content="7 Days (Default)"/>
-                                <ComboBoxItem Content="14 Days (Two weeks)"/>
-                                <ComboBoxItem Content="30 Days (One month)"/>
-                                <ComboBoxItem Content="90 Days (Quarterly)"/>
-                            </ComboBox>
-
-                            <!-- Log File Split Threshold -->
-                            <Grid Margin="0,12,0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Log File Split Threshold" FontWeight="SemiBold" FontSize="12.5" VerticalAlignment="Center"/>
-                                <TextBlock Grid.Column="1" x:Name="LogSplitThresholdText" Text="100 MB" FontWeight="Bold" FontSize="12.5" Foreground="{DynamicResource AccentBrush}"/>
-                            </Grid>
-                            <ComboBox x:Name="LogSplitThresholdCombo" 
-                                      Height="34" 
-                                      FontSize="13"
-                                      SelectionChanged="LogSplitThresholdCombo_SelectionChanged"
-                                      ToolTip="Maximum size a single daily log file can reach before splitting into an indexed file">
-                                <ComboBoxItem Content="25 MB"/>
-                                <ComboBoxItem Content="50 MB"/>
-                                <ComboBoxItem Content="100 MB (Default)"/>
-                                <ComboBoxItem Content="250 MB"/>
-                                <ComboBoxItem Content="500 MB"/>
-                                <ComboBoxItem Content="1000 MB (1 GB)"/>
-                            </ComboBox>
-                        </StackPanel>
+                            CornerRadius="6"
+                            Padding="6,4"
+                            Margin="0,0,0,8">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" 
+                                       Text="🔍" 
+                                       FontSize="11" 
+                                       Margin="2,0,6,0" 
+                                       VerticalAlignment="Center" 
+                                       Foreground="{DynamicResource TextMutedBrush}"/>
+                            <TextBox Grid.Column="1"
+                                     x:Name="SearchSettingsBox"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     Foreground="{DynamicResource TextPrimaryBrush}"
+                                     CaretBrush="{DynamicResource TextPrimaryBrush}"
+                                     FontSize="12"
+                                     VerticalAlignment="Center"
+                                     TextChanged="SearchSettingsBox_TextChanged"
+                                     PreviewKeyDown="SearchSettingsBox_PreviewKeyDown"/>
+                            <TextBlock Grid.Column="1"
+                                       x:Name="SearchPlaceholderText"
+                                       Text="Search settings (Ctrl+F)..."
+                                       FontSize="12"
+                                       Foreground="{DynamicResource TextMutedBrush}"
+                                       VerticalAlignment="Center"
+                                       IsHitTestVisible="False"/>
+                            <Button Grid.Column="2"
+                                    x:Name="ClearSearchBtn"
+                                    Content="✕"
+                                    Width="16" Height="16"
+                                    FontSize="9.5"
+                                    Padding="0"
+                                    Style="{StaticResource WindowControlButtonStyle}"
+                                    Visibility="Collapsed"
+                                    Click="ClearSearchBtn_Click"/>
+                        </Grid>
                     </Border>
 
-                    <!-- Application Appearance & Theme -->
-                    <Border Background="{DynamicResource BgPrimaryBrush}"
-                            BorderBrush="{DynamicResource BorderBrush}"
-                            BorderThickness="1"
-                            CornerRadius="8"
-                            Padding="16"
-                            Margin="0,0,0,14">
-                        <StackPanel>
-                            <TextBlock Text="Appearance &amp; Theme" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}"/>
-                            <TextBlock Text="Select your visual preference or automatically sync with Windows" 
-                                       FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0"/>
-
-                            <Border Height="1" Background="{DynamicResource BorderSubtleBrush}" Margin="0,8,0,12" SnapsToDevicePixels="True"/>
-
-                            <ComboBox x:Name="ThemeCombo" 
-                                      Height="34" 
-                                      FontSize="13"
-                                      ToolTip="Theme selection">
-                                <ComboBoxItem Content="System Default (Auto-detect Windows theme)"/>
-                                <ComboBoxItem Content="Dark Mode (Deep charcoal slate)"/>
-                                <ComboBoxItem Content="Light Mode (Clean crisp light)"/>
-                            </ComboBox>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Global Application Shortcuts -->
-                    <Border Background="{DynamicResource BgPrimaryBrush}"
-                            BorderBrush="{DynamicResource BorderBrush}"
-                            BorderThickness="1"
-                            CornerRadius="8"
-                            Padding="16"
-                            Margin="0,0,0,14">
-                        <StackPanel>
-                            <TextBlock Text="Global Application Shortcuts" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}"/>
-                            <TextBlock Text="System-wide hotkeys to bring up TriggerPoint or the quick Command Palette" 
-                                       FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0"/>
-
-                            <Border Height="1" Background="{DynamicResource BorderSubtleBrush}" Margin="0,8,0,12" SnapsToDevicePixels="True"/>
-
-                            <!-- Shortcut Conflict Warning Banner -->
-                            <Border x:Name="ShortcutConflictWarningBorder"
-                                    Background="{DynamicResource WarningSubtleBrush}"
-                                    BorderBrush="{DynamicResource WarningBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="6"
-                                    Padding="10,8"
-                                    Margin="0,0,0,12"
-                                    Visibility="Collapsed">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="⚠️" FontSize="13" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                    <TextBlock x:Name="ShortcutConflictWarningText"
-                                               Text="Shortcut conflict detected."
-                                               FontSize="12"
-                                               Foreground="{DynamicResource WarningBrush}"
-                                               FontWeight="SemiBold"
-                                               VerticalAlignment="Center"
-                                               TextWrapping="Wrap"/>
-                                </StackPanel>
-                            </Border>
-
-                            <!-- Open Action Manager -->
-                            <TextBlock Text="Open Action Manager" FontWeight="SemiBold" FontSize="12.5" Margin="0,0,0,4"/>
-                            <controls:HotkeyRecorderControl x:Name="OpenSettingsHotkeyRecorder" Margin="0,0,0,12"/>
-
-                            <!-- Command Palette -->
-                            <TextBlock Text="Open Command Palette" FontWeight="SemiBold" FontSize="12.5" Margin="0,0,0,4"/>
-                            <controls:HotkeyRecorderControl x:Name="CommandPaletteHotkeyRecorder"/>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- System Startup & Daemon Behavior -->
-                    <Border Background="{DynamicResource BgPrimaryBrush}"
-                            BorderBrush="{DynamicResource BorderBrush}"
-                            BorderThickness="1"
-                            CornerRadius="8"
-                            Padding="16">
-                        <StackPanel>
-                            <TextBlock Text="System Integration" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}"/>
-                            <TextBlock Text="Configure Windows startup and background launch behavior" 
-                                       FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0"/>
-
-                            <Border Height="1" Background="{DynamicResource BorderSubtleBrush}" Margin="0,8,0,12" SnapsToDevicePixels="True"/>
-
-                            <CheckBox x:Name="RunAtStartupCheck" 
-                                      Content="Start TriggerPoint when you log in to Windows" 
-                                      FontSize="13" 
-                                      Margin="0,0,0,10"
-                                      ToolTip="Adds TriggerPoint to current user's Windows Startup registry run key"/>
-
-                            <CheckBox x:Name="StartMinimizedCheck" 
-                                      Content="Start minimized to System Tray" 
-                                      FontSize="13" 
-                                      Margin="0,0,0,10"
-                                      ToolTip="Prevents the settings window from opening on startup"/>
-
-                            <CheckBox x:Name="HideWindowOnTargetCheck" 
-                                      Content="Hide TriggerPoint window while targeting an application or tab" 
-                                      FontSize="13" 
-                                      Margin="0,0,0,10"
-                                      ToolTip="Temporarily hides this settings window during crosshair targeting so you can easily select windows sitting directly behind it"/>
-
-                            <CheckBox x:Name="ShowSuccessToastsCheck" 
-                                      Content="Show toast notification on successful action execution" 
-                                      FontSize="13" 
-                                      Margin="0,0,0,10"
-                                      ToolTip="Displays a brief notification confirming action execution"/>
-
-                            <!-- Toast Notification Monitor Placement -->
-                            <StackPanel x:Name="ToastPlacementPanel" Margin="24,0,0,12">
-                                <TextBlock Text="Notification Monitor Position" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource TextPrimaryBrush}"/>
-                                <TextBlock Text="Select which display to anchor toast notifications on" 
-                                           FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,1,0,6"/>
-                                <ComboBox x:Name="ToastPlacementCombo" 
-                                          Width="380" 
-                                          HorizontalAlignment="Left"
-                                          FontSize="12">
-                                    <ComboBoxItem Content="Primary Monitor (Recommended — Windows standard, above taskbar)"/>
-                                    <ComboBoxItem Content="Active Monitor (Follows mouse cursor)"/>
-                                </ComboBox>
-                            </StackPanel>
-
-                            <!-- Window Startup & Open Placement -->
-                            <StackPanel Margin="0,4,0,14">
-                                <TextBlock Text="Window Startup &amp; Open Location" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource TextPrimaryBrush}"/>
-                                <TextBlock Text="Choose where TriggerPoint manager windows appear when launched" 
-                                           FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,1,0,6"/>
-                                <ComboBox x:Name="WindowPlacementCombo" 
-                                          Width="380" 
-                                          HorizontalAlignment="Left"
-                                          FontSize="12">
-                                    <ComboBoxItem Content="Remember Last Position (Default — Restores exact coordinates)"/>
-                                    <ComboBoxItem Content="Primary Display (Centered)"/>
-                                    <ComboBoxItem Content="Active Display at Mouse Pointer (Centered)"/>
-                                </ComboBox>
-                            </StackPanel>
-
-                            <CheckBox x:Name="ValidateOnStartupCheck" 
-                                      Content="Validate shortcut file paths on startup" 
-                                      FontSize="13" 
-                                      Margin="0,0,0,10"
-                                      ToolTip="Checks if shortcut target files exist on disk when TriggerPoint starts and notifies you of broken links"/>
-
-                            <CheckBox x:Name="ConfirmRevertChangesCheck" 
-                                      Content="Confirm before reverting unsaved changes to an item" 
-                                      FontSize="13" 
-                                      Margin="0,0,0,10"
-                                      ToolTip="Shows a confirmation dialog before discarding uncommitted edits to an action or folder"/>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Backup & Data Management -->
-                    <Border Background="{DynamicResource BgPrimaryBrush}"
-                            BorderBrush="{DynamicResource BorderBrush}"
-                            BorderThickness="1"
-                            CornerRadius="8"
-                            Padding="16"
-                            Margin="0,14,0,0">
-                        <StackPanel>
-                            <TextBlock Text="Backup &amp; Data Management" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}"/>
-                            <TextBlock Text="Export and import your TriggerPoint actions, folders, and application settings" 
-                                       FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0"/>
-
-                            <Border Height="1" Background="{DynamicResource BorderSubtleBrush}" Margin="0,8,0,12" SnapsToDevicePixels="True"/>
-
-                            <!-- Recycle Bin Retention Settings -->
-                            <TextBlock Text="Recycle Bin &amp; Retention" FontWeight="SemiBold" FontSize="13" Margin="0,4,0,4" Foreground="{DynamicResource TextPrimaryBrush}"/>
-                            <TextBlock Text="Deleted actions and folders are kept in the Recycle Bin before being permanently removed." 
-                                       FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,10"/>
-
-                            <CheckBox x:Name="NeverDeleteRecycleCheck" 
-                                      Content="Never automatically delete items (keep indefinitely)" 
-                                      FontSize="13" 
-                                      Margin="0,0,0,8"
-                                      Checked="NeverDeleteRecycleCheck_Changed"
-                                      Unchecked="NeverDeleteRecycleCheck_Changed"/>
-
-                            <Grid x:Name="RecycleDaysPanel" Margin="0,0,0,12">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="Permanent Deletion Period" FontWeight="SemiBold" FontSize="12.5"/>
-                                    <TextBlock Text="Items older than this number of days will be permanently purged on launch" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                                </StackPanel>
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBox x:Name="RecycleRetentionDaysInput" 
-                                             Width="70" 
-                                             Height="32" 
-                                             FontSize="13" 
-                                             FontWeight="SemiBold"
-                                             TextAlignment="Center"
-                                             VerticalContentAlignment="Center"
-                                             PreviewTextInput="RecycleRetentionDaysInput_PreviewTextInput"/>
-                                    <TextBlock Text="days" FontSize="12.5" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                                </StackPanel>
-                            </Grid>
-
-                            <!-- Recycle Bin Status & Empty Button -->
-                            <Border Background="{DynamicResource BgSecondaryBrush}" 
-                                    BorderBrush="{DynamicResource BorderBrush}" 
-                                    BorderThickness="1" 
-                                    CornerRadius="6" 
-                                    Padding="10,8" 
-                                    Margin="0,0,0,14">
+                    <!-- Nav Buttons List -->
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="NavButtonsList">
+                            <!-- 1. Appearance & Theme -->
+                            <Button x:Name="NavAppearanceBtn" 
+                                    Style="{StaticResource SettingsNavButtonStyle}" 
+                                    Tag="Selected" 
+                                    Click="NavCategory_Click">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="24"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="🎨" FontSize="13" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="Appearance" FontSize="12.5" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Button>
+
+                            <!-- 2. Shortcuts & Hotkeys -->
+                            <Button x:Name="NavShortcutsBtn" 
+                                    Style="{StaticResource SettingsNavButtonStyle}" 
+                                    Click="NavCategory_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="24"/>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                        <TextBlock Text="🗑" FontSize="13" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                        <TextBlock x:Name="RecycleBinStatusText" 
-                                                   Text="Recycle Bin: 0 items" 
-                                                   FontSize="12" 
-                                                   Foreground="{DynamicResource TextSecondaryBrush}" 
-                                                   VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                    <Button Grid.Column="1"
-                                            x:Name="EmptyRecycleBinBtn"
-                                            Content="Empty Bin"
-                                            Style="{StaticResource SecondaryButtonStyle}"
-                                            FontSize="11.5"
-                                            Padding="8,3"
-                                            Click="EmptyRecycleBinBtn_Click"/>
+                                    <TextBlock Grid.Column="0" Text="⌨️" FontSize="13" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="Shortcuts" FontSize="12.5" VerticalAlignment="Center"/>
+                                    <Border Grid.Column="2" x:Name="ShortcutNavBadge"
+                                            Background="{DynamicResource WarningSubtleBrush}"
+                                            BorderBrush="{DynamicResource WarningBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="4"
+                                            Padding="4,1"
+                                            Visibility="Collapsed"
+                                            ToolTip="Global hotkey conflict detected">
+                                        <TextBlock Text="⚠️" FontSize="10"/>
+                                    </Border>
                                 </Grid>
-                            </Border>
+                            </Button>
 
-                            <Separator Margin="0,0,0,12" Background="{DynamicResource BorderBrush}"/>
+                            <!-- 3. System Integration -->
+                            <Button x:Name="NavSystemBtn" 
+                                    Style="{StaticResource SettingsNavButtonStyle}" 
+                                    Click="NavCategory_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="24"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="🖥️" FontSize="13" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="System" FontSize="12.5" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Button>
 
-                            <!-- Live Telemetry Pill -->
-                            <Border Background="{DynamicResource BgSecondaryBrush}" 
-                                    BorderBrush="{DynamicResource BorderBrush}" 
-                                    BorderThickness="1" 
-                                    CornerRadius="6" 
-                                    Padding="10,8" 
-                                    Margin="0,0,0,12">
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Text="📊" FontSize="13" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                    <TextBlock x:Name="BackupTelemetryText" 
-                                               Text="Scanning configuration..." 
-                                               FontSize="12" 
-                                               Foreground="{DynamicResource TextSecondaryBrush}" 
-                                               VerticalAlignment="Center"/>
+                            <!-- 4. Diagnostics & Logging -->
+                            <Button x:Name="NavLoggingBtn" 
+                                    Style="{StaticResource SettingsNavButtonStyle}" 
+                                    Click="NavCategory_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="24"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="📝" FontSize="13" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="Diagnostics" FontSize="12.5" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Button>
+
+                            <!-- 5. Updates & Maintenance -->
+                            <Button x:Name="NavUpdatesBtn" 
+                                    Style="{StaticResource SettingsNavButtonStyle}" 
+                                    Click="NavCategory_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="24"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="🔄" FontSize="13" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="Updates" FontSize="12.5" VerticalAlignment="Center"/>
+                                    <Border Grid.Column="2" x:Name="UpdateNavBadge"
+                                            Background="{DynamicResource AccentSubtleBrush}"
+                                            BorderBrush="{DynamicResource AccentBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="4"
+                                            Padding="4,1"
+                                            Visibility="Collapsed"
+                                            ToolTip="New update available">
+                                        <TextBlock Text="⚡" FontSize="10"/>
+                                    </Border>
+                                </Grid>
+                            </Button>
+
+                            <!-- 6. Backup & Data Management -->
+                            <Button x:Name="NavDataBtn" 
+                                    Style="{StaticResource SettingsNavButtonStyle}" 
+                                    Click="NavCategory_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="24"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="💾" FontSize="13" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="Data &amp; Backup" FontSize="12.5" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Button>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+
+            <!-- Column 2: Right Content Area -->
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Section Breadcrumb & Description Header -->
+                <Border Grid.Row="0" Margin="0,0,0,10">
+                    <StackPanel>
+                        <TextBlock x:Name="CategoryBreadcrumbText"
+                                   Text="Settings &gt; Appearance &amp; Theme"
+                                   FontSize="13.5"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource AccentBrush}"/>
+                        <TextBlock x:Name="CategorySubtitleText"
+                                   Text="Configure visual preferences, translucent materials, and interface micro-animations"
+                                   FontSize="11.5"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   Margin="0,2,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Scrollable Content Pane -->
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="0,0,6,0">
+                    <StackPanel>
+                        <!-- CATEGORY 1: Appearance & Theme -->
+                        <StackPanel x:Name="CategoryAppearancePanel" Margin="0,0,0,12">
+                            <Border Background="{DynamicResource BgPrimaryBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="16">
+                                <StackPanel>
+                                    <TextBlock Text="Appearance &amp; Theme" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                    <TextBlock Text="Select your visual preference or automatically sync with Windows" 
+                                               FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+
+                                    <Border Height="1" Background="{DynamicResource BorderSubtleBrush}" Margin="0,8,0,12" SnapsToDevicePixels="True"/>
+
+                                    <ComboBox x:Name="ThemeCombo" 
+                                              Height="34" 
+                                              FontSize="13"
+                                              ToolTip="Theme selection">
+                                        <ComboBoxItem Content="System Default (Auto-detect Windows theme)"/>
+                                        <ComboBoxItem Content="Dark Mode (Deep charcoal slate)"/>
+                                        <ComboBoxItem Content="Light Mode (Clean crisp light)"/>
+                                    </ComboBox>
+
+                                    <!-- Backdrop Translucency Checkbox -->
+                                    <CheckBox x:Name="EnableBackdropEffectsCheck"
+                                              Content="Enable Windows 11 Mica / Acrylic material transparency"
+                                              FontSize="12.5"
+                                              Margin="0,12,0,4"
+                                              ToolTip="Applies native Windows 11 translucent materials to palettes and menus. Turn off if running over Remote Desktop or experiencing GPU lag."/>
+
+                                    <!-- UI Animations Checkbox -->
+                                    <CheckBox x:Name="EnableUiAnimationsCheck"
+                                              Content="Enable smooth window animations and micro-transitions"
+                                              FontSize="12.5"
+                                              Margin="0,4,0,0"
+                                              ToolTip="Provides subtle entrance and hover animations. Uncheck for instant 0ms cut transitions."/>
                                 </StackPanel>
                             </Border>
-
-                            <!-- Buttons Row -->
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="10"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-
-                                <!-- Export Dropdown Button -->
-                                <Button x:Name="ExportBackupBtn" 
-                                        Grid.Column="0" 
-                                        Style="{StaticResource SecondaryButtonStyle}" 
-                                        Height="34" 
-                                        Padding="12,0" 
-                                        Click="ExportBackupBtn_Click">
-                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                        <TextBlock Text="📤" Margin="0,0,6,0"/>
-                                        <TextBlock Text="Export Backup ▾" FontWeight="SemiBold"/>
-                                    </StackPanel>
-                                    <Button.ContextMenu>
-                                        <ContextMenu x:Name="ExportBackupContextMenu">
-                                            <MenuItem x:Name="ExportFullBackupMenuItem" Click="ExportFullBackupMenuItem_Click">
-                                                <MenuItem.Icon>
-                                                    <TextBlock Text="📦" FontSize="13"/>
-                                                </MenuItem.Icon>
-                                            </MenuItem>
-                                            <MenuItem x:Name="ExportTreeItemsMenuItem" Click="ExportTreeItemsMenuItem_Click">
-                                                <MenuItem.Icon>
-                                                    <TextBlock Text="⚡" FontSize="13"/>
-                                                </MenuItem.Icon>
-                                            </MenuItem>
-                                            <Separator/>
-                                            <MenuItem x:Name="ExportSettingsMenuItem" Header="Application Settings Only" Click="ExportSettingsMenuItem_Click">
-                                                <MenuItem.Icon>
-                                                    <TextBlock Text="⚙" FontSize="13"/>
-                                                </MenuItem.Icon>
-                                            </MenuItem>
-                                        </ContextMenu>
-                                    </Button.ContextMenu>
-                                </Button>
-
-                                <!-- Import Button -->
-                                <Button x:Name="ImportBackupBtn" 
-                                        Grid.Column="2" 
-                                        Style="{StaticResource SecondaryButtonStyle}" 
-                                        Height="34" 
-                                        Padding="12,0" 
-                                        Click="ImportBackupBtn_Click">
-                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                        <TextBlock Text="📥" Margin="0,0,6,0"/>
-                                        <TextBlock Text="Import / Restore..." FontWeight="SemiBold"/>
-                                    </StackPanel>
-                                </Button>
-                            </Grid>
                         </StackPanel>
-                    </Border>
-                </StackPanel>
-            </ScrollViewer>
 
-            <!-- Bottom Action Buttons -->
-            <Grid Grid.Row="2">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
+                        <!-- CATEGORY 2: Global Application Shortcuts -->
+                        <StackPanel x:Name="CategoryShortcutsPanel" Margin="0,0,0,12" Visibility="Collapsed">
+                            <Border Background="{DynamicResource BgPrimaryBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="16">
+                                <StackPanel>
+                                    <TextBlock Text="Global Application Shortcuts" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                    <TextBlock Text="System-wide hotkeys to bring up TriggerPoint, the quick Command Palette, or the Cheat Sheet HUD" 
+                                               FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0"/>
 
-                <TextBlock Grid.Column="0" x:Name="SettingsStatusText" Text="Ready." FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                    <Border Height="1" Background="{DynamicResource BorderSubtleBrush}" Margin="0,8,0,12" SnapsToDevicePixels="True"/>
 
-                <StackPanel Grid.Column="2" Orientation="Horizontal">
-                    <Button Content="Cancel" 
-                            Style="{StaticResource SecondaryButtonStyle}" 
-                            Padding="14,6" 
-                            Margin="0,0,8,0"
-                            Click="CancelBtn_Click"/>
-                    <Button x:Name="SaveSettingsBtn" 
-                            Content="Save Settings" 
-                            Style="{StaticResource AccentButtonStyle}" 
-                            Padding="16,6"
-                            Click="SaveSettingsBtn_Click"/>
-                </StackPanel>
+                                    <!-- Shortcut Conflict Warning Banner -->
+                                    <Border x:Name="ShortcutConflictWarningBorder"
+                                            Background="{DynamicResource WarningSubtleBrush}"
+                                            BorderBrush="{DynamicResource WarningBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="6"
+                                            Padding="10,8"
+                                            Margin="0,0,0,12"
+                                            Visibility="Collapsed">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="⚠️" FontSize="13" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="ShortcutConflictWarningText"
+                                                       Text="Shortcut conflict detected."
+                                                       FontSize="12"
+                                                       Foreground="{DynamicResource WarningBrush}"
+                                                       FontWeight="SemiBold"
+                                                       VerticalAlignment="Center"
+                                                       TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Open Action Manager -->
+                                    <TextBlock Text="Open Action Manager" FontWeight="SemiBold" FontSize="12.5" Margin="0,0,0,4"/>
+                                    <controls:HotkeyRecorderControl x:Name="OpenSettingsHotkeyRecorder" Margin="0,0,0,12"/>
+
+                                    <!-- Command Palette -->
+                                    <TextBlock Text="Open Command Palette" FontWeight="SemiBold" FontSize="12.5" Margin="0,0,0,4"/>
+                                    <controls:HotkeyRecorderControl x:Name="CommandPaletteHotkeyRecorder" Margin="0,0,0,12"/>
+
+                                    <!-- Shortcut Cheat Sheet HUD -->
+                                    <TextBlock Text="Shortcut Cheat Sheet HUD Overlay" FontWeight="SemiBold" FontSize="12.5" Margin="0,0,0,4"/>
+                                    <controls:HotkeyRecorderControl x:Name="CheatSheetHotkeyRecorder"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- CATEGORY 3: System Integration -->
+                        <StackPanel x:Name="CategorySystemPanel" Margin="0,0,0,12" Visibility="Collapsed">
+                            <Border Background="{DynamicResource BgPrimaryBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="16">
+                                <StackPanel>
+                                    <TextBlock Text="System Integration" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                    <TextBlock Text="Configure Windows startup and background launch behavior" 
+                                               FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+
+                                    <Border Height="1" Background="{DynamicResource BorderSubtleBrush}" Margin="0,8,0,12" SnapsToDevicePixels="True"/>
+
+                                    <CheckBox x:Name="RunAtStartupCheck" 
+                                              Content="Start TriggerPoint when you log in to Windows" 
+                                              FontSize="13" 
+                                              Margin="0,0,0,10"
+                                              ToolTip="Adds TriggerPoint to current user's Windows Startup registry run key"/>
+
+                                    <CheckBox x:Name="StartMinimizedCheck" 
+                                              Content="Start minimized to System Tray" 
+                                              FontSize="13" 
+                                              Margin="0,0,0,10"
+                                              ToolTip="Prevents the settings window from opening on startup"/>
+
+                                    <CheckBox x:Name="HideWindowOnTargetCheck" 
+                                              Content="Hide TriggerPoint window while targeting an application or tab" 
+                                              FontSize="13" 
+                                              Margin="0,0,0,10"
+                                              ToolTip="Temporarily hides this settings window during crosshair targeting so you can easily select windows sitting directly behind it"/>
+
+                                    <CheckBox x:Name="ShowSuccessToastsCheck" 
+                                              Content="Show toast notification on successful action execution" 
+                                              FontSize="13" 
+                                              Margin="0,0,0,10"
+                                              ToolTip="Displays a brief notification confirming action execution"/>
+
+                                    <!-- Toast Notification Monitor Placement -->
+                                    <StackPanel x:Name="ToastPlacementPanel" Margin="24,0,0,12">
+                                        <TextBlock Text="Notification Monitor Position" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                        <TextBlock Text="Select which display to anchor toast notifications on" 
+                                                   FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,1,0,6"/>
+                                        <ComboBox x:Name="ToastPlacementCombo" 
+                                                  Width="380" 
+                                                  HorizontalAlignment="Left"
+                                                  FontSize="12">
+                                            <ComboBoxItem Content="Primary Monitor (Recommended — Windows standard, above taskbar)"/>
+                                            <ComboBoxItem Content="Active Monitor (Follows mouse cursor)"/>
+                                        </ComboBox>
+                                    </StackPanel>
+
+                                    <!-- Window Startup & Open Placement -->
+                                    <StackPanel Margin="0,4,0,14">
+                                        <TextBlock Text="Window Startup &amp; Open Location" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                        <TextBlock Text="Choose where TriggerPoint manager windows appear when launched" 
+                                                   FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,1,0,6"/>
+                                        <ComboBox x:Name="WindowPlacementCombo" 
+                                                  Width="380" 
+                                                  HorizontalAlignment="Left"
+                                                  FontSize="12">
+                                            <ComboBoxItem Content="Remember Last Position (Default — Restores exact coordinates)"/>
+                                            <ComboBoxItem Content="Primary Display (Centered)"/>
+                                            <ComboBoxItem Content="Active Display at Mouse Pointer (Centered)"/>
+                                        </ComboBox>
+                                    </StackPanel>
+
+                                    <CheckBox x:Name="ValidateOnStartupCheck" 
+                                              Content="Validate shortcut file paths on startup" 
+                                              FontSize="13" 
+                                              Margin="0,0,0,10"
+                                              ToolTip="Checks if shortcut target files exist on disk when TriggerPoint starts and notifies you of broken links"/>
+
+                                    <CheckBox x:Name="ConfirmRevertChangesCheck" 
+                                              Content="Confirm before reverting unsaved changes to an item" 
+                                              FontSize="13" 
+                                              Margin="0,0,0,4"
+                                              ToolTip="Shows a confirmation dialog before discarding uncommitted edits to an action or folder"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- CATEGORY 4: Diagnostics & Logging -->
+                        <StackPanel x:Name="CategoryLoggingPanel" Margin="0,0,0,12" Visibility="Collapsed">
+                            <Border Background="{DynamicResource BgPrimaryBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="16">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="Serilog Diagnostics &amp; Logging" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            <TextBlock Text="Dynamic runtime log level and automatic daily rolling file retention" 
+                                                       FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                        <Button Grid.Column="1" 
+                                                Content="📁 Open Logs Folder" 
+                                                Style="{StaticResource SecondaryButtonStyle}" 
+                                                FontSize="11.5" 
+                                                Padding="8,4"
+                                                ToolTip="Open the logs directory in Windows File Explorer"
+                                                Click="OpenLogsFolderBtn_Click"/>
+                                    </Grid>
+
+                                    <Border Height="1" Background="{DynamicResource BorderSubtleBrush}" Margin="0,6,0,12" SnapsToDevicePixels="True"/>
+
+                                    <!-- Log Level ComboBox -->
+                                    <TextBlock Text="Minimum Log Level" FontWeight="SemiBold" FontSize="12.5" Margin="0,0,0,4"/>
+                                    <ComboBox x:Name="LogLevelCombo" 
+                                              Height="34" 
+                                              FontSize="13" 
+                                              ToolTip="Sets the minimum severity required to emit a log event">
+                                        <ComboBoxItem Content="Verbose (Everything, detailed tracing)"/>
+                                        <ComboBoxItem Content="Debug (Diagnostic &amp; internal events)"/>
+                                        <ComboBoxItem Content="Information (Standard application events - Recommended)" IsSelected="True"/>
+                                        <ComboBoxItem Content="Warning (Conflicts and non-fatal warnings)"/>
+                                        <ComboBoxItem Content="Error (Exceptions and execution failures)"/>
+                                        <ComboBoxItem Content="Fatal (Critical daemon errors only)"/>
+                                    </ComboBox>
+
+                                    <!-- Log Retention Days -->
+                                    <Grid Margin="0,12,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Log Retention Period (Days)" FontWeight="SemiBold" FontSize="12.5" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" x:Name="RetentionDaysText" Text="7 days" FontWeight="Bold" FontSize="12.5" Foreground="{DynamicResource AccentBrush}"/>
+                                    </Grid>
+                                    <ComboBox x:Name="RetentionDaysCombo" 
+                                              Height="34" 
+                                              FontSize="13"
+                                              SelectionChanged="RetentionDaysCombo_SelectionChanged"
+                                              ToolTip="Daily rolling log files older than this will be automatically deleted">
+                                        <ComboBoxItem Content="1 Day (Minimal disk usage)"/>
+                                        <ComboBoxItem Content="3 Days"/>
+                                        <ComboBoxItem Content="7 Days (Default)"/>
+                                        <ComboBoxItem Content="14 Days (Two weeks)"/>
+                                        <ComboBoxItem Content="30 Days (One month)"/>
+                                        <ComboBoxItem Content="90 Days (Quarterly)"/>
+                                    </ComboBox>
+
+                                    <!-- Log File Split Threshold -->
+                                    <Grid Margin="0,12,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Log File Split Threshold" FontWeight="SemiBold" FontSize="12.5" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" x:Name="LogSplitThresholdText" Text="100 MB" FontWeight="Bold" FontSize="12.5" Foreground="{DynamicResource AccentBrush}"/>
+                                    </Grid>
+                                    <ComboBox x:Name="LogSplitThresholdCombo" 
+                                              Height="34" 
+                                              FontSize="13"
+                                              SelectionChanged="LogSplitThresholdCombo_SelectionChanged"
+                                              ToolTip="Maximum size a single daily log file can reach before splitting into an indexed file">
+                                        <ComboBoxItem Content="25 MB"/>
+                                        <ComboBoxItem Content="50 MB"/>
+                                        <ComboBoxItem Content="100 MB (Default)"/>
+                                        <ComboBoxItem Content="250 MB"/>
+                                        <ComboBoxItem Content="500 MB"/>
+                                        <ComboBoxItem Content="1000 MB (1 GB)"/>
+                                    </ComboBox>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- CATEGORY 5: Updates & Maintenance -->
+                        <StackPanel x:Name="CategoryUpdatesPanel" Margin="0,0,0,12" Visibility="Collapsed">
+                            <Border Background="{DynamicResource BgPrimaryBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="16">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="Updates &amp; Maintenance" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            <TextBlock Text="Check for newer versions and configure automatic update intervals" 
+                                                       FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                        <Button Grid.Column="1" 
+                                                x:Name="CheckForUpdatesBtn"
+                                                Content="⚡ Check for Updates" 
+                                                Style="{StaticResource AccentButtonStyle}" 
+                                                FontSize="11.5" 
+                                                Padding="10,5"
+                                                Click="CheckForUpdatesBtn_Click"/>
+                                    </Grid>
+
+                                    <Border Height="1" Background="{DynamicResource BorderSubtleBrush}" Margin="0,6,0,12" SnapsToDevicePixels="True"/>
+
+                                    <!-- Update Status Info Card -->
+                                    <Border Background="{DynamicResource BgSecondaryBrush}"
+                                            BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="6"
+                                            Padding="12,10"
+                                            Margin="0,0,0,12">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+
+                                            <!-- Current Version -->
+                                            <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,8,6">
+                                                <TextBlock Text="Current Version" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
+                                                <TextBlock x:Name="CurrentVersionInfoText" Text="v2.0.8" FontSize="12.5" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </StackPanel>
+
+                                            <!-- Latest Version Found -->
+                                            <StackPanel Grid.Row="0" Grid.Column="1" Margin="8,0,0,6">
+                                                <TextBlock Text="Latest Version Found" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
+                                                <TextBlock x:Name="LastVersionFoundText" Text="v2.0.8 (Up to date)" FontSize="12.5" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </StackPanel>
+
+                                            <!-- Last Checked Date/Time -->
+                                            <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,4,0,0">
+                                                <TextBlock Text="Last Checked" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
+                                                <TextBlock x:Name="LastCheckedInfoText" Text="Never checked" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+
+                                    <!-- Inline Check Status / Spinner -->
+                                    <StackPanel x:Name="UpdateCheckingPanel" Orientation="Horizontal" Margin="0,0,0,10" Visibility="Collapsed">
+                                        <TextBlock Text="⏳" FontSize="13" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="UpdateCheckingStatusText" Text="Checking GitHub Releases for updates..." FontSize="12" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+
+                                    <!-- Update Check Frequency -->
+                                    <TextBlock Text="Update Check Frequency" FontWeight="SemiBold" FontSize="12.5" Margin="0,0,0,4"/>
+                                    <ComboBox x:Name="UpdateFrequencyCombo" 
+                                              Height="34" 
+                                              FontSize="13" 
+                                              Margin="0,0,0,10"
+                                              ToolTip="Specifies how often TriggerPoint checks for new releases">
+                                        <ComboBoxItem Content="On Every Startup (Check whenever TriggerPoint opens)"/>
+                                        <ComboBoxItem Content="Daily (Every 24 hours - Recommended)"/>
+                                        <ComboBoxItem Content="Weekly (Every 7 days)"/>
+                                        <ComboBoxItem Content="Monthly (Every 30 days)"/>
+                                        <ComboBoxItem Content="Manual Only (Never check automatically)"/>
+                                    </ComboBox>
+
+                                    <!-- Silent Install Option -->
+                                    <CheckBox x:Name="SilentInstallUpdatesCheck" 
+                                              Content="Automatically restart TriggerPoint when update completes (silent installation)" 
+                                              FontSize="13" 
+                                              Margin="0,0,0,8"
+                                              ToolTip="Applies updates quietly without showing the installer setup wizard pages"/>
+
+                                    <!-- Include Pre-release Builds -->
+                                    <CheckBox x:Name="IncludePreReleasesCheck" 
+                                              Content="Include Pre-Release / Beta versions" 
+                                              FontSize="13" 
+                                              Margin="0,0,0,6"
+                                              ToolTip="Enables notifications for experimental preview releases on GitHub"/>
+
+                                    <!-- Ignored Version Banner -->
+                                    <Border x:Name="IgnoredVersionBorder"
+                                            Background="{DynamicResource BgSecondaryBrush}"
+                                            BorderBrush="{DynamicResource BorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="6"
+                                            Padding="10,8"
+                                            Margin="0,6,0,0"
+                                            Visibility="Collapsed">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                <TextBlock Text="Ignored Version" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
+                                                <TextBlock x:Name="IgnoredVersionText" Text="v..." FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </StackPanel>
+                                            <Button Grid.Column="1" 
+                                                    Content="Reset / Unignore" 
+                                                    Style="{StaticResource SecondaryButtonStyle}" 
+                                                    FontSize="11" 
+                                                    Padding="8,4"
+                                                    Click="ResetIgnoredVersionBtn_Click"/>
+                                        </Grid>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- CATEGORY 6: Backup & Data Management -->
+                        <StackPanel x:Name="CategoryDataPanel" Margin="0,0,0,12" Visibility="Collapsed">
+                            <Border Background="{DynamicResource BgPrimaryBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="16">
+                                <StackPanel>
+                                    <TextBlock Text="Backup &amp; Data Management" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                    <TextBlock Text="Export and import your TriggerPoint actions, folders, and application settings" 
+                                               FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+
+                                    <Border Height="1" Background="{DynamicResource BorderSubtleBrush}" Margin="0,8,0,12" SnapsToDevicePixels="True"/>
+
+                                    <!-- Recycle Bin Retention Settings -->
+                                    <TextBlock Text="Recycle Bin &amp; Retention" FontWeight="SemiBold" FontSize="13" Margin="0,4,0,4" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                    <TextBlock Text="Deleted actions and folders are kept in the Recycle Bin before being permanently removed." 
+                                               FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,10"/>
+
+                                    <CheckBox x:Name="NeverDeleteRecycleCheck" 
+                                              Content="Never automatically delete items (keep indefinitely)" 
+                                              FontSize="13" 
+                                              Margin="0,0,0,8"
+                                              Checked="NeverDeleteRecycleCheck_Changed"
+                                              Unchecked="NeverDeleteRecycleCheck_Changed"/>
+
+                                    <Grid x:Name="RecycleDaysPanel" Margin="0,0,0,12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="Permanent Deletion Period" FontWeight="SemiBold" FontSize="12.5"/>
+                                            <TextBlock Text="Items older than this number of days will be permanently purged on launch" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBox x:Name="RecycleRetentionDaysInput" 
+                                                     Width="70" 
+                                                     Height="32" 
+                                                     FontSize="13" 
+                                                     FontWeight="SemiBold"
+                                                     TextAlignment="Center"
+                                                     VerticalContentAlignment="Center"
+                                                     PreviewTextInput="RecycleRetentionDaysInput_PreviewTextInput"/>
+                                            <TextBlock Text="days" FontSize="12.5" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <!-- Recycle Bin Status & Empty Button -->
+                                    <Border Background="{DynamicResource BgSecondaryBrush}" 
+                                            BorderBrush="{DynamicResource BorderBrush}" 
+                                            BorderThickness="1" 
+                                            CornerRadius="6" 
+                                            Padding="10,8" 
+                                            Margin="0,0,0,14">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock Text="🗑" FontSize="13" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                <TextBlock x:Name="RecycleBinStatusText" 
+                                                           Text="Recycle Bin: 0 items" 
+                                                           FontSize="12" 
+                                                           Foreground="{DynamicResource TextSecondaryBrush}" 
+                                                           VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                            <Button Grid.Column="1"
+                                                    x:Name="EmptyRecycleBinBtn"
+                                                    Content="Empty Bin"
+                                                    Style="{StaticResource SecondaryButtonStyle}"
+                                                    FontSize="11.5"
+                                                    Padding="8,3"
+                                                    Click="EmptyRecycleBinBtn_Click"/>
+                                        </Grid>
+                                    </Border>
+
+                                    <Separator Margin="0,0,0,12" Background="{DynamicResource BorderBrush}"/>
+
+                                    <!-- Live Telemetry Pill -->
+                                    <Border Background="{DynamicResource BgSecondaryBrush}" 
+                                            BorderBrush="{DynamicResource BorderBrush}" 
+                                            BorderThickness="1" 
+                                            CornerRadius="6" 
+                                            Padding="10,8" 
+                                            Margin="0,0,0,12">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="📊" FontSize="13" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="BackupTelemetryText" 
+                                                       Text="Scanning configuration..." 
+                                                       FontSize="12" 
+                                                       Foreground="{DynamicResource TextSecondaryBrush}" 
+                                                       VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Buttons Row -->
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="10"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Export Dropdown Button -->
+                                        <Button x:Name="ExportBackupBtn" 
+                                                Grid.Column="0" 
+                                                Style="{StaticResource SecondaryButtonStyle}" 
+                                                Height="34" 
+                                                Padding="12,0" 
+                                                Click="ExportBackupBtn_Click">
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                                <TextBlock Text="📤" Margin="0,0,6,0"/>
+                                                <TextBlock Text="Export Backup ▾" FontWeight="SemiBold"/>
+                                            </StackPanel>
+                                            <Button.ContextMenu>
+                                                <ContextMenu x:Name="ExportBackupContextMenu">
+                                                    <MenuItem x:Name="ExportFullBackupMenuItem" Click="ExportFullBackupMenuItem_Click">
+                                                        <MenuItem.Icon>
+                                                            <TextBlock Text="📦" FontSize="13"/>
+                                                        </MenuItem.Icon>
+                                                    </MenuItem>
+                                                    <MenuItem x:Name="ExportTreeItemsMenuItem" Click="ExportTreeItemsMenuItem_Click">
+                                                        <MenuItem.Icon>
+                                                            <TextBlock Text="⚡" FontSize="13"/>
+                                                        </MenuItem.Icon>
+                                                    </MenuItem>
+                                                    <Separator/>
+                                                    <MenuItem x:Name="ExportSettingsMenuItem" Header="Application Settings Only" Click="ExportSettingsMenuItem_Click">
+                                                        <MenuItem.Icon>
+                                                            <TextBlock Text="⚙" FontSize="13"/>
+                                                        </MenuItem.Icon>
+                                                    </MenuItem>
+                                                </ContextMenu>
+                                            </Button.ContextMenu>
+                                        </Button>
+
+                                        <!-- Import Button -->
+                                        <Button x:Name="ImportBackupBtn" 
+                                                Grid.Column="2" 
+                                                Style="{StaticResource SecondaryButtonStyle}" 
+                                                Height="34" 
+                                                Padding="12,0" 
+                                                Click="ImportBackupBtn_Click">
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                                <TextBlock Text="📥" Margin="0,0,6,0"/>
+                                                <TextBlock Text="Import / Restore..." FontWeight="SemiBold"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- No Search Results Found Panel -->
+                        <Border x:Name="NoSearchResultsPanel"
+                                Background="{DynamicResource BgPrimaryBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="28,24"
+                                Visibility="Collapsed"
+                                HorizontalAlignment="Stretch">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock Text="🔍" FontSize="36" HorizontalAlignment="Center" Margin="0,0,0,10" Opacity="0.6"/>
+                                <TextBlock x:Name="NoSearchQueryText" Text="No settings match your search" FontWeight="Bold" FontSize="15" HorizontalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                <TextBlock Text="Try searching for keywords like 'theme', 'hotkey', 'startup', 'log', 'update', or 'backup'."
+                                           FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" Margin="0,6,0,14" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="360"/>
+                                <Button Content="Clear Search" Style="{StaticResource SecondaryButtonStyle}" HorizontalAlignment="Center" Padding="14,5" Click="ClearSearchBtn_Click"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
             </Grid>
         </Grid>
+
+        <!-- Bottom Action Buttons -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Grid.Column="0" x:Name="SettingsStatusText" Text="Ready." FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+
+            <StackPanel Grid.Column="2" Orientation="Horizontal">
+                <Button Content="Cancel" 
+                        Style="{StaticResource SecondaryButtonStyle}" 
+                        Padding="14,6" 
+                        Margin="0,0,8,0"
+                        Click="CancelBtn_Click"/>
+                <Button x:Name="SaveSettingsBtn" 
+                        Content="Save Settings" 
+                        Style="{StaticResource AccentButtonStyle}" 
+                        Padding="16,6"
+                        Click="SaveSettingsBtn_Click"/>
+            </StackPanel>
+        </Grid>
+    </Grid>
 </Window>

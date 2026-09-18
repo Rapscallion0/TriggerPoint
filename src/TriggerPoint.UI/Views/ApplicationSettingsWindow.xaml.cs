@@ -24,18 +24,36 @@ public partial class ApplicationSettingsWindow : Window
 
     private readonly IConfigRepository _repository;
     private readonly ILogManagerService _logManagerService;
+    private readonly IUpdateService _updateService;
     private AppSettings _currentSettings = new();
     private List<TriggerItem> _allItems = [];
 
+    internal enum SettingsCategory
+    {
+        Appearance,
+        Shortcuts,
+        System,
+        Logging,
+        Updates,
+        Data
+    }
+
+    private SettingsCategory _selectedCategory = SettingsCategory.Appearance;
+
     public bool TreeDataChanged { get; private set; }
 
-    public ApplicationSettingsWindow(IConfigRepository repository, ILogManagerService logManagerService)
+    public ApplicationSettingsWindow(IConfigRepository repository, ILogManagerService logManagerService, IUpdateService? updateService = null)
     {
         InitializeComponent();
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _logManagerService = logManagerService ?? throw new ArgumentNullException(nameof(logManagerService));
+        _updateService = updateService ?? new GitHubUpdateService(repository);
 
-        Loaded += async (s, e) => await LoadCurrentSettingsAsync();
+        Loaded += async (s, e) =>
+        {
+            SelectCategory(SettingsCategory.Appearance);
+            await LoadCurrentSettingsAsync();
+        };
 
         ThemeManager.ThemeChanged += (s, theme) =>
         {
@@ -53,8 +71,8 @@ public partial class ApplicationSettingsWindow : Window
     private void CenterOnOwnerOrActiveMonitor()
     {
         double dpiScale = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
-        double winWidth = Width > 0 ? Width : 600;
-        double winHeight = Height > 0 ? Height : 650;
+        double winWidth = Width > 0 ? Width : 780;
+        double winHeight = Height > 0 ? Height : 620;
 
         // 1. If Owner is set and visible, center over Owner
         if (Owner != null && Owner.IsVisible)
@@ -177,7 +195,7 @@ public partial class ApplicationSettingsWindow : Window
             };
             LogSplitThresholdText.Text = $"{_currentSettings.LogSplitThresholdMb} MB";
 
-            // Populate Theme
+            // Populate Theme & Visuals
             ThemeCombo.SelectedIndex = _currentSettings.Theme switch
             {
                 ThemePreference.System => 0,
@@ -185,6 +203,8 @@ public partial class ApplicationSettingsWindow : Window
                 ThemePreference.Light => 2,
                 _ => 0
             };
+            EnableBackdropEffectsCheck.IsChecked = _currentSettings.EnableBackdropEffects;
+            EnableUiAnimationsCheck.IsChecked = _currentSettings.EnableUiAnimations;
 
             // Populate Startup & Minimized
             RunAtStartupCheck.IsChecked = IsRunAtStartupConfigured() || _currentSettings.RunAtStartup;
@@ -210,8 +230,10 @@ public partial class ApplicationSettingsWindow : Window
             // Populate Global Shortcuts
             OpenSettingsHotkeyRecorder.Binding = _currentSettings.OpenSettingsHotkey;
             CommandPaletteHotkeyRecorder.Binding = _currentSettings.CommandPaletteHotkey;
+            CheatSheetHotkeyRecorder.Binding = _currentSettings.CheatSheetHotkey;
             OpenSettingsHotkeyRecorder.BindingRecorded += (s, b) => CheckHotkeyConflicts();
             CommandPaletteHotkeyRecorder.BindingRecorded += (s, b) => CheckHotkeyConflicts();
+            CheatSheetHotkeyRecorder.BindingRecorded += (s, b) => CheckHotkeyConflicts();
             CheckHotkeyConflicts();
 
             // Populate Recycle Bin retention
@@ -222,6 +244,9 @@ public partial class ApplicationSettingsWindow : Window
             await RefreshRecycleBinStatusAsync();
 
             UpdateBackupCardUI();
+
+            // Populate Update Settings
+            PopulateUpdateSettingsUI();
 
             SettingsStatusText.Text = "Settings loaded.";
         }
@@ -236,16 +261,19 @@ public partial class ApplicationSettingsWindow : Window
     {
         var openHotkey = OpenSettingsHotkeyRecorder.Binding;
         var cmdHotkey = CommandPaletteHotkeyRecorder.Binding;
+        var cheatSheetHotkey = CheatSheetHotkeyRecorder.Binding;
 
-        var validation = HotkeyRegistryValidator.ValidateApplicationHotkeys(openHotkey, cmdHotkey, _allItems);
+        var validation = HotkeyRegistryValidator.ValidateApplicationHotkeys(openHotkey, cmdHotkey, _allItems, cheatSheetHotkey);
         if (!validation.IsValid)
         {
             ShortcutConflictWarningText.Text = validation.ErrorMessage;
             ShortcutConflictWarningBorder.Visibility = Visibility.Visible;
+            ShortcutNavBadge.Visibility = Visibility.Visible;
         }
         else
         {
             ShortcutConflictWarningBorder.Visibility = Visibility.Collapsed;
+            ShortcutNavBadge.Visibility = Visibility.Collapsed;
         }
     }
 
@@ -362,8 +390,9 @@ public partial class ApplicationSettingsWindow : Window
         {
             var openSettingsHotkey = OpenSettingsHotkeyRecorder.Binding;
             var cmdPaletteHotkey = CommandPaletteHotkeyRecorder.Binding;
+            var cheatSheetHotkey = CheatSheetHotkeyRecorder.Binding;
 
-            var validation = HotkeyRegistryValidator.ValidateApplicationHotkeys(openSettingsHotkey, cmdPaletteHotkey, _allItems);
+            var validation = HotkeyRegistryValidator.ValidateApplicationHotkeys(openSettingsHotkey, cmdPaletteHotkey, _allItems, cheatSheetHotkey);
             if (!validation.IsValid)
             {
                 CheckHotkeyConflicts();
@@ -428,7 +457,23 @@ public partial class ApplicationSettingsWindow : Window
             _currentSettings.ConfirmRevertChanges = ConfirmRevertChangesCheck.IsChecked == true;
             _currentSettings.OpenSettingsHotkey = openSettingsHotkey;
             _currentSettings.CommandPaletteHotkey = cmdPaletteHotkey;
+            _currentSettings.CheatSheetHotkey = cheatSheetHotkey;
+            _currentSettings.EnableBackdropEffects = EnableBackdropEffectsCheck.IsChecked == true;
+            _currentSettings.EnableUiAnimations = EnableUiAnimationsCheck.IsChecked == true;
             _currentSettings.RecycleBinRetentionDays = recycleDays;
+
+            // Update settings
+            _currentSettings.UpdateFrequency = UpdateFrequencyCombo.SelectedIndex switch
+            {
+                0 => UpdateCheckFrequency.OnStartup,
+                1 => UpdateCheckFrequency.Daily,
+                2 => UpdateCheckFrequency.Weekly,
+                3 => UpdateCheckFrequency.Monthly,
+                4 => UpdateCheckFrequency.ManualOnly,
+                _ => UpdateCheckFrequency.Daily
+            };
+            _currentSettings.SilentInstallUpdates = SilentInstallUpdatesCheck.IsChecked == true;
+            _currentSettings.IncludePreReleases = IncludePreReleasesCheck.IsChecked == true;
 
             // 1. Persist to appsettings.json
             await _repository.SaveSettingsAsync(_currentSettings);
@@ -675,8 +720,23 @@ public partial class ApplicationSettingsWindow : Window
 
     private void Window_KeyDown(object sender, KeyEventArgs e)
     {
+        if ((Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Control) == System.Windows.Input.ModifierKeys.Control && e.Key == Key.F)
+        {
+            SearchSettingsBox.Focus();
+            SearchSettingsBox.SelectAll();
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == Key.Escape)
         {
+            if (!string.IsNullOrWhiteSpace(SearchSettingsBox.Text))
+            {
+                SearchSettingsBox.Text = string.Empty;
+                e.Handled = true;
+                return;
+            }
+
             DialogResult = false;
             Close();
             e.Handled = true;
@@ -723,4 +783,354 @@ public partial class ApplicationSettingsWindow : Window
             Logger.Warning(ex, "Failed to update Windows startup registry key.");
         }
     }
+
+    private void PopulateUpdateSettingsUI()
+    {
+        var currentVer = _updateService.GetCurrentVersion();
+        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+        string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        string progFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+        bool isSystem = (!string.IsNullOrEmpty(progFiles) && baseDir.StartsWith(progFiles, StringComparison.OrdinalIgnoreCase)) ||
+                        (!string.IsNullOrEmpty(progFilesX86) && baseDir.StartsWith(progFilesX86, StringComparison.OrdinalIgnoreCase));
+        string scope = isSystem ? "System" : "User";
+
+        CurrentVersionInfoText.Text = $"v{currentVer} ({scope}-wide)";
+
+        // Last Checked Text
+        if (_currentSettings.LastUpdateCheckUtc.HasValue)
+        {
+            var localTime = _currentSettings.LastUpdateCheckUtc.Value.ToLocalTime();
+            var dateStr = localTime.Date == DateTime.Today
+                ? $"Today at {localTime:h:mm tt}"
+                : (localTime.Date == DateTime.Today.AddDays(-1)
+                    ? $"Yesterday at {localTime:h:mm tt}"
+                    : localTime.ToString("MMM dd, yyyy h:mm tt"));
+            LastCheckedInfoText.Text = dateStr;
+        }
+        else
+        {
+            LastCheckedInfoText.Text = "Never checked";
+        }
+
+        // Latest Version Found Text
+        if (!string.IsNullOrWhiteSpace(_currentSettings.LastVersionFound))
+        {
+            int cmp = GitHubUpdateService.CompareVersions(_currentSettings.LastVersionFound, currentVer);
+            if (cmp > 0)
+            {
+                LastVersionFoundText.Text = $"v{_currentSettings.LastVersionFound} (Update available)";
+                LastVersionFoundText.Foreground = (System.Windows.Media.Brush)FindResource("AccentBrush");
+                UpdateNavBadge.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                LastVersionFoundText.Text = $"v{_currentSettings.LastVersionFound} (Up to date)";
+                LastVersionFoundText.Foreground = (System.Windows.Media.Brush)FindResource("TextSecondaryBrush");
+                UpdateNavBadge.Visibility = Visibility.Collapsed;
+            }
+        }
+        else
+        {
+            LastVersionFoundText.Text = "None recorded yet";
+            LastVersionFoundText.Foreground = (System.Windows.Media.Brush)FindResource("TextMutedBrush");
+            UpdateNavBadge.Visibility = Visibility.Collapsed;
+        }
+
+        // Update Frequency
+        UpdateFrequencyCombo.SelectedIndex = _currentSettings.UpdateFrequency switch
+        {
+            UpdateCheckFrequency.OnStartup => 0,
+            UpdateCheckFrequency.Daily => 1,
+            UpdateCheckFrequency.Weekly => 2,
+            UpdateCheckFrequency.Monthly => 3,
+            UpdateCheckFrequency.ManualOnly => 4,
+            _ => 1
+        };
+
+        SilentInstallUpdatesCheck.IsChecked = _currentSettings.SilentInstallUpdates;
+        IncludePreReleasesCheck.IsChecked = _currentSettings.IncludePreReleases;
+
+        // Ignored version banner
+        RefreshIgnoredVersionUI();
+    }
+
+    private void RefreshIgnoredVersionUI()
+    {
+        if (!string.IsNullOrWhiteSpace(_currentSettings.IgnoredUpdateVersion))
+        {
+            IgnoredVersionBorder.Visibility = Visibility.Visible;
+            IgnoredVersionText.Text = $"v{_currentSettings.IgnoredUpdateVersion}";
+        }
+        else
+        {
+            IgnoredVersionBorder.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private async void CheckForUpdatesBtn_Click(object sender, RoutedEventArgs e)
+    {
+        CheckForUpdatesBtn.IsEnabled = false;
+        UpdateCheckingPanel.Visibility = Visibility.Visible;
+        UpdateCheckingStatusText.Text = "Checking GitHub Releases for updates...";
+        SettingsStatusText.Text = "Checking for updates...";
+
+        try
+        {
+            var result = await _updateService.CheckForUpdatesAsync(isManualCheck: true);
+
+            // Reload settings so last checked / version found are fresh
+            _currentSettings = await _repository.LoadSettingsAsync();
+            PopulateUpdateSettingsUI();
+
+            UpdateCheckingPanel.Visibility = Visibility.Collapsed;
+            CheckForUpdatesBtn.IsEnabled = true;
+
+            if (result.IsUpdateAvailable)
+            {
+                SettingsStatusText.Text = $"Update v{result.LatestUpdate?.Version} available!";
+                var updateDlg = new UpdateAvailableDialog(result, _updateService, _repository)
+                {
+                    Owner = this
+                };
+                updateDlg.ShowDialog();
+
+                // Refresh settings after dialog closes (user may have chosen to ignore or update)
+                _currentSettings = await _repository.LoadSettingsAsync();
+                PopulateUpdateSettingsUI();
+            }
+            else if (result.IsSuccess)
+            {
+                SettingsStatusText.Text = "TriggerPoint is up to date.";
+                ModernMessageDialog.ShowAlert(
+                    this,
+                    "TriggerPoint is Up to Date",
+                    $"You are running TriggerPoint v{_updateService.GetCurrentVersion()}.\nNo newer releases were found on GitHub.",
+                    ModernDialogType.Info);
+            }
+            else
+            {
+                SettingsStatusText.Text = "Update check failed.";
+                ModernMessageDialog.ShowAlert(
+                    this,
+                    "Update Check Failed",
+                    result.ErrorMessage ?? "Could not retrieve releases from GitHub. Check your internet connection.",
+                    ModernDialogType.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "Unexpected error during manual update check.");
+            UpdateCheckingPanel.Visibility = Visibility.Collapsed;
+            CheckForUpdatesBtn.IsEnabled = true;
+            SettingsStatusText.Text = "Update check failed.";
+            ModernMessageDialog.ShowAlert(this, "Error", $"An unexpected error occurred: {ex.Message}", ModernDialogType.Error);
+        }
+    }
+
+    private async void ResetIgnoredVersionBtn_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _currentSettings.IgnoredUpdateVersion = null;
+            await _repository.SaveSettingsAsync(_currentSettings);
+            RefreshIgnoredVersionUI();
+            SettingsStatusText.Text = "Ignored version reset.";
+        }
+        catch (Exception ex)
+        {
+            Logger.Warning(ex, "Failed to clear ignored update version.");
+        }
+    }
+
+    #region Category Navigation & Search Engine
+
+    private void NavCategory_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn)
+        {
+            SettingsCategory category = btn.Name switch
+            {
+                nameof(NavAppearanceBtn) => SettingsCategory.Appearance,
+                nameof(NavShortcutsBtn) => SettingsCategory.Shortcuts,
+                nameof(NavSystemBtn) => SettingsCategory.System,
+                nameof(NavLoggingBtn) => SettingsCategory.Logging,
+                nameof(NavUpdatesBtn) => SettingsCategory.Updates,
+                nameof(NavDataBtn) => SettingsCategory.Data,
+                _ => SettingsCategory.Appearance
+            };
+
+            if (!string.IsNullOrEmpty(SearchSettingsBox.Text))
+            {
+                SearchSettingsBox.Text = string.Empty;
+            }
+
+            SelectCategory(category);
+        }
+    }
+
+    private void SelectCategory(SettingsCategory category)
+    {
+        _selectedCategory = category;
+
+        // Update sidebar nav tags for accent styling
+        NavAppearanceBtn.Tag = category == SettingsCategory.Appearance ? "Selected" : null;
+        NavShortcutsBtn.Tag = category == SettingsCategory.Shortcuts ? "Selected" : null;
+        NavSystemBtn.Tag = category == SettingsCategory.System ? "Selected" : null;
+        NavLoggingBtn.Tag = category == SettingsCategory.Logging ? "Selected" : null;
+        NavUpdatesBtn.Tag = category == SettingsCategory.Updates ? "Selected" : null;
+        NavDataBtn.Tag = category == SettingsCategory.Data ? "Selected" : null;
+
+        // Toggle category panels
+        CategoryAppearancePanel.Visibility = category == SettingsCategory.Appearance ? Visibility.Visible : Visibility.Collapsed;
+        CategoryShortcutsPanel.Visibility = category == SettingsCategory.Shortcuts ? Visibility.Visible : Visibility.Collapsed;
+        CategorySystemPanel.Visibility = category == SettingsCategory.System ? Visibility.Visible : Visibility.Collapsed;
+        CategoryLoggingPanel.Visibility = category == SettingsCategory.Logging ? Visibility.Visible : Visibility.Collapsed;
+        CategoryUpdatesPanel.Visibility = category == SettingsCategory.Updates ? Visibility.Visible : Visibility.Collapsed;
+        CategoryDataPanel.Visibility = category == SettingsCategory.Data ? Visibility.Visible : Visibility.Collapsed;
+
+        NoSearchResultsPanel.Visibility = Visibility.Collapsed;
+
+        // Update breadcrumb and contextual subtitle
+        switch (category)
+        {
+            case SettingsCategory.Appearance:
+                CategoryBreadcrumbText.Text = "Settings > Appearance & Theme";
+                CategorySubtitleText.Text = "Configure visual preferences, translucent materials, and interface micro-animations";
+                break;
+            case SettingsCategory.Shortcuts:
+                CategoryBreadcrumbText.Text = "Settings > Shortcuts & Hotkeys";
+                CategorySubtitleText.Text = "System-wide hotkeys to bring up TriggerPoint, the quick Command Palette, or the Cheat Sheet HUD";
+                break;
+            case SettingsCategory.System:
+                CategoryBreadcrumbText.Text = "Settings > System Integration";
+                CategorySubtitleText.Text = "Configure Windows startup, background launch behavior, and notification anchors";
+                break;
+            case SettingsCategory.Logging:
+                CategoryBreadcrumbText.Text = "Settings > Diagnostics & Logging";
+                CategorySubtitleText.Text = "Dynamic runtime log level and automatic daily rolling file retention";
+                break;
+            case SettingsCategory.Updates:
+                CategoryBreadcrumbText.Text = "Settings > Updates & Maintenance";
+                CategorySubtitleText.Text = "Check for newer versions and configure automatic update intervals";
+                break;
+            case SettingsCategory.Data:
+                CategoryBreadcrumbText.Text = "Settings > Backup & Data Management";
+                CategorySubtitleText.Text = "Export and import your TriggerPoint actions, folders, and application settings";
+                break;
+        }
+    }
+
+    private void SearchSettingsBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        string query = SearchSettingsBox.Text?.Trim() ?? string.Empty;
+        SearchPlaceholderText.Visibility = string.IsNullOrEmpty(query) ? Visibility.Visible : Visibility.Collapsed;
+        ClearSearchBtn.Visibility = string.IsNullOrEmpty(query) ? Visibility.Collapsed : Visibility.Visible;
+
+        if (string.IsNullOrEmpty(query))
+        {
+            SelectCategory(_selectedCategory);
+        }
+        else
+        {
+            FilterSettings(query);
+        }
+    }
+
+    private void ClearSearchBtn_Click(object sender, RoutedEventArgs e)
+    {
+        SearchSettingsBox.Text = string.Empty;
+        SearchSettingsBox.Focus();
+    }
+
+    private void SearchSettingsBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape)
+        {
+            SearchSettingsBox.Text = string.Empty;
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Down)
+        {
+            NavAppearanceBtn.Focus();
+            e.Handled = true;
+        }
+    }
+
+    internal static readonly Dictionary<SettingsCategory, string[]> CategoryKeywords = new()
+    {
+        [SettingsCategory.Appearance] = ["appearance", "theme", "dark", "light", "system default", "mica", "acrylic", "material", "transparency", "translucent", "animation", "animations", "micro-transitions", "visual", "look"],
+        [SettingsCategory.Shortcuts] = ["shortcut", "shortcuts", "hotkey", "hotkeys", "global", "action manager", "command palette", "cheat sheet", "hud", "overlay", "conflict", "key", "recorder"],
+        [SettingsCategory.System] = ["system", "startup", "login", "windows", "minimized", "tray", "system tray", "hide window", "crosshair", "targeting", "toast", "toasts", "notification", "notifications", "monitor", "display", "active monitor", "primary monitor", "screen", "location", "placement", "validate", "path", "revert", "confirm", "unsaved"],
+        [SettingsCategory.Logging] = ["serilog", "log", "logs", "logging", "diagnostics", "minimum log level", "retention", "days", "split", "threshold", "mb", "folder", "open logs", "verbose", "debug", "information", "warning", "error", "fatal"],
+        [SettingsCategory.Updates] = ["update", "updates", "maintenance", "check for updates", "version", "latest", "frequency", "startup", "daily", "weekly", "monthly", "manual", "silent install", "restart", "pre-release", "beta", "preview", "ignored", "ignore", "release"],
+        [SettingsCategory.Data] = ["backup", "data", "management", "recycle", "recycle bin", "retention", "purge", "empty", "delete", "telemetry", "export", "import", "restore", "json", "actions", "folders"]
+    };
+
+    internal static bool MatchesCategory(SettingsCategory cat, string query)
+    {
+        if (string.IsNullOrWhiteSpace(query)) return true;
+        string lowerQuery = query.Trim().ToLowerInvariant();
+        if (CategoryKeywords.TryGetValue(cat, out var words))
+        {
+            foreach (var word in words)
+            {
+                if (word.Contains(lowerQuery, StringComparison.OrdinalIgnoreCase) ||
+                    lowerQuery.Contains(word, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private void FilterSettings(string query)
+    {
+        // Clear selection tag on sidebar buttons while search is active
+        NavAppearanceBtn.Tag = null;
+        NavShortcutsBtn.Tag = null;
+        NavSystemBtn.Tag = null;
+        NavLoggingBtn.Tag = null;
+        NavUpdatesBtn.Tag = null;
+        NavDataBtn.Tag = null;
+
+        int matchCount = 0;
+
+        bool matchApp = MatchesCategory(SettingsCategory.Appearance, query);
+        bool matchShort = MatchesCategory(SettingsCategory.Shortcuts, query);
+        bool matchSys = MatchesCategory(SettingsCategory.System, query);
+        bool matchLog = MatchesCategory(SettingsCategory.Logging, query);
+        bool matchUpd = MatchesCategory(SettingsCategory.Updates, query);
+        bool matchData = MatchesCategory(SettingsCategory.Data, query);
+
+        CategoryAppearancePanel.Visibility = matchApp ? Visibility.Visible : Visibility.Collapsed;
+        CategoryShortcutsPanel.Visibility = matchShort ? Visibility.Visible : Visibility.Collapsed;
+        CategorySystemPanel.Visibility = matchSys ? Visibility.Visible : Visibility.Collapsed;
+        CategoryLoggingPanel.Visibility = matchLog ? Visibility.Visible : Visibility.Collapsed;
+        CategoryUpdatesPanel.Visibility = matchUpd ? Visibility.Visible : Visibility.Collapsed;
+        CategoryDataPanel.Visibility = matchData ? Visibility.Visible : Visibility.Collapsed;
+
+        if (matchApp) matchCount++;
+        if (matchShort) matchCount++;
+        if (matchSys) matchCount++;
+        if (matchLog) matchCount++;
+        if (matchUpd) matchCount++;
+        if (matchData) matchCount++;
+
+        if (matchCount == 0)
+        {
+            NoSearchResultsPanel.Visibility = Visibility.Visible;
+            NoSearchQueryText.Text = $"No settings match \"{query}\"";
+            CategoryBreadcrumbText.Text = "Search Results (0 matches)";
+            CategorySubtitleText.Text = "Try a different keyword or clear the search filter";
+        }
+        else
+        {
+            NoSearchResultsPanel.Visibility = Visibility.Collapsed;
+            CategoryBreadcrumbText.Text = $"Search Results for \"{query}\" ({matchCount} {(matchCount == 1 ? "category" : "categories")})";
+            CategorySubtitleText.Text = "Showing matching settings categories below";
+        }
+    }
+
+    #endregion
 }

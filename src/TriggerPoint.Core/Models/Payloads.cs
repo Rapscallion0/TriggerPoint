@@ -14,7 +14,9 @@ public sealed class ActionPayload
     public bool OpenInNewWindow { get; set; } = false;
 
     // Snippet execution properties
+    public SnippetContentType SnippetContentType { get; set; } = SnippetContentType.PlainText;
     public string SnippetTemplate { get; set; } = string.Empty;
+    public string SnippetRtf { get; set; } = string.Empty;
 
     // Workflow execution properties
     public WorkflowMode WorkflowMode { get; set; } = WorkflowMode.Visual;
@@ -24,6 +26,27 @@ public sealed class ActionPayload
 
     // Macro execution properties
     public MacroPayload Macro { get; set; } = new();
+
+    public ActionPayload Clone()
+    {
+        return new ActionPayload
+        {
+            Command = Command,
+            Arguments = Arguments,
+            WorkingDirectory = WorkingDirectory,
+            RunAsAdmin = RunAsAdmin,
+            TargetDisplay = TargetDisplay,
+            OpenInNewWindow = OpenInNewWindow,
+            SnippetContentType = SnippetContentType,
+            SnippetTemplate = SnippetTemplate,
+            SnippetRtf = SnippetRtf,
+            WorkflowMode = WorkflowMode,
+            WorkflowSteps = WorkflowSteps?.ConvertAll(s => s.Clone()) ?? [],
+            WorkflowVariables = WorkflowVariables?.ConvertAll(v => v.Clone()) ?? [],
+            ScriptSource = ScriptSource,
+            Macro = Macro?.Clone() ?? new MacroPayload()
+        };
+    }
 }
 
 public sealed class WorkflowVariableDefinition
@@ -32,6 +55,7 @@ public sealed class WorkflowVariableDefinition
     public string Name { get; set; } = string.Empty;
     public string Value { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
+    public bool IsSecret { get; set; } = false;
 
     public WorkflowVariableDefinition Clone()
     {
@@ -40,7 +64,8 @@ public sealed class WorkflowVariableDefinition
             Id = Guid.NewGuid(),
             Name = Name,
             Value = Value,
-            Description = Description
+            Description = Description,
+            IsSecret = IsSecret
         };
     }
 }
@@ -115,7 +140,9 @@ public sealed class WorkflowStep
     public bool OpenInExplorer { get; set; } = false;
 
     // InjectSnippet properties
+    public SnippetContentType SnippetContentType { get; set; } = SnippetContentType.PlainText;
     public string SnippetTemplate { get; set; } = string.Empty;
+    public string SnippetRtf { get; set; } = string.Empty;
 
     // Delay properties
     public int DelayMs { get; set; } = 500;
@@ -183,7 +210,9 @@ public sealed class WorkflowStep
             DirectoryPath = DirectoryPath,
             DirectoryMissingPolicy = DirectoryMissingPolicy,
             OpenInExplorer = OpenInExplorer,
+            SnippetContentType = SnippetContentType,
             SnippetTemplate = SnippetTemplate,
+            SnippetRtf = SnippetRtf,
             DelayMs = DelayMs,
             InlineScript = InlineScript,
             TargetItemId = TargetItemId,

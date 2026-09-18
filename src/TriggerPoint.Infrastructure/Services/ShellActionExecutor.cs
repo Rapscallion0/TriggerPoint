@@ -87,8 +87,12 @@ public class ShellActionExecutor : IActionExecutor
                     effectiveHwnd = _contextFilterService.GetForegroundWindowHandle();
                 }
 
-                _logger.Information("Executing snippet '{Name}' for target window handle {Hwnd}", item.Name, effectiveHwnd);
-                await _snippetService.InjectSnippetAsync(item.Payload.SnippetTemplate, effectiveHwnd).ConfigureAwait(false);
+                _logger.Information("Executing snippet '{Name}' (Type: {Type}) for target window handle {Hwnd}", item.Name, item.Payload.SnippetContentType, effectiveHwnd);
+                await _snippetService.InjectSnippetAsync(
+                    item.Payload.SnippetTemplate, 
+                    effectiveHwnd, 
+                    item.Payload.SnippetContentType, 
+                    item.Payload.SnippetRtf).ConfigureAwait(false);
                 ExecutionSucceeded?.Invoke(item, "Snippet injected into active window.");
             }
             catch (Exception ex)
@@ -207,11 +211,19 @@ public class ShellActionExecutor : IActionExecutor
             }
         }
 
+        var expandedCommand = Environment.ExpandEnvironmentVariables(command);
+        if (!Core.Services.ProtocolValidator.IsSafeUrl(expandedCommand, out var rejectReason))
+        {
+            _logger.Warning("Blocked unsafe shell command/URL '{Command}': {Reason}", expandedCommand, rejectReason);
+            ExecutionFailed?.Invoke(item, rejectReason ?? "Execution blocked by security policy.");
+            return;
+        }
+
         try
         {
             var psi = new ProcessStartInfo
             {
-                FileName = Environment.ExpandEnvironmentVariables(command),
+                FileName = expandedCommand,
                 UseShellExecute = true
             };
 

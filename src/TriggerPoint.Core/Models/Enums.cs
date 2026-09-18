@@ -148,3 +148,9 @@ public enum CommandPaletteFilterType
     Folder = 4,
     Macro = 5
 }
+
+public enum SnippetContentType
+{
+    PlainText = 0,
+    RichText = 1
+}

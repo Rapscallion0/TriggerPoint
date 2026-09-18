@@ -8,6 +8,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -370,6 +371,8 @@ public partial class SettingsWindow : Window
     private Guid? _newUnsavedItemId;
     private bool _isRevertingTreeSelection;
     private bool _isRebuildingTree;
+    private SnippetContentType _currentSnippetContentType = SnippetContentType.PlainText;
+    private bool _isUpdatingRichText;
     private readonly DispatcherTimer _snippetPreviewDebounceTimer;
     private readonly DispatcherTimer _folderExpansionSaveTimer;
     private readonly DispatcherTimer _appSettingsSaveTimer;
@@ -407,6 +410,8 @@ public partial class SettingsWindow : Window
     private readonly IBrowserDetectionService? _browserDetectionService;
     private readonly IMacroService _macroService;
     private readonly IWorkflowTemplateService _workflowTemplateService;
+    private readonly IUpdateService? _updateService;
+    private UpdateCheckResult? _latestAvailableUpdate;
 
     public bool IsExiting { get; set; }
 
@@ -419,7 +424,8 @@ public partial class SettingsWindow : Window
         IWorkflowExecutor? workflowExecutor = null,
         IBrowserDetectionService? browserDetectionService = null,
         IMacroService? macroService = null,
-        IWorkflowTemplateService? workflowTemplateService = null)
+        IWorkflowTemplateService? workflowTemplateService = null,
+        IUpdateService? updateService = null)
     {
         InitializeComponent();
         _repository = repository;
@@ -432,6 +438,7 @@ public partial class SettingsWindow : Window
         _browserDetectionService = browserDetectionService;
         _macroService = macroService ?? new TriggerPoint.Infrastructure.Services.Win32MacroService();
         _workflowTemplateService = workflowTemplateService ?? new TriggerPoint.Infrastructure.Services.WorkflowTemplateService();
+        _updateService = updateService;
 
         MacroEditor?.Initialize(_macroService);
         if (MacroEditor != null)
@@ -488,7 +495,11 @@ public partial class SettingsWindow : Window
         };
         ShellArgsBox.TextChanged += (s, e) => OnFormEdited();
         ShellWorkDirBox.TextChanged += (s, e) => OnFormEdited();
-        ShellRunAsAdminCheck.Click += (s, e) => OnFormEdited();
+        ShellRunAsAdminCheck.Click += (s, e) =>
+        {
+            UpdateEditorAdminBadge(ShellRunAsAdminCheck.IsChecked == true);
+            OnFormEdited();
+        };
         if (WorkflowScriptEditor != null)
         {
             WorkflowScriptEditor.TextChanged += WorkflowScriptEditor_TextChanged;
@@ -909,7 +920,9 @@ public partial class SettingsWindow : Window
         target.Payload.RunAsAdmin = snapshot.Payload.RunAsAdmin;
         target.Payload.TargetDisplay = snapshot.Payload.TargetDisplay;
         target.Payload.OpenInNewWindow = snapshot.Payload.OpenInNewWindow;
+        target.Payload.SnippetContentType = snapshot.Payload.SnippetContentType;
         target.Payload.SnippetTemplate = snapshot.Payload.SnippetTemplate;
+        target.Payload.SnippetRtf = snapshot.Payload.SnippetRtf;
         target.Payload.WorkflowMode = snapshot.Payload.WorkflowMode;
         target.Payload.ScriptSource = snapshot.Payload.ScriptSource;
         target.Payload.WorkflowSteps = snapshot.Payload.WorkflowSteps.Select(s => s.Clone()).ToList();
@@ -1237,6 +1250,7 @@ public partial class SettingsWindow : Window
                 if (RecycledItemBanner != null) RecycledItemBanner.Visibility = Visibility.Collapsed;
                 EditorHeaderTitle.Text = "Recycle Bin";
                 if (EditorTypeBadge != null) EditorTypeBadge.Visibility = Visibility.Collapsed;
+                if (EditorAdminBadge != null) EditorAdminBadge.Visibility = Visibility.Collapsed;
                 if (DeleteItemBtn != null) DeleteItemBtn.Visibility = Visibility.Collapsed;
                 if (TestActionBtn != null) TestActionBtn.Visibility = Visibility.Collapsed;
                 if (SaveBtn != null) SaveBtn.IsEnabled = false;
@@ -1342,10 +1356,33 @@ public partial class SettingsWindow : Window
             UpdateCommandValidationStatus(item.Payload.Command);
 
             // Snippet payload
+            _currentSnippetContentType = item.Payload.SnippetContentType;
             SnippetTemplateBox.Text = item.Payload.SnippetTemplate;
             SnippetTemplateBox.ScrollToHome();
             _lastSnippetCaretIndex = -1;
             _lastSnippetSelectionLength = 0;
+
+            _isUpdatingRichText = true;
+            try
+            {
+                if (_currentSnippetContentType == SnippetContentType.RichText && !string.IsNullOrEmpty(item.Payload.SnippetRtf))
+                {
+                    RichTextService.LoadFromRtf(SnippetRichTextBox.Document, item.Payload.SnippetRtf);
+                }
+                else if (!string.IsNullOrEmpty(item.Payload.SnippetTemplate))
+                {
+                    RichTextService.LoadFromPlainText(SnippetRichTextBox.Document, item.Payload.SnippetTemplate);
+                }
+                else
+                {
+                    SnippetRichTextBox.Document.Blocks.Clear();
+                }
+            }
+            finally
+            {
+                _isUpdatingRichText = false;
+            }
+            UpdateSnippetFormatUI(_currentSnippetContentType);
 
             // Workflow payload
             if (WorkflowVisualContainer != null && WorkflowScriptContainer != null)
@@ -1382,6 +1419,7 @@ public partial class SettingsWindow : Window
 
             UpdateFormVisibility(item.ActionType);
             UpdateEditorTypeBadge(item.ActionType);
+            UpdateEditorAdminBadge(item.Payload.RunAsAdmin);
             UpdateConflictBanner(item);
         }
         finally
@@ -1427,6 +1465,14 @@ public partial class SettingsWindow : Window
             };
             EditorTypeBadgeText.Foreground = Application.Current.TryFindResource(textKey) as Brush ?? Brushes.Gray;
             EditorTypeBadge.Background = Application.Current.TryFindResource(bgKey) as Brush ?? Brushes.Transparent;
+        }
+    }
+
+    private void UpdateEditorAdminBadge(bool isAdmin)
+    {
+        if (EditorAdminBadge != null)
+        {
+            EditorAdminBadge.Visibility = isAdmin ? Visibility.Visible : Visibility.Collapsed;
         }
     }
 
@@ -1547,6 +1593,8 @@ public partial class SettingsWindow : Window
             if (WorkflowSettingsGroup != null) WorkflowSettingsGroup.Visibility = Visibility.Collapsed;
             if (MacroSettingsGroup != null) MacroSettingsGroup.Visibility = Visibility.Collapsed;
         }
+
+        SyncWorkflowMiniMapVisibility(isWorkflow: actionType == ActionType.Workflow);
     }
 
     private void UpdateConflictBanner(TriggerItem item)
@@ -1607,7 +1655,17 @@ public partial class SettingsWindow : Window
             _selectedItem.Payload.TargetDisplay = string.IsNullOrWhiteSpace(tagStr) ? null : tagStr;
         }
 
-        _selectedItem.Payload.SnippetTemplate = SnippetTemplateBox.Text;
+        _selectedItem.Payload.SnippetContentType = _currentSnippetContentType;
+        if (_currentSnippetContentType == SnippetContentType.RichText)
+        {
+            _selectedItem.Payload.SnippetRtf = RichTextService.SaveToRtf(SnippetRichTextBox.Document);
+            _selectedItem.Payload.SnippetTemplate = RichTextService.ExtractPlainText(SnippetRichTextBox.Document);
+        }
+        else
+        {
+            _selectedItem.Payload.SnippetTemplate = SnippetTemplateBox.Text;
+            _selectedItem.Payload.SnippetRtf = string.Empty;
+        }
 
         if (_selectedItem.ActionType == ActionType.Macro && MacroEditor != null)
         {
@@ -1708,7 +1766,19 @@ public partial class SettingsWindow : Window
 
     private void InsertTokenIntoSnippetBox(string token)
     {
-        if (string.IsNullOrEmpty(token) || SnippetTemplateBox == null) return;
+        if (string.IsNullOrEmpty(token)) return;
+
+        if (_currentSnippetContentType == SnippetContentType.RichText && SnippetRichTextBox != null)
+        {
+            SnippetRichTextBox.Selection.Text = token;
+            SnippetRichTextBox.CaretPosition = SnippetRichTextBox.Selection.End;
+            SnippetRichTextBox.Focus();
+            QueueSnippetLivePreviewUpdate();
+            OnFormEdited();
+            return;
+        }
+
+        if (SnippetTemplateBox == null) return;
 
         string current = SnippetTemplateBox.Text ?? string.Empty;
         int insertPos;
@@ -1867,6 +1937,56 @@ public partial class SettingsWindow : Window
     {
         if (SnippetLivePreviewText == null || SnippetPreviewStatsText == null) return;
 
+        if (_currentSnippetContentType == SnippetContentType.RichText)
+        {
+            if (SnippetRichTextBox == null || SnippetLivePreviewRichBox == null) return;
+
+            var rtf = RichTextService.SaveToRtf(SnippetRichTextBox.Document);
+            var plain = RichTextService.ExtractPlainText(SnippetRichTextBox.Document);
+
+            if (string.IsNullOrWhiteSpace(plain))
+            {
+                SnippetLivePreviewRichBox.Document.Blocks.Clear();
+                SnippetPreviewStatsText.Text = "0 chars • 0 tokens";
+                return;
+            }
+
+            try
+            {
+                string previewClip = string.Empty;
+                try
+                {
+                    if (Clipboard.ContainsText())
+                    {
+                        previewClip = Clipboard.GetText();
+                        if (previewClip.Length > 40) previewClip = previewClip[..37] + "...";
+                    }
+                }
+                catch { }
+
+                if (string.IsNullOrEmpty(previewClip)) previewClip = "[Clipboard text]";
+
+                var (evalRtf, _, evalPlain, _) = RichTextService.EvaluateFlowDocument(
+                    rtf,
+                    plain,
+                    promptResponses: null,
+                    clipboardProvider: () => Task.FromResult(previewClip),
+                    referenceTime: DateTime.Now,
+                    activeWindowTitle: "Example Window Title",
+                    activeProcessName: "notepad.exe");
+
+                RichTextService.LoadFromRtf(SnippetLivePreviewRichBox.Document, evalRtf);
+
+                var tokenMatches = System.Text.RegularExpressions.Regex.Matches(plain, @"\{[^{}]+\}");
+                SnippetPreviewStatsText.Text = $"{evalPlain.Length} chars • {tokenMatches.Count} tokens";
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "Failed to render rich snippet live preview.");
+            }
+            return;
+        }
+
         var template = SnippetTemplateBox.Text;
         if (string.IsNullOrWhiteSpace(template))
         {
@@ -1910,6 +2030,477 @@ public partial class SettingsWindow : Window
         {
             SnippetLivePreviewText.Text = $"Preview error: {ex.Message}";
             SnippetLivePreviewText.Foreground = Application.Current.TryFindResource("ErrorBrush") as Brush ?? Brushes.Red;
+        }
+    }
+
+    private void SnippetFormatPlainBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentSnippetContentType == SnippetContentType.PlainText) return;
+
+        // Convert rich text plain text to template box
+        var plainText = RichTextService.ExtractPlainText(SnippetRichTextBox.Document);
+        SnippetTemplateBox.Text = plainText;
+        _currentSnippetContentType = SnippetContentType.PlainText;
+        UpdateSnippetFormatUI(SnippetContentType.PlainText);
+        OnFormEdited();
+        QueueSnippetLivePreviewUpdate();
+    }
+
+    private void SnippetFormatRichBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentSnippetContentType == SnippetContentType.RichText) return;
+
+        // Convert plain text to rich text document
+        var plainText = SnippetTemplateBox.Text;
+        _isUpdatingRichText = true;
+        try
+        {
+            RichTextService.LoadFromPlainText(SnippetRichTextBox.Document, plainText);
+        }
+        finally
+        {
+            _isUpdatingRichText = false;
+        }
+
+        _currentSnippetContentType = SnippetContentType.RichText;
+        UpdateSnippetFormatUI(SnippetContentType.RichText);
+        OnFormEdited();
+        QueueSnippetLivePreviewUpdate();
+    }
+
+    private void UpdateSnippetFormatUI(SnippetContentType format)
+    {
+        var accentBrush = Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.DodgerBlue;
+        var textSecBrush = Application.Current.TryFindResource("TextSecondaryBrush") as Brush ?? Brushes.Gray;
+
+        if (format == SnippetContentType.RichText)
+        {
+            SnippetFormatRichBtn.Background = accentBrush;
+            SnippetFormatRichBtn.Foreground = Brushes.White;
+            SnippetFormatPlainBtn.Background = Brushes.Transparent;
+            SnippetFormatPlainBtn.Foreground = textSecBrush;
+
+            SnippetPlainTextContainer.Visibility = Visibility.Collapsed;
+            SnippetRichTextContainer.Visibility = Visibility.Visible;
+            SnippetLivePreviewText.Visibility = Visibility.Collapsed;
+            SnippetLivePreviewRichBox.Visibility = Visibility.Visible;
+
+            // Rich text always defaults to paper view
+            _isPaperCanvasActive = true;
+            ApplySnippetCanvasMode();
+        }
+        else
+        {
+            SnippetFormatPlainBtn.Background = accentBrush;
+            SnippetFormatPlainBtn.Foreground = Brushes.White;
+            SnippetFormatRichBtn.Background = Brushes.Transparent;
+            SnippetFormatRichBtn.Foreground = textSecBrush;
+
+            SnippetPlainTextContainer.Visibility = Visibility.Visible;
+            SnippetRichTextContainer.Visibility = Visibility.Collapsed;
+            SnippetLivePreviewText.Visibility = Visibility.Visible;
+            SnippetLivePreviewRichBox.Visibility = Visibility.Collapsed;
+
+            // Plain text live preview container matches theme
+            if (SnippetLivePreviewContainerBorder != null)
+            {
+                SnippetLivePreviewContainerBorder.Background = Application.Current.TryFindResource("BgInputBrush") as Brush ?? Brushes.Transparent;
+                SnippetLivePreviewContainerBorder.BorderBrush = Application.Current.TryFindResource("BorderBrush") as Brush ?? Brushes.Gray;
+            }
+        }
+    }
+
+    private void RichFontSizeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isUpdatingRichText || SnippetRichTextBox == null) return;
+        if (RichFontSizeCombo.SelectedItem is ComboBoxItem item && double.TryParse(item.Tag?.ToString(), out var size))
+        {
+            SnippetRichTextBox.Selection.ApplyPropertyValue(TextElement.FontSizeProperty, size);
+            OnRichFormattingApplied();
+            SnippetRichTextBox.Focus();
+        }
+    }
+
+    private void RichBoldBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (SnippetRichTextBox == null) return;
+        EditingCommands.ToggleBold.Execute(null, SnippetRichTextBox);
+        OnRichFormattingApplied();
+        SnippetRichTextBox.Focus();
+    }
+
+    private void RichItalicBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (SnippetRichTextBox == null) return;
+        EditingCommands.ToggleItalic.Execute(null, SnippetRichTextBox);
+        OnRichFormattingApplied();
+        SnippetRichTextBox.Focus();
+    }
+
+    private void RichUnderlineBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (SnippetRichTextBox == null) return;
+        EditingCommands.ToggleUnderline.Execute(null, SnippetRichTextBox);
+        OnRichFormattingApplied();
+        SnippetRichTextBox.Focus();
+    }
+
+    private void RichStrikethroughBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (SnippetRichTextBox == null) return;
+        var current = SnippetRichTextBox.Selection.GetPropertyValue(Inline.TextDecorationsProperty);
+        if (current is TextDecorationCollection coll && coll.Count > 0 && coll.Contains(TextDecorations.Strikethrough[0]))
+        {
+            SnippetRichTextBox.Selection.ApplyPropertyValue(Inline.TextDecorationsProperty, null);
+        }
+        else
+        {
+            SnippetRichTextBox.Selection.ApplyPropertyValue(Inline.TextDecorationsProperty, TextDecorations.Strikethrough);
+        }
+        OnRichFormattingApplied();
+        SnippetRichTextBox.Focus();
+    }
+
+    private bool _activeColorIsHighlight;
+
+    private void RichTextColorBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _activeColorIsHighlight = false;
+        Color? currentColor = null;
+        if (SnippetRichTextBox != null)
+        {
+            var fg = SnippetRichTextBox.Selection.GetPropertyValue(TextElement.ForegroundProperty);
+            if (fg is SolidColorBrush scb) currentColor = scb.Color;
+        }
+        RichColorPickerFlyout.Show(RichTextColorBtn, isHighlightMode: false, currentColor);
+    }
+
+    private void RichHighlightBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _activeColorIsHighlight = true;
+        Color? currentColor = null;
+        if (SnippetRichTextBox != null)
+        {
+            var bg = SnippetRichTextBox.Selection.GetPropertyValue(TextElement.BackgroundProperty);
+            if (bg is SolidColorBrush scb) currentColor = scb.Color;
+        }
+        RichColorPickerFlyout.Show(RichHighlightBtn, isHighlightMode: true, currentColor);
+    }
+
+    private void RichColorPickerFlyout_ColorSelected(object? sender, Color? color)
+    {
+        if (SnippetRichTextBox == null) return;
+
+        if (_activeColorIsHighlight)
+        {
+            if (color.HasValue)
+            {
+                var brush = new SolidColorBrush(color.Value);
+                SnippetRichTextBox.Selection.ApplyPropertyValue(TextElement.BackgroundProperty, brush);
+                if (RichHighlightColorIndicator != null) RichHighlightColorIndicator.Background = brush;
+            }
+            else
+            {
+                SnippetRichTextBox.Selection.ApplyPropertyValue(TextElement.BackgroundProperty, Brushes.Transparent);
+                if (RichHighlightColorIndicator != null) RichHighlightColorIndicator.Background = Brushes.Transparent;
+            }
+        }
+        else
+        {
+            if (color.HasValue)
+            {
+                var brush = new SolidColorBrush(color.Value);
+                SnippetRichTextBox.Selection.ApplyPropertyValue(TextElement.ForegroundProperty, brush);
+                if (RichTextColorIndicator != null) RichTextColorIndicator.Background = brush;
+            }
+            else
+            {
+                // Theme-Agnostic Automatic: Clear local property so it inherits ambient theme and exports as auto
+                SnippetRichTextBox.Selection.ApplyPropertyValue(TextElement.ForegroundProperty, DependencyProperty.UnsetValue);
+                if (RichTextColorIndicator != null) RichTextColorIndicator.Background = Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.DodgerBlue;
+            }
+        }
+
+        OnRichFormattingApplied();
+        SnippetRichTextBox.Focus();
+    }
+
+    private void RichBulletListBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (SnippetRichTextBox == null) return;
+        EditingCommands.ToggleBullets.Execute(null, SnippetRichTextBox);
+        OnRichFormattingApplied();
+        SnippetRichTextBox.Focus();
+    }
+
+    private void RichNumberedListBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (SnippetRichTextBox == null) return;
+        EditingCommands.ToggleNumbering.Execute(null, SnippetRichTextBox);
+        OnRichFormattingApplied();
+        SnippetRichTextBox.Focus();
+    }
+
+    private void RichAlignLeftBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (SnippetRichTextBox == null) return;
+        EditingCommands.AlignLeft.Execute(null, SnippetRichTextBox);
+        OnRichFormattingApplied();
+        SnippetRichTextBox.Focus();
+    }
+
+    private void RichAlignCenterBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (SnippetRichTextBox == null) return;
+        EditingCommands.AlignCenter.Execute(null, SnippetRichTextBox);
+        OnRichFormattingApplied();
+        SnippetRichTextBox.Focus();
+    }
+
+    private void RichAlignRightBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (SnippetRichTextBox == null) return;
+        EditingCommands.AlignRight.Execute(null, SnippetRichTextBox);
+        OnRichFormattingApplied();
+        SnippetRichTextBox.Focus();
+    }
+
+    private void RichClearFormatBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (SnippetRichTextBox == null) return;
+
+        bool isFullDocument = SnippetRichTextBox.Selection.IsEmpty;
+        TextRange targetRange = isFullDocument
+            ? new TextRange(SnippetRichTextBox.Document.ContentStart, SnippetRichTextBox.Document.ContentEnd)
+            : SnippetRichTextBox.Selection;
+
+        if (string.IsNullOrEmpty(targetRange.Text)) return;
+
+        // 1. Remove list structures if full document or list is intersected
+        ConvertListsToParagraphs(SnippetRichTextBox.Document.Blocks, targetRange);
+
+        // Re-evaluate targetRange after structural DOM changes
+        targetRange = isFullDocument
+            ? new TextRange(SnippetRichTextBox.Document.ContentStart, SnippetRichTextBox.Document.ContentEnd)
+            : SnippetRichTextBox.Selection;
+
+        // 2. Clear all character and inline properties
+        targetRange.ClearAllProperties();
+        targetRange.ApplyPropertyValue(TextElement.FontWeightProperty, FontWeights.Normal);
+        targetRange.ApplyPropertyValue(TextElement.FontStyleProperty, FontStyles.Normal);
+        targetRange.ApplyPropertyValue(Inline.TextDecorationsProperty, null);
+        targetRange.ApplyPropertyValue(TextElement.FontSizeProperty, 14.66); // 11pt default
+
+        // 3. Reset paragraph alignment to left
+        targetRange.ApplyPropertyValue(Block.TextAlignmentProperty, TextAlignment.Left);
+
+        // 4. Reset ribbon indicator controls
+        if (RichFontSizeCombo != null)
+        {
+            _isUpdatingRichText = true;
+            try
+            {
+                foreach (ComboBoxItem item in RichFontSizeCombo.Items)
+                {
+                    if (item.Tag?.ToString() == "14.66")
+                    {
+                        RichFontSizeCombo.SelectedItem = item;
+                        break;
+                    }
+                }
+            }
+            finally
+            {
+                _isUpdatingRichText = false;
+            }
+        }
+        if (RichTextColorIndicator != null)
+            RichTextColorIndicator.Background = Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.DodgerBlue;
+        if (RichHighlightColorIndicator != null)
+            RichHighlightColorIndicator.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFF59D"));
+
+        OnRichFormattingApplied();
+        SnippetRichTextBox.Focus();
+    }
+
+    private static void ConvertListsToParagraphs(BlockCollection blocks, TextRange targetRange)
+    {
+        var listBlocks = blocks.OfType<List>().ToList();
+        foreach (var list in listBlocks)
+        {
+            if (targetRange.Start.CompareTo(list.ContentEnd) <= 0 && targetRange.End.CompareTo(list.ContentStart) >= 0)
+            {
+                var extracted = new List<Block>();
+                foreach (var item in list.ListItems.ToList())
+                {
+                    while (item.Blocks.Count > 0)
+                    {
+                        var childBlock = item.Blocks.FirstBlock;
+                        item.Blocks.Remove(childBlock);
+                        extracted.Add(childBlock);
+                    }
+                }
+
+                foreach (var b in extracted)
+                {
+                    if (b is Paragraph p)
+                    {
+                        p.Margin = new Thickness(0, 0, 0, 4);
+                        p.TextAlignment = TextAlignment.Left;
+                    }
+                    blocks.InsertBefore(list, b);
+                }
+
+                blocks.Remove(list);
+            }
+        }
+
+        foreach (var section in blocks.OfType<Section>().ToList())
+        {
+            ConvertListsToParagraphs(section.Blocks, targetRange);
+        }
+    }
+
+    private void OnRichFormattingApplied()
+    {
+        if (_isUpdatingRichText) return;
+        OnFormEdited();
+        QueueSnippetLivePreviewUpdate();
+        UpdateRichToolbarSelectionState();
+    }
+
+    private void SnippetRichTextBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if ((Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Control) == System.Windows.Input.ModifierKeys.Control)
+        {
+            if (e.Key == Key.B || e.Key == Key.I || e.Key == Key.U || e.Key == Key.Z || e.Key == Key.Y)
+            {
+                Dispatcher.InvokeAsync(() => OnRichFormattingApplied(), System.Windows.Threading.DispatcherPriority.Background);
+            }
+        }
+    }
+
+    private bool _isPaperCanvasActive = true;
+
+    private void SnippetCanvasToggleBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _isPaperCanvasActive = !_isPaperCanvasActive;
+        ApplySnippetCanvasMode();
+    }
+
+    private void ApplySnippetCanvasMode()
+    {
+        if (SnippetRichTextEditorBorder == null || SnippetRichTextBox == null) return;
+
+        if (_isPaperCanvasActive)
+        {
+            SnippetRichTextEditorBorder.Background = Brushes.White;
+            SnippetRichTextEditorBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(203, 213, 225)); // #CBD5E1
+            SnippetRichTextBox.Foreground = new SolidColorBrush(Color.FromRgb(30, 41, 59)); // #1E293B
+            SnippetRichTextBox.CaretBrush = new SolidColorBrush(Color.FromRgb(37, 99, 235)); // #2563EB
+
+            if (SnippetLivePreviewContainerBorder != null)
+            {
+                SnippetLivePreviewContainerBorder.Background = Brushes.White;
+                SnippetLivePreviewContainerBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(203, 213, 225));
+            }
+            if (SnippetLivePreviewRichBox != null)
+            {
+                SnippetLivePreviewRichBox.Foreground = new SolidColorBrush(Color.FromRgb(30, 41, 59));
+            }
+            if (SnippetLivePreviewText != null)
+            {
+                SnippetLivePreviewText.Foreground = new SolidColorBrush(Color.FromRgb(30, 41, 59));
+            }
+
+            if (SnippetCanvasIconText != null) SnippetCanvasIconText.Text = "🌙";
+            if (SnippetCanvasModeText != null) SnippetCanvasModeText.Text = "Theme";
+            if (SnippetCanvasToggleBtn != null) SnippetCanvasToggleBtn.ToolTip = "Switch to theme editor canvas";
+        }
+        else
+        {
+            SnippetRichTextEditorBorder.Background = Application.Current.TryFindResource("BgInputBrush") as Brush ?? Brushes.Transparent;
+            SnippetRichTextEditorBorder.BorderBrush = Application.Current.TryFindResource("BorderBrush") as Brush ?? Brushes.Gray;
+            SnippetRichTextBox.Foreground = Application.Current.TryFindResource("TextPrimaryBrush") as Brush ?? Brushes.White;
+            SnippetRichTextBox.CaretBrush = Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.DodgerBlue;
+
+            if (SnippetLivePreviewContainerBorder != null)
+            {
+                SnippetLivePreviewContainerBorder.Background = Application.Current.TryFindResource("BgInputBrush") as Brush ?? Brushes.Transparent;
+                SnippetLivePreviewContainerBorder.BorderBrush = Application.Current.TryFindResource("BorderBrush") as Brush ?? Brushes.Gray;
+            }
+            if (SnippetLivePreviewRichBox != null)
+            {
+                SnippetLivePreviewRichBox.Foreground = Application.Current.TryFindResource("TextPrimaryBrush") as Brush ?? Brushes.White;
+            }
+            if (SnippetLivePreviewText != null)
+            {
+                SnippetLivePreviewText.Foreground = Application.Current.TryFindResource("TextSecondaryBrush") as Brush ?? Brushes.Gray;
+            }
+
+            if (SnippetCanvasIconText != null) SnippetCanvasIconText.Text = "📄";
+            if (SnippetCanvasModeText != null) SnippetCanvasModeText.Text = "Paper";
+            if (SnippetCanvasToggleBtn != null) SnippetCanvasToggleBtn.ToolTip = "Switch to paper canvas (standard paper background)";
+        }
+
+        // Refresh live preview rendering asynchronously under new canvas colors without altering snippet dirty state
+        _ = UpdateSnippetLivePreviewAsync();
+    }
+
+    private void SnippetRichTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_isUpdatingRichText) return;
+        OnFormEdited();
+        QueueSnippetLivePreviewUpdate();
+    }
+
+    private void SnippetRichTextBox_SelectionChanged(object sender, RoutedEventArgs e)
+    {
+        UpdateRichToolbarSelectionState();
+    }
+
+    private void UpdateRichToolbarSelectionState()
+    {
+        if (_isUpdatingRichText || SnippetRichTextBox == null) return;
+
+        var isBold = SnippetRichTextBox.Selection.GetPropertyValue(TextElement.FontWeightProperty);
+        if (RichBoldBtn != null)
+            RichBoldBtn.Opacity = (isBold is FontWeight fw && fw >= FontWeights.Bold) ? 1.0 : 0.7;
+
+        var isItalic = SnippetRichTextBox.Selection.GetPropertyValue(TextElement.FontStyleProperty);
+        if (RichItalicBtn != null)
+            RichItalicBtn.Opacity = (isItalic is FontStyle fs && fs == FontStyles.Italic) ? 1.0 : 0.7;
+
+        var textDecs = SnippetRichTextBox.Selection.GetPropertyValue(Inline.TextDecorationsProperty);
+        if (textDecs is TextDecorationCollection coll && coll.Count > 0)
+        {
+            if (RichUnderlineBtn != null)
+                RichUnderlineBtn.Opacity = coll.Contains(TextDecorations.Underline[0]) ? 1.0 : 0.7;
+            if (RichStrikethroughBtn != null)
+                RichStrikethroughBtn.Opacity = coll.Contains(TextDecorations.Strikethrough[0]) ? 1.0 : 0.7;
+        }
+        else
+        {
+            if (RichUnderlineBtn != null) RichUnderlineBtn.Opacity = 0.7;
+            if (RichStrikethroughBtn != null) RichStrikethroughBtn.Opacity = 0.7;
+        }
+
+        var fg = SnippetRichTextBox.Selection.GetPropertyValue(TextElement.ForegroundProperty);
+        var bg = SnippetRichTextBox.Selection.GetPropertyValue(TextElement.BackgroundProperty);
+        var isAutoFg = fg == DependencyProperty.UnsetValue || RichTextService.IsAutomaticOrThemeColor(fg as Brush, bg as Brush, SnippetRichTextBox);
+        if (RichTextColorIndicator != null)
+        {
+            if (!isAutoFg && fg is SolidColorBrush scbFg)
+                RichTextColorIndicator.Background = scbFg;
+            else
+                RichTextColorIndicator.Background = Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.DodgerBlue;
+        }
+        if (RichHighlightColorIndicator != null)
+        {
+            if (bg is SolidColorBrush scbBg && scbBg.Color.A > 0)
+                RichHighlightColorIndicator.Background = scbBg;
+            else
+                RichHighlightColorIndicator.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFF59D"));
         }
     }
 
@@ -2407,7 +2998,7 @@ public partial class SettingsWindow : Window
         if (_logManagerService == null) return;
         if (!PromptSaveIfDirty()) return;
 
-        var dlg = new ApplicationSettingsWindow(_repository, _logManagerService)
+        var dlg = new ApplicationSettingsWindow(_repository, _logManagerService, _updateService)
         {
             Owner = this
         };
@@ -2432,6 +3023,51 @@ public partial class SettingsWindow : Window
             RefreshTreeConflictStates();
             StatusText.Text = $"Reloaded {_items.Count} items following data import.";
         }
+    }
+
+    public void NotifyUpdateAvailable(UpdateCheckResult updateResult)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            _latestAvailableUpdate = updateResult;
+            if (updateResult.IsUpdateAvailable && updateResult.LatestUpdate != null)
+            {
+                UpdateBadgeBtn.Content = $"✨ Update Available (v{updateResult.LatestUpdate.Version})";
+                UpdateBadgeBtn.ToolTip = $"Click to inspect and install TriggerPoint v{updateResult.LatestUpdate.Version}";
+                UpdateBadgeBtn.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                UpdateBadgeBtn.Visibility = Visibility.Collapsed;
+            }
+        });
+    }
+
+    private void UpdateBadgeBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_latestAvailableUpdate?.LatestUpdate == null) return;
+
+        var svc = _updateService ?? new TriggerPoint.Infrastructure.Services.GitHubUpdateService(_repository);
+        var dlg = new UpdateAvailableDialog(_latestAvailableUpdate, svc, _repository)
+        {
+            Owner = this
+        };
+        dlg.ShowDialog();
+
+        // Refresh settings after dialog closes
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var settings = await _repository.LoadSettingsAsync();
+                if (!string.IsNullOrEmpty(settings.IgnoredUpdateVersion) &&
+                    string.Equals(settings.IgnoredUpdateVersion, _latestAvailableUpdate?.LatestUpdate?.Version, StringComparison.OrdinalIgnoreCase))
+                {
+                    Dispatcher.Invoke(() => UpdateBadgeBtn.Visibility = Visibility.Collapsed);
+                }
+            }
+            catch { }
+        });
     }
 
     private TriggerTreeItemViewModel? _rightClickedTreeVm;
@@ -3411,7 +4047,9 @@ public partial class SettingsWindow : Window
         {
             EditorHeaderTitle.Text = "No Selection";
             if (EditorTypeBadge != null) EditorTypeBadge.Visibility = Visibility.Collapsed;
+            if (EditorAdminBadge != null) EditorAdminBadge.Visibility = Visibility.Collapsed;
             if (EditorPanel != null) EditorPanel.Visibility = Visibility.Collapsed;
+            SyncWorkflowMiniMapVisibility(isWorkflow: false);
             if (SaveBtn != null) SaveBtn.IsEnabled = false;
             if (TestActionBtn != null) TestActionBtn.Visibility = Visibility.Collapsed;
             if (DeleteItemBtn != null) DeleteItemBtn.Visibility = Visibility.Collapsed;

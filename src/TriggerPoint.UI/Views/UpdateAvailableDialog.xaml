@@ -1,0 +1,289 @@
+<Window x:Class="TriggerPoint.UI.Views.UpdateAvailableDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="TriggerPoint Update Available"
+        MinWidth="480"
+        MaxWidth="620"
+        Width="540"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="True"
+        KeyDown="Window_KeyDown">
+
+    <Border Background="{DynamicResource BgSecondaryBrush}"
+            BorderBrush="{DynamicResource BorderBrush}"
+            BorderThickness="1"
+            CornerRadius="10"
+            Margin="12">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="24" ShadowDepth="4" Opacity="0.5" Direction="270"/>
+        </Border.Effect>
+
+        <Grid Margin="22">
+            <Grid.RowDefinitions>
+                <!-- Title / Header -->
+                <RowDefinition Height="Auto"/>
+                <!-- Version Comparison Pill -->
+                <RowDefinition Height="Auto"/>
+                <!-- Description -->
+                <RowDefinition Height="Auto"/>
+                <!-- Changelog Expander Section -->
+                <RowDefinition Height="Auto"/>
+                <!-- Download Progress Bar Section (Visible during download) -->
+                <RowDefinition Height="Auto"/>
+                <!-- Action Buttons / Footer -->
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Title / Header -->
+            <Grid Grid.Row="0" Margin="0,0,0,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="🚀" FontSize="20" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                    <StackPanel>
+                        <TextBlock Text="New Update Available" 
+                                   FontSize="16" 
+                                   FontWeight="Bold" 
+                                   Foreground="{DynamicResource TextPrimaryBrush}"/>
+                        <TextBlock Text="A new version of TriggerPoint is ready to install" 
+                                   FontSize="11.5" 
+                                   Foreground="{DynamicResource TextSecondaryBrush}" 
+                                   Margin="0,2,0,0"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <Button Grid.Column="1" 
+                        Content="✕" 
+                        Style="{StaticResource WindowControlButtonStyle}" 
+                        Width="28" Height="28" 
+                        Click="CloseBtn_Click"/>
+            </Grid>
+
+            <!-- Version Comparison Banner -->
+            <Border Grid.Row="1"
+                    Background="{DynamicResource BgPrimaryBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="14,10"
+                    Margin="0,0,0,14">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border Background="{DynamicResource BgSecondaryBrush}" 
+                                BorderBrush="{DynamicResource BorderSubtleBrush}" 
+                                BorderThickness="1" 
+                                CornerRadius="4" 
+                                Padding="8,3">
+                            <TextBlock x:Name="CurrentVersionText" 
+                                       Text="v2.0.8" 
+                                       FontSize="12" 
+                                       FontWeight="SemiBold" 
+                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        </Border>
+                        <TextBlock Text="➔" 
+                                   FontSize="13" 
+                                   Foreground="{DynamicResource AccentBrush}" 
+                                   Margin="10,0,10,0" 
+                                   VerticalAlignment="Center"/>
+                        <Border Background="{DynamicResource AccentSubtleBrush}" 
+                                BorderBrush="{DynamicResource AccentBrush}" 
+                                BorderThickness="1" 
+                                CornerRadius="4" 
+                                Padding="8,3">
+                            <TextBlock x:Name="TargetVersionText" 
+                                       Text="v2.0.9" 
+                                       FontSize="12" 
+                                       FontWeight="Bold" 
+                                       Foreground="{DynamicResource AccentBrush}"/>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right">
+                        <TextBlock x:Name="ReleaseDateText" 
+                                   Text="Released Sep 18, 2026" 
+                                   FontSize="11" 
+                                   Foreground="{DynamicResource TextMutedBrush}" 
+                                   HorizontalAlignment="Right"/>
+                        <TextBlock x:Name="DownloadSizeText" 
+                                   Text="Size: ~25 MB" 
+                                   FontSize="11" 
+                                   Foreground="{DynamicResource TextSecondaryBrush}" 
+                                   HorizontalAlignment="Right" 
+                                   Margin="0,2,0,0"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Update Summary Text -->
+            <TextBlock Grid.Row="2"
+                       x:Name="UpdateSummaryText"
+                       Text="TriggerPoint includes new features, performance improvements, and fixes."
+                       FontSize="12.5"
+                       Foreground="{DynamicResource TextPrimaryBrush}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,12"
+                       LineHeight="18"/>
+
+            <!-- Changelog Section -->
+            <StackPanel Grid.Row="3" Margin="0,0,0,14">
+                <Grid Margin="0,0,0,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <Button x:Name="ToggleChangelogBtn"
+                            Grid.Column="0"
+                            HorizontalAlignment="Left"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Foreground="{DynamicResource AccentBrush}"
+                            FontSize="12"
+                            FontWeight="SemiBold"
+                            Cursor="Hand"
+                            Click="ToggleChangelogBtn_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="ChangelogExpanderArrow" Text="▶ " FontSize="10" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="ChangelogExpanderLabel" Text="View Improvements &amp; Changelog" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+
+                    <Button x:Name="ViewOnGitHubBtn"
+                            Grid.Column="1"
+                            Content="View on GitHub ↗"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            FontSize="11"
+                            Padding="8,3"
+                            Cursor="Hand"
+                            Click="ViewOnGitHubBtn_Click"/>
+                </Grid>
+
+                <Border x:Name="ChangelogBorder"
+                        Background="{DynamicResource BgPrimaryBrush}"
+                        BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        MaxHeight="240"
+                        Visibility="Collapsed"
+                        Padding="12,10">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <TextBlock x:Name="ChangelogContentText"
+                                   Text="No changelog available."
+                                   FontSize="12"
+                                   FontFamily="Consolas, Segoe UI, sans-serif"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   TextWrapping="Wrap"
+                                   LineHeight="18"/>
+                    </ScrollViewer>
+                </Border>
+            </StackPanel>
+
+            <!-- Download Progress Panel (Visible while downloading) -->
+            <Border Grid.Row="4"
+                    x:Name="DownloadProgressPanel"
+                    Background="{DynamicResource BgPrimaryBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="14,12"
+                    Margin="0,0,0,14"
+                    Visibility="Collapsed">
+                <StackPanel>
+                    <Grid Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="DownloadStatusText" 
+                                   Text="Downloading update..." 
+                                   FontSize="12" 
+                                   FontWeight="SemiBold" 
+                                   Foreground="{DynamicResource TextPrimaryBrush}"/>
+                        <TextBlock Grid.Column="1" 
+                                   x:Name="DownloadPercentText" 
+                                   Text="0%" 
+                                   FontSize="12" 
+                                   FontWeight="Bold" 
+                                   Foreground="{DynamicResource AccentBrush}"/>
+                    </Grid>
+
+                    <ProgressBar x:Name="DownloadProgressBar"
+                                 Height="8"
+                                 Minimum="0"
+                                 Maximum="100"
+                                 Value="0"
+                                 Foreground="{DynamicResource AccentBrush}"
+                                 Background="{DynamicResource BgSecondaryBrush}"
+                                 BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                 BorderThickness="1"
+                                 Margin="0,0,0,6"/>
+
+                    <TextBlock x:Name="DownloadSpeedText" 
+                               Text="0.0 MB / 0.0 MB" 
+                               FontSize="11" 
+                               Foreground="{DynamicResource TextMutedBrush}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Buttons Row -->
+            <Grid Grid.Row="5">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Ignore Version Action -->
+                <Button Grid.Column="0"
+                        x:Name="IgnoreVersionBtn"
+                        Content="Ignore this version"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        FontSize="11.5"
+                        Foreground="{DynamicResource TextMutedBrush}"
+                        VerticalAlignment="Center"
+                        Click="IgnoreVersionBtn_Click"/>
+
+                <!-- Primary Action Buttons -->
+                <StackPanel Grid.Column="1" 
+                            Orientation="Horizontal" 
+                            HorizontalAlignment="Right">
+                    <Button x:Name="UpdateLaterBtn" 
+                            Content="Update Later" 
+                            Style="{StaticResource SecondaryButtonStyle}" 
+                            FontSize="12.5"
+                            Padding="14,6"
+                            Margin="0,0,8,0"
+                            Click="UpdateLaterBtn_Click"/>
+
+                    <Button x:Name="UpdateNowBtn" 
+                            Content="⚡ Update Now" 
+                            Style="{StaticResource AccentButtonStyle}" 
+                            FontSize="12.5"
+                            FontWeight="Bold"
+                            Padding="16,6"
+                            Click="UpdateNowBtn_Click"/>
+
+                    <Button x:Name="CancelDownloadBtn" 
+                            Content="Cancel Download" 
+                            Style="{StaticResource SecondaryButtonStyle}" 
+                            FontSize="12"
+                            Padding="12,6"
+                            Visibility="Collapsed"
+                            Click="CancelDownloadBtn_Click"/>
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

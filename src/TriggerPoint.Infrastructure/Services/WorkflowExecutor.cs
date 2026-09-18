@@ -281,6 +281,13 @@ public class WorkflowExecutor : IWorkflowExecutor
                 if (string.IsNullOrWhiteSpace(url)) return false;
 
                 var expanded = Environment.ExpandEnvironmentVariables(url.Trim());
+                if (!ProtocolValidator.IsSafeUrl(expanded, out var rejectReason))
+                {
+                    _logger.Warning("Blocked unsafe URL in workflow step: '{Url}': {Reason}", expanded, rejectReason);
+                    _toastNotificationService.ShowWarning("Security Block", rejectReason ?? "Unsafe URL blocked by security policy.");
+                    return false;
+                }
+
                 _logger.Information("Opening URL: {Url} (Browser: {Browser}, Profile: {Profile}, NewWindow: {NewWindow})", expanded, step.BrowserTarget, step.BrowserProfile, step.OpenInNewWindow);
                 if (_browserDetectionService != null)
                 {
@@ -400,9 +407,8 @@ public class WorkflowExecutor : IWorkflowExecutor
             case WorkflowStepType.InjectSnippet:
             {
                 var template = ResolveVariables(step.SnippetTemplate, contextVariables);
-                if (string.IsNullOrEmpty(template)) return false;
-
-                await _snippetService.InjectSnippetAsync(template, effectiveHwnd);
+                var rtf = ResolveVariables(step.SnippetRtf, contextVariables);
+                await _snippetService.InjectSnippetAsync(template, effectiveHwnd, step.SnippetContentType, rtf);
                 return true;
             }
 

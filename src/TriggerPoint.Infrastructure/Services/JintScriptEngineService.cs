@@ -82,9 +82,9 @@ public class JintScriptEngineService : IScriptEngineService
                 {
                     var engine = new Engine(options =>
                     {
-                        options.TimeoutInterval(TimeSpan.FromSeconds(30));
+                        options.TimeoutInterval(TimeSpan.FromSeconds(10));
                         options.LimitMemory(25_000_000);
-                        options.MaxStatements(100_000);
+                        options.MaxStatements(50_000);
                         options.CancellationToken(cancellationToken);
                     });
 
@@ -272,10 +272,28 @@ public class TriggerPointJsBridge
         _toastNotificationService.ShowSuccess(title ?? "TriggerPoint", message ?? string.Empty);
     }
 
+    private static readonly HashSet<string> SensitiveInterpreters = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "cmd", "cmd.exe",
+        "powershell", "powershell.exe",
+        "pwsh", "pwsh.exe",
+        "cscript", "cscript.exe",
+        "wscript", "wscript.exe",
+        "mshta", "mshta.exe"
+    };
+
     public void openUrl(string url, string? browser = null, string? profile = null, bool newWindow = false)
     {
         if (string.IsNullOrWhiteSpace(url)) return;
         var expanded = Environment.ExpandEnvironmentVariables(url.Trim());
+
+        if (!TriggerPoint.Core.Services.ProtocolValidator.IsSafeUrl(expanded, out var rejectReason))
+        {
+            _logger.Warning("Script URL blocked: {Reason}", rejectReason);
+            _toastNotificationService.ShowWarning("Security Block", rejectReason ?? "Unsafe URL scheme blocked.");
+            return;
+        }
+
         _logger.Information("Script opening URL: {Url} (Browser: {Browser}, Profile: {Profile}, NewWindow: {NewWindow})", expanded, browser, profile, newWindow);
         if (_browserDetectionService != null)
         {
@@ -294,6 +312,25 @@ public class TriggerPointJsBridge
     {
         if (string.IsNullOrWhiteSpace(cmd)) return;
         var expandedCmd = Environment.ExpandEnvironmentVariables(cmd.Trim());
+
+        var baseName = Path.GetFileName(expandedCmd);
+        if (SensitiveInterpreters.Contains(baseName) || runAsAdmin || _isElevated)
+        {
+            if (_confirmationDialogService != null)
+            {
+                var allowed = _confirmationDialogService.ShowConfirmationAsync(
+                    $"A script is requesting to launch a privileged or system shell:\n\n{expandedCmd} {args}\n\nDo you want to allow this process to execute?",
+                    "Security Guardrail",
+                    "Allow Execution",
+                    "Block Execution").GetAwaiter().GetResult();
+                if (!allowed)
+                {
+                    _logger.Warning("Script execution of '{Cmd}' blocked by user security guardrail.", expandedCmd);
+                    throw new InvalidOperationException($"Process launch blocked by user security guardrail: '{expandedCmd}'.");
+                }
+            }
+        }
+
         var psi = new ProcessStartInfo
         {
             FileName = expandedCmd,
@@ -361,6 +398,22 @@ public class TriggerPointJsBridge
 
 public class TriggerPointFsBridge
 {
+    private static bool IsRestrictedSystemPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return true;
+        try
+        {
+            var fullPath = Path.GetFullPath(path);
+            var winDir = Path.GetFullPath(Environment.GetFolderPath(Environment.SpecialFolder.Windows));
+            if (fullPath.StartsWith(winDir, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        catch { }
+        return false;
+    }
+
     public bool exists(string path)
     {
         if (string.IsNullOrWhiteSpace(path)) return false;
@@ -372,6 +425,10 @@ public class TriggerPointFsBridge
     {
         if (string.IsNullOrWhiteSpace(path)) return false;
         var expanded = Environment.ExpandEnvironmentVariables(path.Trim());
+        if (IsRestrictedSystemPath(expanded))
+        {
+            throw new InvalidOperationException($"Filesystem creation within Windows system directory is blocked by security policy: '{expanded}'");
+        }
         Directory.CreateDirectory(expanded);
         return true;
     }

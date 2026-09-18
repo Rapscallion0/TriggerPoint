@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
@@ -34,6 +35,9 @@ public partial class HotkeyRecorderControl : UserControl
     private bool _isRecording;
     public bool IsRecording => _isRecording;
 
+    private ShortcutBinding? _pendingLeader;
+    private bool _isWaitingForChord;
+
     public HotkeyRecorderControl()
     {
         InitializeComponent();
@@ -42,7 +46,22 @@ public partial class HotkeyRecorderControl : UserControl
         PreviewKeyDown += HotkeyRecorderControl_PreviewKeyDown;
         PreviewKeyUp += HotkeyRecorderControl_PreviewKeyUp;
         GotFocus += (s, e) => StartRecording();
-        LostFocus += (s, e) => StopRecording(cancelled: true);
+        LostFocus += (s, e) =>
+        {
+            if (_isWaitingForChord && _pendingLeader != null)
+            {
+                var single = _pendingLeader;
+                _pendingLeader = null;
+                _isWaitingForChord = false;
+                Binding = single;
+                BindingRecorded?.Invoke(this, single);
+                StopRecording(cancelled: false);
+            }
+            else
+            {
+                StopRecording(cancelled: true);
+            }
+        };
         Unloaded += (s, e) => StopRecording(cancelled: true);
     }
 
@@ -61,11 +80,25 @@ public partial class HotkeyRecorderControl : UserControl
             RecordingBorder.BorderBrush = (Brush)(Application.Current?.TryFindResource("AccentBrush") ?? Brushes.DodgerBlue);
             RecordingBorder.BorderThickness = new Thickness(1.5);
             ClearButton.Visibility = Visibility.Visible;
+
+            if (_isWaitingForChord && _pendingLeader != null)
+            {
+                PromptText.Visibility = Visibility.Collapsed;
+                KeyBadge.Visibility = Visibility.Visible;
+                HotkeyDisplayText.Text = $"{_pendingLeader.PrimaryDisplayText}, ...";
+                ChordHintText.Text = "Press 2nd key for chord (or Enter to finish)";
+                ChordHintText.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                ChordHintText.Visibility = Visibility.Collapsed;
+            }
         }
         else
         {
             RecordingBorder.BorderBrush = (Brush)(Application.Current?.TryFindResource("BorderBrush") ?? Brushes.Gray);
             RecordingBorder.BorderThickness = new Thickness(1);
+            ChordHintText.Visibility = Visibility.Collapsed;
 
             if (Binding != null && !Binding.IsEmpty)
             {
@@ -96,6 +129,9 @@ public partial class HotkeyRecorderControl : UserControl
     {
         if (_isRecording) return;
         _isRecording = true;
+        _pendingLeader = null;
+        _isWaitingForChord = false;
+
         lock (_syncLock)
         {
             _activeRecorders.Add(this);
@@ -107,13 +143,27 @@ public partial class HotkeyRecorderControl : UserControl
         PromptText.Text = "Recording... Press keys";
         PromptText.Visibility = Visibility.Visible;
         KeyBadge.Visibility = Visibility.Collapsed;
+        ChordHintText.Visibility = Visibility.Collapsed;
         UpdateUi();
     }
 
     public void StopRecording(bool cancelled)
     {
         if (!_isRecording) return;
+
+        if (!cancelled && _isWaitingForChord && _pendingLeader != null)
+        {
+            var single = _pendingLeader;
+            _pendingLeader = null;
+            _isWaitingForChord = false;
+            Binding = single;
+            BindingRecorded?.Invoke(this, single);
+        }
+
+        _pendingLeader = null;
+        _isWaitingForChord = false;
         _isRecording = false;
+
         lock (_syncLock)
         {
             _activeRecorders.Remove(this);
@@ -134,7 +184,22 @@ public partial class HotkeyRecorderControl : UserControl
         // Escape cancels recording
         if (key == Key.Escape)
         {
+            _pendingLeader = null;
+            _isWaitingForChord = false;
             StopRecording(cancelled: true);
+            e.Handled = true;
+            return;
+        }
+
+        // Enter key commits single leader stroke if user was waiting for chord
+        if (key == Key.Return && _isWaitingForChord && _pendingLeader != null)
+        {
+            var single = _pendingLeader;
+            _pendingLeader = null;
+            _isWaitingForChord = false;
+            Binding = single;
+            BindingRecorded?.Invoke(this, single);
+            StopRecording(cancelled: false);
             e.Handled = true;
             return;
         }
@@ -142,10 +207,17 @@ public partial class HotkeyRecorderControl : UserControl
         // Collect current modifiers
         var modifiers = GetCurrentModifiers();
 
-        // If the pressed key is a modifier, show current progress (e.g. "Ctrl + ...")
+        // If the pressed key is a modifier, show current progress
         if (IsModifierKey(key))
         {
-            ShowIncompleteModifierPreview(modifiers);
+            if (_isWaitingForChord && _pendingLeader != null)
+            {
+                ShowIncompleteChordPreview(_pendingLeader, modifiers);
+            }
+            else
+            {
+                ShowIncompleteModifierPreview(modifiers);
+            }
             e.Handled = true;
             return;
         }
@@ -154,12 +226,41 @@ public partial class HotkeyRecorderControl : UserControl
         int vk = KeyInterop.VirtualKeyFromKey(key);
         string keyName = FormatKeyName(key);
 
-        var newBinding = new ShortcutBinding(modifiers, vk, keyName);
-        Binding = newBinding;
-        BindingRecorded?.Invoke(this, newBinding);
+        if (!_isWaitingForChord)
+        {
+            // First stroke (Leader) recorded!
+            _pendingLeader = new ShortcutBinding(modifiers, vk, keyName);
+            _isWaitingForChord = true;
 
-        StopRecording(cancelled: false);
-        e.Handled = true;
+            KeyBadge.Visibility = Visibility.Visible;
+            HotkeyDisplayText.Text = $"{_pendingLeader.PrimaryDisplayText}, ...";
+            PromptText.Visibility = Visibility.Collapsed;
+            ChordHintText.Text = "Press 2nd key for chord (or Enter to finish)";
+            ChordHintText.Visibility = Visibility.Visible;
+            e.Handled = true;
+            return;
+        }
+        else
+        {
+            // Second stroke (Chord) recorded!
+            var chordBinding = new ShortcutBinding(
+                _pendingLeader!.Modifiers,
+                _pendingLeader.VirtualKey,
+                _pendingLeader.KeyName,
+                modifiers,
+                vk,
+                keyName);
+
+            _pendingLeader = null;
+            _isWaitingForChord = false;
+            ChordHintText.Visibility = Visibility.Collapsed;
+
+            Binding = chordBinding;
+            BindingRecorded?.Invoke(this, chordBinding);
+
+            StopRecording(cancelled: false);
+            e.Handled = true;
+        }
     }
 
     private void HotkeyRecorderControl_PreviewKeyUp(object sender, KeyEventArgs e)
@@ -167,16 +268,29 @@ public partial class HotkeyRecorderControl : UserControl
         if (!_isRecording) return;
 
         var modifiers = GetCurrentModifiers();
-        if (modifiers == ModifierKeys.None)
+        if (_isWaitingForChord && _pendingLeader != null)
         {
-            // All modifiers were released without a trigger key
-            PromptText.Text = "Press keys now...";
-            PromptText.Visibility = Visibility.Visible;
-            KeyBadge.Visibility = Visibility.Collapsed;
+            if (modifiers == ModifierKeys.None)
+            {
+                HotkeyDisplayText.Text = $"{_pendingLeader.PrimaryDisplayText}, ...";
+            }
+            else
+            {
+                ShowIncompleteChordPreview(_pendingLeader, modifiers);
+            }
         }
         else
         {
-            ShowIncompleteModifierPreview(modifiers);
+            if (modifiers == ModifierKeys.None)
+            {
+                PromptText.Text = "Press keys now...";
+                PromptText.Visibility = Visibility.Visible;
+                KeyBadge.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                ShowIncompleteModifierPreview(modifiers);
+            }
         }
 
         e.Handled = true;
@@ -196,6 +310,21 @@ public partial class HotkeyRecorderControl : UserControl
         PromptText.Visibility = Visibility.Collapsed;
         HotkeyDisplayText.Text = sb.ToString();
         KeyBadge.Visibility = Visibility.Visible;
+    }
+
+    private void ShowIncompleteChordPreview(ShortcutBinding leader, ModifierKeys chordModifiers)
+    {
+        var sb = new StringBuilder();
+        sb.Append(leader.PrimaryDisplayText).Append(", ");
+        if (chordModifiers.HasFlag(ModifierKeys.Control)) sb.Append("Ctrl + ");
+        if (chordModifiers.HasFlag(ModifierKeys.Alt)) sb.Append("Alt + ");
+        if (chordModifiers.HasFlag(ModifierKeys.Shift)) sb.Append("Shift + ");
+        if (chordModifiers.HasFlag(ModifierKeys.Windows)) sb.Append("Win + ");
+        sb.Append("...");
+
+        HotkeyDisplayText.Text = sb.ToString();
+        KeyBadge.Visibility = Visibility.Visible;
+        PromptText.Visibility = Visibility.Collapsed;
     }
 
     private static ModifierKeys GetCurrentModifiers()
@@ -245,9 +374,11 @@ public partial class HotkeyRecorderControl : UserControl
 
     private void ClearButton_Click(object sender, RoutedEventArgs e)
     {
+        _pendingLeader = null;
+        _isWaitingForChord = false;
         Binding = null;
         BindingRecorded?.Invoke(this, null);
-        StopRecording(cancelled: false);
+        StopRecording(cancelled: true);
         e.Handled = true;
     }
 }

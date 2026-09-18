@@ -15,7 +15,7 @@ public class ContextFilterService : IContextFilterService
     private IntPtr _cachedHwnd;
     private string? _cachedUrl;
     private DateTime _cacheTimestamp = DateTime.MinValue;
-    private static readonly TimeSpan CacheDuration = TimeSpan.FromMilliseconds(350);
+    private static readonly TimeSpan CacheDuration = TimeSpan.FromMilliseconds(500);
 
     public IntPtr LastExternalForegroundHwnd { get; set; } = IntPtr.Zero;
 
@@ -70,27 +70,39 @@ public class ContextFilterService : IContextFilterService
 
         try
         {
-            var root = AutomationElement.FromHandle(hWnd);
-            if (root != null)
+            var extractionTask = Task.Run(() =>
             {
-                // Find edit controls (address bar)
-                var editCondition = new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Edit);
-                var edits = root.FindAll(TreeScope.Descendants, editCondition);
-
-                foreach (AutomationElement edit in edits)
+                var root = AutomationElement.FromHandle(hWnd);
+                if (root != null)
                 {
-                    if (edit.TryGetCurrentPattern(ValuePattern.Pattern, out var patternObj) &&
-                        patternObj is ValuePattern valPattern)
+                    // Find edit controls (address bar)
+                    var editCondition = new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Edit);
+                    var edits = root.FindAll(TreeScope.Descendants, editCondition);
+
+                    foreach (AutomationElement edit in edits)
                     {
-                        var val = valPattern.Current.Value?.Trim();
-                        if (!string.IsNullOrWhiteSpace(val) &&
-                            (val.Contains('.') || val.Contains("://") || val.StartsWith("localhost", StringComparison.OrdinalIgnoreCase) || val.StartsWith("about:", StringComparison.OrdinalIgnoreCase)))
+                        if (edit.TryGetCurrentPattern(ValuePattern.Pattern, out var patternObj) &&
+                            patternObj is ValuePattern valPattern)
                         {
-                            detectedUrl = val;
-                            break;
+                            var val = valPattern.Current.Value?.Trim();
+                            if (!string.IsNullOrWhiteSpace(val) &&
+                                (val.Contains('.') || val.Contains("://") || val.StartsWith("localhost", StringComparison.OrdinalIgnoreCase) || val.StartsWith("about:", StringComparison.OrdinalIgnoreCase)))
+                            {
+                                return val;
+                            }
                         }
                     }
                 }
+                return null;
+            });
+
+            if (extractionTask.Wait(45))
+            {
+                detectedUrl = extractionTask.Result;
+            }
+            else
+            {
+                _logger.Debug("UI Automation URL extraction timed out (>45ms) for window {HWnd}", hWnd);
             }
         }
         catch (Exception ex)
