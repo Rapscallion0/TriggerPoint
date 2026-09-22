@@ -33,9 +33,14 @@
     <Thickness x:Key="TreeItemRowMargin">0,1,0,1</Thickness>
 
     <!-- Base Control Styles -->
-    <Style TargetType="TextBlock">
+    <Style TargetType="Window">
         <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+    </Style>
+
+    <Style TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
         <Setter Property="FontSize" Value="13"/>
     </Style>
 
@@ -198,6 +203,7 @@
     <Style x:Key="AccentButtonStyle" TargetType="Button">
         <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
         <Setter Property="Foreground" Value="White"/>
+        <Setter Property="TextElement.Foreground" Value="White"/>
         <Setter Property="FontSize" Value="13"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="Padding" Value="14,8"/>
@@ -206,12 +212,32 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
+                    <ControlTemplate.Resources>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground" Value="White"/>
+                        </Style>
+                        <Style TargetType="AccessText">
+                            <Setter Property="Foreground" Value="White"/>
+                        </Style>
+                    </ControlTemplate.Resources>
                     <Border x:Name="border"
                             Background="{TemplateBinding Background}"
                             CornerRadius="6"
                             Padding="{TemplateBinding Padding}"
-                            SnapsToDevicePixels="True">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            SnapsToDevicePixels="True"
+                            TextElement.Foreground="White">
+                        <Border.Resources>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="White"/>
+                            </Style>
+                            <Style TargetType="AccessText">
+                                <Setter Property="Foreground" Value="White"/>
+                            </Style>
+                        </Border.Resources>
+                        <ContentPresenter HorizontalAlignment="Center" 
+                                          VerticalAlignment="Center"
+                                          RecognizesAccessKey="True"
+                                          TextElement.Foreground="White"/>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
@@ -221,7 +247,10 @@
                             <Setter TargetName="border" Property="Opacity" Value="0.85"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter TargetName="border" Property="Opacity" Value="0.4"/>
+                            <Setter TargetName="border" Property="Opacity" Value="0.45"/>
+                            <Setter TargetName="border" Property="TextElement.Foreground" Value="White"/>
+                            <Setter Property="Foreground" Value="White"/>
+                            <Setter Property="TextElement.Foreground" Value="White"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -231,6 +260,47 @@
 
     <!-- Modern Primary Button Style Alias -->
     <Style x:Key="PrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}"/>
+
+    <!-- Segmented / Pill Toggle Button Style -->
+    <Style x:Key="SegmentedToggleButtonStyle" TargetType="Button">
+        <Style.Resources>
+            <Style TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            </Style>
+            <Style TargetType="AccessText">
+                <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            </Style>
+        </Style.Resources>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        <Setter Property="FontSize" Value="11.5"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Padding" Value="10,4"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="border"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="4"
+                            Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True"
+                            TextElement.Foreground="{TemplateBinding Foreground}">
+                        <ContentPresenter HorizontalAlignment="Center" 
+                                          VerticalAlignment="Center"
+                                          RecognizesAccessKey="True"
+                                          TextElement.Foreground="{TemplateBinding Foreground}"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="border" Property="Opacity" Value="0.85"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
 
     <!-- Modern Secondary Button Style -->
     <Style x:Key="SecondaryButtonStyle" TargetType="Button">

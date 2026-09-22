@@ -336,8 +336,6 @@ public class TriggerTreeItemViewModel : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(DropBelowVisibility)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(DropInsideBorderBrush)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(DropInsideBackgroundBrush)));
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsSelected)));
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsExpanded)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsEnabled)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ItemOpacity)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(DisabledBadgeVisibility)));
@@ -576,6 +574,15 @@ public partial class SettingsWindow : Window
         ThemeManager.ThemeChanged += (s, theme) =>
         {
             ThemeManager.ApplyWindowIcons(this);
+
+            if (_selectedItem?.ActionType == ActionType.Workflow)
+            {
+                RebuildWorkflowStepCards(_activeWorkflowStepId);
+                RebuildWorkflowMiniMap();
+                RebuildWorkflowVariablesUI();
+                UpdateMiniMapToggleVisualState();
+                UpdateToggleAllExpandButtonUi();
+            }
         };
 
         var assembly = System.Reflection.Assembly.GetExecutingAssembly();
@@ -630,14 +637,33 @@ public partial class SettingsWindow : Window
             {
                 await LoadDataAsync();
             }
+
+            if (App.LatestAvailableUpdate != null)
+            {
+                NotifyUpdateAvailable(App.LatestAvailableUpdate);
+            }
         };
     }
 
     private void SetDirty(bool isDirty = true)
     {
+        var vm = FindViewModel(_selectedItem);
+        if (vm?.IsRecycledItem == true || vm?.IsRecycleBinRoot == true)
+        {
+            _isItemDirty = false;
+            if (SaveBtn != null)
+            {
+                SaveBtn.IsEnabled = false;
+                SaveBtn.Visibility = Visibility.Collapsed;
+            }
+            if (RevertItemBtn != null) RevertItemBtn.IsEnabled = false;
+            return;
+        }
+
         _isItemDirty = isDirty;
         if (SaveBtn != null)
         {
+            SaveBtn.Visibility = Visibility.Visible;
             SaveBtn.IsEnabled = isDirty;
         }
         if (RevertItemBtn != null)
@@ -825,14 +851,29 @@ public partial class SettingsWindow : Window
     private void OnFormEdited()
     {
         if (_isUpdatingForm || _selectedItem == null) return;
+        var vm = FindViewModel(_selectedItem);
+        if (vm?.IsRecycledItem == true || vm?.IsRecycleBinRoot == true) return;
+
         CommitCurrentFormChanges();
         bool isChanged = !IsItemMatchingSnapshot(_selectedItem, _originalItemSnapshot);
+        if (!isChanged && HasAnyTagInputPendingText())
+        {
+            isChanged = true;
+        }
         SetDirty(isChanged);
+    }
+
+    private bool HasAnyTagInputPendingText()
+    {
+        return (AllowedProcessesTagInput?.HasPendingInput == true)
+            || (ExcludedProcessesTagInput?.HasPendingInput == true)
+            || (AllowedUrlsTagInput?.HasPendingInput == true)
+            || (ExcludedUrlsTagInput?.HasPendingInput == true);
     }
 
     internal static bool IsItemMatchingSnapshot(TriggerItem current, TriggerItem? snapshot)
     {
-        if (snapshot == null) return true;
+        if (snapshot == null) return false;
         try
         {
             string currentJson = GetComparisonJson(current);
@@ -1210,6 +1251,11 @@ public partial class SettingsWindow : Window
 
         if (e.NewValue is TriggerTreeItemViewModel vm)
         {
+            if (_selectedItem != null && _selectedItem.Id == vm.Item.Id)
+            {
+                return;
+            }
+
             if (_isItemDirty && _selectedItem != null && _selectedItem.Id != vm.Item.Id)
             {
                 if (!PromptSaveIfDirty())
@@ -1251,9 +1297,14 @@ public partial class SettingsWindow : Window
                 EditorHeaderTitle.Text = "Recycle Bin";
                 if (EditorTypeBadge != null) EditorTypeBadge.Visibility = Visibility.Collapsed;
                 if (EditorAdminBadge != null) EditorAdminBadge.Visibility = Visibility.Collapsed;
+                if (ItemEnabledCheck != null) ItemEnabledCheck.Visibility = Visibility.Collapsed;
                 if (DeleteItemBtn != null) DeleteItemBtn.Visibility = Visibility.Collapsed;
                 if (TestActionBtn != null) TestActionBtn.Visibility = Visibility.Collapsed;
-                if (SaveBtn != null) SaveBtn.IsEnabled = false;
+                if (SaveBtn != null)
+                {
+                    SaveBtn.IsEnabled = false;
+                    SaveBtn.Visibility = Visibility.Collapsed;
+                }
                 if (RevertItemBtn != null) RevertItemBtn.Visibility = Visibility.Collapsed;
 
                 if (RecycleBinCountDetailText != null)
@@ -1288,9 +1339,19 @@ public partial class SettingsWindow : Window
                     EditorPanel.IsEnabled = false;
                     EditorPanel.Opacity = 0.6;
                 }
+                if (ItemEnabledCheck != null)
+                {
+                    ItemEnabledCheck.Visibility = Visibility.Visible;
+                    ItemEnabledCheck.IsEnabled = false;
+                    ItemEnabledCheck.ToolTip = "Deleted items in the Recycle Bin cannot be enabled or disabled. Restore the item first.";
+                }
                 if (DeleteItemBtn != null) DeleteItemBtn.Visibility = Visibility.Collapsed;
                 if (TestActionBtn != null) TestActionBtn.Visibility = Visibility.Collapsed;
-                if (SaveBtn != null) SaveBtn.IsEnabled = false;
+                if (SaveBtn != null)
+                {
+                    SaveBtn.IsEnabled = false;
+                    SaveBtn.Visibility = Visibility.Collapsed;
+                }
                 if (RevertItemBtn != null) RevertItemBtn.Visibility = Visibility.Collapsed;
                 if (RestoreRecycledItemBtn != null) RestoreRecycledItemBtn.IsEnabled = true;
                 if (PermanentlyDeleteRecycledItemBtn != null) PermanentlyDeleteRecycledItemBtn.IsEnabled = true;
@@ -1309,6 +1370,12 @@ public partial class SettingsWindow : Window
                     EditorPanel.IsEnabled = true;
                     EditorPanel.Opacity = 1.0;
                 }
+                if (ItemEnabledCheck != null)
+                {
+                    ItemEnabledCheck.Visibility = Visibility.Visible;
+                    ItemEnabledCheck.IsEnabled = true;
+                    ItemEnabledCheck.ToolTip = "When unchecked, this item is disabled and its shortcut is not registered";
+                }
                 if (DeleteItemBtn != null) DeleteItemBtn.Visibility = Visibility.Visible;
                 if (RevertItemBtn != null)
                 {
@@ -1318,6 +1385,11 @@ public partial class SettingsWindow : Window
                 if (TestActionBtn != null)
                 {
                     TestActionBtn.Visibility = item.ActionType == ActionType.Folder ? Visibility.Collapsed : Visibility.Visible;
+                }
+                if (SaveBtn != null)
+                {
+                    SaveBtn.Visibility = Visibility.Visible;
+                    SaveBtn.IsEnabled = _isItemDirty;
                 }
             }
 
@@ -1497,7 +1569,9 @@ public partial class SettingsWindow : Window
 
         if (TestActionBtn != null)
         {
-            TestActionBtn.Visibility = actionType == ActionType.Folder ? Visibility.Collapsed : Visibility.Visible;
+            var currentVm = FindViewModel(_selectedItem);
+            bool isRecycled = currentVm?.IsRecycledItem == true || currentVm?.IsRecycleBinRoot == true;
+            TestActionBtn.Visibility = (actionType == ActionType.Folder || isRecycled) ? Visibility.Collapsed : Visibility.Visible;
         }
 
         if (PresentationModeGroup != null)
@@ -1627,6 +1701,8 @@ public partial class SettingsWindow : Window
     private void CommitCurrentFormChanges()
     {
         if (_selectedItem == null || _isUpdatingForm) return;
+        var currentVm = FindViewModel(_selectedItem);
+        if (currentVm?.IsRecycledItem == true || currentVm?.IsRecycleBinRoot == true) return;
 
         _selectedItem.Name = ItemNameBox.Text.Trim();
         _selectedItem.Description = ItemDescBox.Text.Trim();
@@ -1643,28 +1719,34 @@ public partial class SettingsWindow : Window
             _selectedItem.AutoNumberMode = (FolderAutoNumberMode)Math.Max(0, AutoNumberModeCombo.SelectedIndex);
         }
         _selectedItem.Hotkey = HotkeyRecorder.Binding;
-        _selectedItem.AcceleratorKey = AcceleratorBox.Text.Trim();
+        _selectedItem.AcceleratorKey = string.IsNullOrWhiteSpace(AcceleratorBox.Text) ? null : AcceleratorBox.Text.Trim();
 
-        _selectedItem.Payload.Command = ShellCommandBox.Text.Trim();
-        _selectedItem.Payload.Arguments = ShellArgsBox.Text.Trim();
-        _selectedItem.Payload.WorkingDirectory = ShellWorkDirBox.Text.Trim();
-        _selectedItem.Payload.RunAsAdmin = ShellRunAsAdminCheck.IsChecked == true;
-        if (ShellDisplayTargetCombo?.SelectedItem is ComboBoxItem dispItem)
+        if (_selectedItem.ActionType == ActionType.Shell)
         {
-            string? tagStr = dispItem.Tag?.ToString();
-            _selectedItem.Payload.TargetDisplay = string.IsNullOrWhiteSpace(tagStr) ? null : tagStr;
+            _selectedItem.Payload.Command = ShellCommandBox.Text.Trim();
+            _selectedItem.Payload.Arguments = ShellArgsBox.Text.Trim();
+            _selectedItem.Payload.WorkingDirectory = ShellWorkDirBox.Text.Trim();
+            _selectedItem.Payload.RunAsAdmin = ShellRunAsAdminCheck.IsChecked == true;
+            if (ShellDisplayTargetCombo?.SelectedItem is ComboBoxItem dispItem)
+            {
+                string? tagStr = dispItem.Tag?.ToString();
+                _selectedItem.Payload.TargetDisplay = string.IsNullOrWhiteSpace(tagStr) ? null : tagStr;
+            }
         }
 
-        _selectedItem.Payload.SnippetContentType = _currentSnippetContentType;
-        if (_currentSnippetContentType == SnippetContentType.RichText)
+        if (_selectedItem.ActionType == ActionType.Snippet)
         {
-            _selectedItem.Payload.SnippetRtf = RichTextService.SaveToRtf(SnippetRichTextBox.Document);
-            _selectedItem.Payload.SnippetTemplate = RichTextService.ExtractPlainText(SnippetRichTextBox.Document);
-        }
-        else
-        {
-            _selectedItem.Payload.SnippetTemplate = SnippetTemplateBox.Text;
-            _selectedItem.Payload.SnippetRtf = string.Empty;
+            _selectedItem.Payload.SnippetContentType = _currentSnippetContentType;
+            if (_currentSnippetContentType == SnippetContentType.RichText)
+            {
+                _selectedItem.Payload.SnippetRtf = RichTextService.SaveToRtf(SnippetRichTextBox.Document);
+                _selectedItem.Payload.SnippetTemplate = RichTextService.ExtractPlainText(SnippetRichTextBox.Document);
+            }
+            else
+            {
+                _selectedItem.Payload.SnippetTemplate = SnippetTemplateBox.Text;
+                _selectedItem.Payload.SnippetRtf = string.Empty;
+            }
         }
 
         if (_selectedItem.ActionType == ActionType.Macro && MacroEditor != null)
@@ -1672,15 +1754,18 @@ public partial class SettingsWindow : Window
             _selectedItem.Payload.Macro = MacroEditor.CurrentMacro;
         }
 
-        // WorkflowMode is updated directly by ConvertToJsBtn_Click and ReturnToVisualBtn_Click;
-        // read the current container state as the source of truth.
-        _selectedItem.Payload.WorkflowMode =
-            WorkflowScriptContainer?.Visibility == Visibility.Visible
-                ? WorkflowMode.Script
-                : WorkflowMode.Visual;
-        if (WorkflowScriptEditor != null)
+        if (_selectedItem.ActionType == ActionType.Workflow)
         {
-            _selectedItem.Payload.ScriptSource = WorkflowScriptEditor.Text;
+            // WorkflowMode is updated directly by ConvertToJsBtn_Click and ReturnToVisualBtn_Click;
+            // read the current container state as the source of truth.
+            _selectedItem.Payload.WorkflowMode =
+                WorkflowScriptContainer?.Visibility == Visibility.Visible
+                    ? WorkflowMode.Script
+                    : WorkflowMode.Visual;
+            if (WorkflowScriptEditor != null)
+            {
+                _selectedItem.Payload.ScriptSource = WorkflowScriptEditor.Text;
+            }
         }
 
         _selectedItem.ContextFilter.AllowedProcesses = AllowedProcessesTagInput.GetTags();
@@ -2906,6 +2991,13 @@ public partial class SettingsWindow : Window
 
     private async Task<bool> SaveConfigurationCoreAsync()
     {
+        var currentVm = FindViewModel(_selectedItem);
+        if (currentVm?.IsRecycledItem == true || currentVm?.IsRecycleBinRoot == true)
+        {
+            SetDirty(false);
+            return false;
+        }
+
         AllowedProcessesTagInput?.CommitPendingInput();
         ExcludedProcessesTagInput?.CommitPendingInput();
         AllowedUrlsTagInput?.CommitPendingInput();
@@ -2998,7 +3090,11 @@ public partial class SettingsWindow : Window
         if (_logManagerService == null) return;
         if (!PromptSaveIfDirty()) return;
 
-        var dlg = new ApplicationSettingsWindow(_repository, _logManagerService, _updateService)
+        var initialCategory = (_latestAvailableUpdate?.IsUpdateAvailable == true && _latestAvailableUpdate.LatestUpdate != null)
+            ? ApplicationSettingsWindow.SettingsCategory.Updates
+            : ApplicationSettingsWindow.SettingsCategory.Appearance;
+
+        var dlg = new ApplicationSettingsWindow(_repository, _logManagerService, _updateService, initialCategory)
         {
             Owner = this
         };
@@ -3035,10 +3131,27 @@ public partial class SettingsWindow : Window
                 UpdateBadgeBtn.Content = $"✨ Update Available (v{updateResult.LatestUpdate.Version})";
                 UpdateBadgeBtn.ToolTip = $"Click to inspect and install TriggerPoint v{updateResult.LatestUpdate.Version}";
                 UpdateBadgeBtn.Visibility = Visibility.Visible;
+
+                if (AppSettingsUpdateBadge != null)
+                {
+                    AppSettingsUpdateBadge.Visibility = Visibility.Visible;
+                }
+                if (AppSettingsBtn != null)
+                {
+                    AppSettingsBtn.ToolTip = $"Application Settings (Update v{updateResult.LatestUpdate.Version} available)";
+                }
             }
             else
             {
                 UpdateBadgeBtn.Visibility = Visibility.Collapsed;
+                if (AppSettingsUpdateBadge != null)
+                {
+                    AppSettingsUpdateBadge.Visibility = Visibility.Collapsed;
+                }
+                if (AppSettingsBtn != null)
+                {
+                    AppSettingsBtn.ToolTip = "Application Settings (Log Level, Log Retention, Theme, Startup)";
+                }
             }
         });
     }
@@ -3063,7 +3176,12 @@ public partial class SettingsWindow : Window
                 if (!string.IsNullOrEmpty(settings.IgnoredUpdateVersion) &&
                     string.Equals(settings.IgnoredUpdateVersion, _latestAvailableUpdate?.LatestUpdate?.Version, StringComparison.OrdinalIgnoreCase))
                 {
-                    Dispatcher.Invoke(() => UpdateBadgeBtn.Visibility = Visibility.Collapsed);
+                    Dispatcher.Invoke(() =>
+                    {
+                        UpdateBadgeBtn.Visibility = Visibility.Collapsed;
+                        if (AppSettingsUpdateBadge != null) AppSettingsUpdateBadge.Visibility = Visibility.Collapsed;
+                        if (AppSettingsBtn != null) AppSettingsBtn.ToolTip = "Application Settings (Log Level, Log Retention, Theme, Startup)";
+                    });
                 }
             }
             catch { }
@@ -3677,10 +3795,20 @@ public partial class SettingsWindow : Window
     private void ItemEnabledCheck_Click(object sender, RoutedEventArgs e)
     {
         if (_selectedItem == null || _isUpdatingForm) return;
+        var vm = FindViewModel(_selectedItem);
+        if (vm?.IsRecycledItem == true || vm?.IsRecycleBinRoot == true)
+        {
+            if (ItemEnabledCheck != null)
+            {
+                ItemEnabledCheck.IsChecked = _selectedItem.IsEnabled;
+                UpdateItemEnabledCheckUi(_selectedItem.IsEnabled);
+            }
+            return;
+        }
+
         _selectedItem.IsEnabled = ItemEnabledCheck.IsChecked == true;
         UpdateItemEnabledCheckUi(_selectedItem.IsEnabled);
         SetDirty(true);
-        var vm = FindViewModel(_selectedItem);
         vm?.NotifyUpdated();
         RegisterShortcuts();
         RefreshTreeConflictStates();
@@ -4049,8 +4177,13 @@ public partial class SettingsWindow : Window
             if (EditorTypeBadge != null) EditorTypeBadge.Visibility = Visibility.Collapsed;
             if (EditorAdminBadge != null) EditorAdminBadge.Visibility = Visibility.Collapsed;
             if (EditorPanel != null) EditorPanel.Visibility = Visibility.Collapsed;
+            if (ItemEnabledCheck != null) ItemEnabledCheck.Visibility = Visibility.Collapsed;
             SyncWorkflowMiniMapVisibility(isWorkflow: false);
-            if (SaveBtn != null) SaveBtn.IsEnabled = false;
+            if (SaveBtn != null)
+            {
+                SaveBtn.IsEnabled = false;
+                SaveBtn.Visibility = Visibility.Collapsed;
+            }
             if (TestActionBtn != null) TestActionBtn.Visibility = Visibility.Collapsed;
             if (DeleteItemBtn != null) DeleteItemBtn.Visibility = Visibility.Collapsed;
 
@@ -4344,8 +4477,11 @@ public partial class SettingsWindow : Window
 
     private async void TestActionBtn_Click(object sender, RoutedEventArgs e)
     {
-        CommitCurrentFormChanges();
         if (_selectedItem == null) return;
+        var vm = FindViewModel(_selectedItem);
+        if (vm?.IsRecycledItem == true || vm?.IsRecycleBinRoot == true) return;
+
+        CommitCurrentFormChanges();
 
         StatusText.Text = $"Testing action '{_selectedItem.Name}'...";
         await _executor.ExecuteAsync(_selectedItem);
@@ -4362,12 +4498,12 @@ public partial class SettingsWindow : Window
         if (_shortcutListener.IsSnoozed)
         {
             SnoozeToggleBtn.Content = "🔕 Snoozed";
-            SnoozeToggleBtn.Foreground = (System.Windows.Media.Brush)Application.Current.FindResource("WarningBrush");
+            SnoozeToggleBtn.Foreground = Application.Current.TryFindResource("WarningBrush") as System.Windows.Media.Brush ?? Brushes.Orange;
         }
         else
         {
             SnoozeToggleBtn.Content = "🔔 Active";
-            SnoozeToggleBtn.Foreground = (System.Windows.Media.Brush)Application.Current.FindResource("SuccessBrush");
+            SnoozeToggleBtn.Foreground = Application.Current.TryFindResource("SuccessBrush") as System.Windows.Media.Brush ?? Brushes.Green;
         }
     }
 
@@ -4388,8 +4524,9 @@ public partial class SettingsWindow : Window
         }
     }
 
-    private TriggerTreeItemViewModel? FindViewModel(TriggerItem item)
+    private TriggerTreeItemViewModel? FindViewModel(TriggerItem? item)
     {
+        if (item == null) return null;
         return FindViewModelRecursive(_treeRoots, item.Id);
     }
 
@@ -5911,6 +6048,7 @@ public partial class SettingsWindow : Window
             return;
 
         InheritedRulesTagsPanel.Children.Clear();
+        InheritParentRulesCheck.IsChecked = item.InheritContextFilter;
 
         if (!item.ParentId.HasValue)
         {

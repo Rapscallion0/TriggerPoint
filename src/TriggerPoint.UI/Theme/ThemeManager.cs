@@ -115,6 +115,8 @@ public static class ThemeManager
             res["BorderBrush"] = new SolidColorBrush(Color.FromRgb(55, 56, 70));          // #373846
             res["BorderSubtleBrush"] = new SolidColorBrush(Color.FromRgb(40, 41, 52));    // #282934
             res["TextPrimaryBrush"] = new SolidColorBrush(Color.FromRgb(242, 243, 245));  // #F2F3F5
+            res[SystemColors.ControlTextBrushKey] = res["TextPrimaryBrush"];
+            res[SystemColors.WindowTextBrushKey] = res["TextPrimaryBrush"];
             res["TextSecondaryBrush"] = new SolidColorBrush(Color.FromRgb(160, 163, 175));// #A0A3AF
             res["TextMutedBrush"] = new SolidColorBrush(Color.FromRgb(115, 118, 130));    // #737682
             res["AccentBrush"] = new SolidColorBrush(Color.FromRgb(99, 102, 241));        // #6366F1 Indigo
@@ -155,10 +157,14 @@ public static class ThemeManager
 
             try
             {
-                res["AppIconSource"] = BitmapFrame.Create(
-                    new Uri("pack://application:,,,/TriggerPoint;component/Assets/TriggerPoint.ico", UriKind.Absolute),
-                    BitmapCreateOptions.None,
-                    BitmapCacheOption.Default);
+                var bi = new BitmapImage();
+                bi.BeginInit();
+                bi.UriSource = new Uri("pack://application:,,,/TriggerPoint;component/Assets/TriggerPoint.ico", UriKind.Absolute);
+                bi.CacheOption = BitmapCacheOption.OnLoad;
+                bi.CreateOptions = BitmapCreateOptions.None;
+                bi.EndInit();
+                if (bi.CanFreeze) bi.Freeze();
+                res["AppIconSource"] = bi;
             }
             catch { }
         }
@@ -174,6 +180,8 @@ public static class ThemeManager
             res["BorderBrush"] = new SolidColorBrush(Color.FromRgb(215, 222, 232));       // #D7DEE8 Defined border
             res["BorderSubtleBrush"] = new SolidColorBrush(Color.FromRgb(226, 232, 240)); // #E2E8F0
             res["TextPrimaryBrush"] = new SolidColorBrush(Color.FromRgb(15, 23, 42));     // #0F172A
+            res[SystemColors.ControlTextBrushKey] = res["TextPrimaryBrush"];
+            res[SystemColors.WindowTextBrushKey] = res["TextPrimaryBrush"];
             res["TextSecondaryBrush"] = new SolidColorBrush(Color.FromRgb(71, 85, 105));  // #475569
             res["TextMutedBrush"] = new SolidColorBrush(Color.FromRgb(148, 163, 184));    // #94A3B8
             res["AccentBrush"] = new SolidColorBrush(Color.FromRgb(79, 70, 229));         // #4F46E5
@@ -214,10 +222,14 @@ public static class ThemeManager
 
             try
             {
-                res["AppIconSource"] = BitmapFrame.Create(
-                    new Uri("pack://application:,,,/TriggerPoint;component/Assets/TriggerPoint.Light.ico", UriKind.Absolute),
-                    BitmapCreateOptions.None,
-                    BitmapCacheOption.Default);
+                var bi = new BitmapImage();
+                bi.BeginInit();
+                bi.UriSource = new Uri("pack://application:,,,/TriggerPoint;component/Assets/TriggerPoint.Light.ico", UriKind.Absolute);
+                bi.CacheOption = BitmapCacheOption.OnLoad;
+                bi.CreateOptions = BitmapCreateOptions.None;
+                bi.EndInit();
+                if (bi.CanFreeze) bi.Freeze();
+                res["AppIconSource"] = bi;
             }
             catch { }
         }
@@ -252,13 +264,25 @@ public static class ThemeManager
             if (streamInfo?.Stream != null)
             {
                 using var stream = streamInfo.Stream;
-                int bigCx = NativeMethods.GetSystemMetrics(NativeMethods.SM_CXICON);
-                int bigCy = NativeMethods.GetSystemMetrics(NativeMethods.SM_CYICON);
+
+                // Modern Windows taskbar standard icon size is 48px at 96 DPI (100% display scaling).
+                // Scale with display DPI so high-DPI taskbars get 60/64/72/96px frames rather than clamping to 32px.
+                double dpiScale = 1.0;
+                try
+                {
+                    using var g = System.Drawing.Graphics.FromHwnd(IntPtr.Zero);
+                    dpiScale = g.DpiX / 96.0;
+                }
+                catch { }
+
+                int taskbarIconSize = (int)Math.Round(48.0 * dpiScale);
+                int bigCx = Math.Max(taskbarIconSize, NativeMethods.GetSystemMetrics(NativeMethods.SM_CXICON));
+                int bigCy = Math.Max(taskbarIconSize, NativeMethods.GetSystemMetrics(NativeMethods.SM_CYICON));
                 int smallCx = NativeMethods.GetSystemMetrics(NativeMethods.SM_CXSMICON);
                 int smallCy = NativeMethods.GetSystemMetrics(NativeMethods.SM_CYSMICON);
 
-                if (bigCx <= 0) bigCx = 32;
-                if (bigCy <= 0) bigCy = 32;
+                if (bigCx <= 0) bigCx = 48;
+                if (bigCy <= 0) bigCy = 48;
                 if (smallCx <= 0) smallCx = 16;
                 if (smallCy <= 0) smallCy = 16;
 
@@ -291,8 +315,18 @@ public static class ThemeManager
 
             if (Application.Current?.Resources["AppIconSource"] is ImageSource iconSource)
             {
+                if (iconSource.CanFreeze && !iconSource.IsFrozen)
+                {
+                    iconSource.Freeze();
+                }
                 window.Icon = iconSource;
             }
+
+            try
+            {
+                window.SetResourceReference(System.Windows.Controls.Control.ForegroundProperty, "TextPrimaryBrush");
+            }
+            catch { }
 
             var helper = new System.Windows.Interop.WindowInteropHelper(window);
             var hwnd = helper.Handle;

@@ -453,6 +453,12 @@ public partial class CommandPaletteView : Window
         UpdateScopeUi();
         LoadSortModePreference();
 
+        if (App.LatestAvailableUpdate?.IsUpdateAvailable == true && App.LatestAvailableUpdate.LatestUpdate != null)
+        {
+            AppSettingsUpdateBadge.Visibility = Visibility.Visible;
+            AppSettingsBtn.ToolTip = $"Application Settings (Update v{App.LatestAvailableUpdate.LatestUpdate.Version} available)";
+        }
+
         Loaded += (s, e) =>
         {
             _isLoaded = true;
@@ -1273,7 +1279,10 @@ public partial class CommandPaletteView : Window
     private void AppSettingsBtn_Click(object sender, RoutedEventArgs e)
     {
         SafeClose();
-        (Application.Current as App)?.ShowApplicationSettingsWindow();
+        var initialCategory = (App.LatestAvailableUpdate?.IsUpdateAvailable == true && App.LatestAvailableUpdate.LatestUpdate != null)
+            ? ApplicationSettingsWindow.SettingsCategory.Updates
+            : ApplicationSettingsWindow.SettingsCategory.Appearance;
+        (Application.Current as App)?.ShowApplicationSettingsWindow(initialCategory);
     }
 
     private void HelpOverlayBtn_Click(object sender, RoutedEventArgs e)

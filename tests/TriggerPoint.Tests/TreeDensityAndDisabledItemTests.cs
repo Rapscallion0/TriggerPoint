@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using TriggerPoint.Core.Contracts;
 using TriggerPoint.Core.Models;
@@ -354,5 +355,561 @@ public class TreeDensityAndDisabledItemTests
         thread.Join(5000);
 
         if (caughtEx != null) throw caughtEx;
+    }
+
+    [Fact]
+    public void SettingsWindow_EditingItemNameAndDesc_SetsDirtyState()
+    {
+        Exception? caughtEx = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                EnsureApplication();
+
+                var tempDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "TP_DirtyTest_" + Guid.NewGuid().ToString("N"));
+                System.IO.Directory.CreateDirectory(tempDir);
+                try
+                {
+                    var repo = new TriggerPoint.Infrastructure.Persistence.JsonConfigRepository(tempDir);
+                    var workflow = new TriggerItem
+                    {
+                        Id = Guid.NewGuid(),
+                        Name = "My Workflow",
+                        Description = "Original Desc",
+                        ActionType = ActionType.Workflow,
+                        Payload = new ActionPayload { WorkflowSteps = [] }
+                    };
+                    var snippet = new TriggerItem
+                    {
+                        Id = Guid.NewGuid(),
+                        Name = "My Snippet",
+                        Description = "Snippet Desc",
+                        ActionType = ActionType.Snippet,
+                        Payload = new ActionPayload { SnippetTemplate = "Hello" }
+                    };
+                    var macro = new TriggerItem
+                    {
+                        Id = Guid.NewGuid(),
+                        Name = "My Macro",
+                        Description = "Macro Desc",
+                        ActionType = ActionType.Macro,
+                        Payload = new ActionPayload { Macro = new MacroPayload() }
+                    };
+                    repo.SaveAsync(new[] { workflow, snippet, macro }).GetAwaiter().GetResult();
+
+                    using var listener = new TriggerPoint.Infrastructure.Win32.Win32HotkeyListener();
+                    var window = new SettingsWindow(repo, listener, new DummyExecutor());
+
+                    // 1. Workflow
+                    window.SelectTreeItem(workflow);
+                    Assert.False(window.SaveBtn.IsEnabled);
+
+                    window.ItemNameBox.Text = "My Workflow Renamed";
+                    Assert.True(window.SaveBtn.IsEnabled, "Editing workflow name should enable SaveBtn");
+
+                    window.ItemNameBox.Text = "My Workflow";
+                    Assert.False(window.SaveBtn.IsEnabled, "Reverting workflow name should disable SaveBtn");
+
+                    window.ItemDescBox.Text = "Changed Desc";
+                    Assert.True(window.SaveBtn.IsEnabled, "Editing workflow description should enable SaveBtn");
+
+                    window.ItemDescBox.Text = "Original Desc";
+                    Assert.False(window.SaveBtn.IsEnabled, "Reverting workflow description should disable SaveBtn");
+
+                    // 2. Snippet
+                    window.SelectTreeItem(snippet);
+                    Assert.False(window.SaveBtn.IsEnabled);
+
+                    window.ItemNameBox.Text = "My Snippet Renamed";
+                    Assert.True(window.SaveBtn.IsEnabled, "Editing snippet name should enable SaveBtn");
+
+                    window.ItemNameBox.Text = "My Snippet";
+                    Assert.False(window.SaveBtn.IsEnabled, "Reverting snippet name should disable SaveBtn");
+
+                    window.ItemDescBox.Text = "New Snippet Desc";
+                    Assert.True(window.SaveBtn.IsEnabled, "Editing snippet desc should enable SaveBtn");
+
+                    // 3. Macro
+                    typeof(SettingsWindow).GetMethod("SetDirty", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.Invoke(window, new object[] { false });
+                    window.SelectTreeItem(macro);
+                    Assert.False(window.SaveBtn.IsEnabled);
+
+                    window.ItemNameBox.Text = "My Macro Renamed";
+                    Assert.True(window.SaveBtn.IsEnabled, "Editing macro name should enable SaveBtn");
+
+                    window.ItemDescBox.Text = "New Macro Desc";
+                    Assert.True(window.SaveBtn.IsEnabled, "Editing macro desc should enable SaveBtn");
+
+                    // Revert before close
+                    typeof(SettingsWindow).GetMethod("SetDirty", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.Invoke(window, new object[] { false });
+                    window.Close();
+                }
+                finally
+                {
+                    try
+                    {
+                        if (System.IO.Directory.Exists(tempDir)) System.IO.Directory.Delete(tempDir, true);
+                    }
+                    catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                caughtEx = ex;
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join(5000);
+
+        if (caughtEx != null) throw caughtEx;
+    }
+
+    [Fact]
+    public void SettingsWindow_CreatedSnippetAndMacro_EditingNameAndDesc_SetsDirtyState()
+    {
+        Exception? caughtEx = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                EnsureApplication();
+
+                var tempDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "TP_CreateDirtyTest_" + Guid.NewGuid().ToString("N"));
+                System.IO.Directory.CreateDirectory(tempDir);
+                try
+                {
+                    var repo = new TriggerPoint.Infrastructure.Persistence.JsonConfigRepository(tempDir);
+                    using var listener = new TriggerPoint.Infrastructure.Win32.Win32HotkeyListener();
+                    var window = new SettingsWindow(repo, listener, new DummyExecutor());
+
+                    // Create Snippet
+                    window.CreateAndEditNewItem("My Snippet", ActionType.Snippet);
+                    Assert.True(window.SaveBtn.IsEnabled);
+
+                    // Save configuration
+                    var saveTask = (Task<bool>)typeof(SettingsWindow).GetMethod("SaveConfigurationCoreAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(window, null)!;
+                    saveTask.GetAwaiter().GetResult();
+                    Assert.False(window.SaveBtn.IsEnabled);
+
+                    // Edit name
+                    window.ItemNameBox.Text = "My Snippet Renamed";
+                    Assert.True(window.SaveBtn.IsEnabled, "Editing created snippet name should enable SaveBtn");
+
+                    // Revert name
+                    window.ItemNameBox.Text = "My Snippet";
+                    Assert.False(window.SaveBtn.IsEnabled, "Reverting created snippet name should disable SaveBtn");
+
+                    // Edit desc
+                    window.ItemDescBox.Text = "My Snippet Desc";
+                    Assert.True(window.SaveBtn.IsEnabled, "Editing created snippet desc should enable SaveBtn");
+
+                    // Save configuration
+                    saveTask = (Task<bool>)typeof(SettingsWindow).GetMethod("SaveConfigurationCoreAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(window, null)!;
+                    saveTask.GetAwaiter().GetResult();
+                    Assert.False(window.SaveBtn.IsEnabled);
+
+                    // Create Macro
+                    window.CreateAndEditNewItem("My Macro", ActionType.Macro);
+                    Assert.True(window.SaveBtn.IsEnabled);
+
+                    // Save configuration
+                    saveTask = (Task<bool>)typeof(SettingsWindow).GetMethod("SaveConfigurationCoreAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(window, null)!;
+                    saveTask.GetAwaiter().GetResult();
+                    Assert.False(window.SaveBtn.IsEnabled);
+
+                    // Edit name
+                    window.ItemNameBox.Text = "My Macro Renamed";
+                    Assert.True(window.SaveBtn.IsEnabled, "Editing created macro name should enable SaveBtn");
+
+                    // Revert name
+                    window.ItemNameBox.Text = "My Macro";
+                    Assert.False(window.SaveBtn.IsEnabled, "Reverting created macro name should disable SaveBtn");
+
+                    // Edit desc
+                    window.ItemDescBox.Text = "My Macro Desc";
+                    Assert.True(window.SaveBtn.IsEnabled, "Editing created macro desc should enable SaveBtn");
+
+                    window.Close();
+                }
+                finally
+                {
+                    try
+                    {
+                        if (System.IO.Directory.Exists(tempDir)) System.IO.Directory.Delete(tempDir, true);
+                    }
+                    catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                caughtEx = ex;
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join(10000);
+
+        if (caughtEx != null) throw caughtEx;
+    }
+
+    [Fact]
+    public void AccentButtonStyle_InLightMode_ResolvesWhiteForegroundOnChildText()
+    {
+        Exception? caughtEx = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                EnsureApplication();
+                TriggerPoint.UI.Theme.ThemeManager.ApplyTheme(TriggerPoint.UI.Theme.AppTheme.Light);
+
+                var win = new Window();
+                var sp = new StackPanel();
+                var accentStyle = Application.Current.TryFindResource("AccentButtonStyle") as Style;
+
+                var btnEnabled = new Button { Style = accentStyle, Content = "💾 Save" };
+                var btnDisabled = new Button { Style = accentStyle, Content = "💾 Save (Disabled)", IsEnabled = false };
+
+                sp.Children.Add(btnEnabled);
+                sp.Children.Add(btnDisabled);
+                win.Content = sp;
+
+                win.Show();
+                win.UpdateLayout();
+
+                // Inspect visual children of enabled button
+                TextBlock? tbEnabled = FindVisualChild<TextBlock>(btnEnabled);
+                Assert.NotNull(tbEnabled);
+                Assert.Equal(Colors.White, ((SolidColorBrush)tbEnabled.Foreground).Color);
+
+                // Inspect visual children of disabled button
+                TextBlock? tbDisabled = FindVisualChild<TextBlock>(btnDisabled);
+                Assert.NotNull(tbDisabled);
+                Assert.Equal(Colors.White, ((SolidColorBrush)tbDisabled.Foreground).Color);
+
+                win.Close();
+            }
+            catch (Exception ex)
+            {
+                caughtEx = ex;
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join(5000);
+
+        if (caughtEx != null) throw caughtEx;
+    }
+
+    [Fact]
+    public void Test_UserActualConfig_SnippetAndMacro()
+    {
+        Exception? caughtEx = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                EnsureApplication();
+
+                string configPath = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TriggerPoint");
+                if (!System.IO.File.Exists(System.IO.Path.Combine(configPath, "triggerpoint.json"))) return;
+
+                var repo = new TriggerPoint.Infrastructure.Persistence.JsonConfigRepository(configPath);
+                var items = repo.LoadAsync().GetAwaiter().GetResult().ToList();
+
+                var snippet = items.FirstOrDefault(x => x.ActionType == ActionType.Snippet);
+                var macro = items.FirstOrDefault(x => x.ActionType == ActionType.Macro);
+
+                using var listener = new TriggerPoint.Infrastructure.Win32.Win32HotkeyListener();
+                var window = new SettingsWindow(repo, listener, new DummyExecutor());
+
+                if (snippet != null)
+                {
+                    string origName = snippet.Name;
+                    string origDesc = snippet.Description ?? "";
+
+                    window.SelectTreeItem(snippet);
+                    Assert.False(window.SaveBtn.IsEnabled, "Snippet initial clean");
+
+                    window.ItemNameBox.Text = origName + " Edited";
+                    Assert.True(window.SaveBtn.IsEnabled, "Snippet name edit should set dirty");
+
+                    window.ItemNameBox.Text = origName;
+                    Assert.False(window.SaveBtn.IsEnabled, "Snippet name revert should unset dirty");
+
+                    window.ItemDescBox.Text = origDesc + " Edited";
+                    Assert.True(window.SaveBtn.IsEnabled, "Snippet desc edit should set dirty");
+
+                    window.ItemDescBox.Text = origDesc;
+                    Assert.False(window.SaveBtn.IsEnabled, "Snippet desc revert should unset dirty");
+                }
+
+                if (macro != null)
+                {
+                    string origName = macro.Name;
+                    string origDesc = macro.Description ?? "";
+
+                    typeof(SettingsWindow).GetMethod("SetDirty", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.Invoke(window, new object[] { false });
+                    window.SelectTreeItem(macro);
+                    Assert.False(window.SaveBtn.IsEnabled, "Macro initial clean");
+
+                    window.ItemNameBox.Text = origName + " Edited";
+                    Assert.True(window.SaveBtn.IsEnabled, "Macro name edit should set dirty");
+
+                    window.ItemNameBox.Text = origName;
+                    Assert.False(window.SaveBtn.IsEnabled, "Macro name revert should unset dirty");
+
+                    window.ItemDescBox.Text = origDesc + " Edited";
+                    Assert.True(window.SaveBtn.IsEnabled, "Macro desc edit should set dirty");
+
+                    window.ItemDescBox.Text = origDesc;
+                    Assert.False(window.SaveBtn.IsEnabled, "Macro desc revert should unset dirty");
+                }
+
+                typeof(SettingsWindow).GetMethod("SetDirty", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.Invoke(window, new object[] { false });
+                window.Close();
+            }
+            catch (Exception ex)
+            {
+                caughtEx = ex;
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join(10000);
+
+        if (caughtEx != null) throw caughtEx;
+    }
+
+    [Fact]
+    public void Test_RealUi_WithWindowShow()
+    {
+        Exception? caughtEx = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                EnsureApplication();
+                SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext(System.Windows.Threading.Dispatcher.CurrentDispatcher));
+
+                string configPath = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TriggerPoint");
+                if (!System.IO.File.Exists(System.IO.Path.Combine(configPath, "triggerpoint.json"))) return;
+
+                var repo = new TriggerPoint.Infrastructure.Persistence.JsonConfigRepository(configPath);
+                using var listener = new TriggerPoint.Infrastructure.Win32.Win32HotkeyListener();
+                var window = new SettingsWindow(repo, listener, new DummyExecutor());
+
+                window.Show();
+
+                // Wait for data load on the dispatcher
+                while (!(bool)typeof(SettingsWindow).GetField("_isDataLoaded", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(window)!)
+                {
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+                    Thread.Sleep(20);
+                }
+
+                // DoEvents
+                System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+
+                var items = (List<TriggerItem>)typeof(SettingsWindow).GetField("_items", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(window)!;
+                var snippet = items.FirstOrDefault(x => x.ActionType == ActionType.Snippet);
+                var macro = items.FirstOrDefault(x => x.ActionType == ActionType.Macro);
+
+                if (snippet != null)
+                {
+                    var snippetVm = (TriggerTreeItemViewModel)typeof(SettingsWindow).GetMethod("FindViewModel", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance, new[] { typeof(TriggerItem) })!.Invoke(window, new object[] { snippet })!;
+                    snippetVm.IsSelected = true;
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+                    Assert.False(window.SaveBtn.IsEnabled, "Real UI snippet initial clean");
+
+                    string orig = window.ItemNameBox.Text;
+                    window.ItemNameBox.Text = orig + " Edited";
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+                    Assert.True(window.SaveBtn.IsEnabled, "Real UI snippet name edit should set dirty");
+
+                    window.ItemNameBox.Text = orig;
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+                    Assert.False(window.SaveBtn.IsEnabled, "Real UI snippet name revert should unset dirty");
+
+                    string origDesc = window.ItemDescBox.Text;
+                    window.ItemDescBox.Text = origDesc + " Edited";
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+                    Assert.True(window.SaveBtn.IsEnabled, "Real UI snippet desc edit should set dirty");
+
+                    window.ItemDescBox.Text = origDesc;
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+                    Assert.False(window.SaveBtn.IsEnabled, "Real UI snippet desc revert should unset dirty");
+                }
+
+                if (macro != null)
+                {
+                    var macroVm = (TriggerTreeItemViewModel)typeof(SettingsWindow).GetMethod("FindViewModel", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance, new[] { typeof(TriggerItem) })!.Invoke(window, new object[] { macro })!;
+                    macroVm.IsSelected = true;
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+                    Assert.False(window.SaveBtn.IsEnabled, "Real UI macro initial clean");
+
+                    string orig = window.ItemNameBox.Text;
+                    window.ItemNameBox.Text = orig + " Edited";
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+                    Assert.True(window.SaveBtn.IsEnabled, "Real UI macro name edit should set dirty");
+
+                    window.ItemNameBox.Text = orig;
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+                    Assert.False(window.SaveBtn.IsEnabled, "Real UI macro name revert should unset dirty");
+
+                    string origDesc = window.ItemDescBox.Text;
+                    window.ItemDescBox.Text = origDesc + " Edited";
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+                    Assert.True(window.SaveBtn.IsEnabled, "Real UI macro desc edit should set dirty");
+
+                    window.ItemDescBox.Text = origDesc;
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+                    Assert.False(window.SaveBtn.IsEnabled, "Real UI macro desc revert should unset dirty");
+                }
+
+                typeof(SettingsWindow).GetMethod("SetDirty", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.Invoke(window, new object[] { false });
+                window.Close();
+            }
+            catch (Exception ex)
+            {
+                caughtEx = new Exception($"Error in STA thread: {ex}\nStackTrace: {ex.StackTrace}");
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join(10000);
+
+        if (caughtEx != null) throw caughtEx;
+    }
+
+    [Fact]
+    public void Test_RecycledItem_CannotToggleEnabled_AndTestButtonIsHidden()
+    {
+        Exception? caughtEx = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                EnsureApplication();
+                SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext(System.Windows.Threading.Dispatcher.CurrentDispatcher));
+
+                string tempDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "TP_RecycleBinUiTest_" + Guid.NewGuid());
+                System.IO.Directory.CreateDirectory(tempDir);
+                try
+                {
+                    var repo = new TriggerPoint.Infrastructure.Persistence.JsonConfigRepository(tempDir);
+                    var activeItem = new TriggerItem
+                    {
+                        Id = Guid.NewGuid(),
+                        Name = "Active Shell",
+                        ActionType = ActionType.Shell,
+                        IsEnabled = true
+                    };
+                    var deletedItem = new TriggerItem
+                    {
+                        Id = Guid.NewGuid(),
+                        Name = "Deleted Snippet",
+                        ActionType = ActionType.Snippet,
+                        IsEnabled = true
+                    };
+
+                    repo.SaveAsync(new[] { activeItem }).GetAwaiter().GetResult();
+                    repo.MoveToRecycleBinAsync(deletedItem, new[] { activeItem, deletedItem }).GetAwaiter().GetResult();
+
+                    using var listener = new TriggerPoint.Infrastructure.Win32.Win32HotkeyListener();
+                    var window = new SettingsWindow(repo, listener, new DummyExecutor());
+
+                    window.Show();
+
+                    while (!(bool)typeof(SettingsWindow).GetField("_isDataLoaded", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(window)!)
+                    {
+                        System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+                        Thread.Sleep(20);
+                    }
+
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+
+                    var roots = (System.Collections.ObjectModel.ObservableCollection<TriggerTreeItemViewModel>)
+                        typeof(SettingsWindow).GetField("_treeRoots", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(window)!;
+                    var binRoot = roots.FirstOrDefault(x => x.IsRecycleBinRoot);
+                    Assert.NotNull(binRoot);
+                    Assert.Single(binRoot.Children);
+                    var recycledVm = binRoot.Children[0];
+
+                    // 1. Select recycled item
+                    window.SelectTreeItem(deletedItem);
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+
+                    Assert.Equal(Visibility.Visible, window.ItemEnabledCheck.Visibility);
+                    Assert.False(window.ItemEnabledCheck.IsEnabled, "Recycled item enabled checkbox must be disabled");
+                    Assert.Equal(Visibility.Collapsed, window.TestActionBtn.Visibility);
+                    Assert.False(window.SaveBtn.IsEnabled, "Save button must be disabled for recycled item");
+                    Assert.Equal(Visibility.Collapsed, window.SaveBtn.Visibility);
+
+                    // 2. Attempt to trigger ItemEnabledCheck click
+                    window.ItemEnabledCheck.IsChecked = false;
+                    typeof(SettingsWindow).GetMethod("ItemEnabledCheck_Click", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                        .Invoke(window, new object[] { window.ItemEnabledCheck, new RoutedEventArgs() });
+
+                    Assert.True(recycledVm.Item.IsEnabled, "Recycled item IsEnabled must not be changed");
+                    Assert.False(window.SaveBtn.IsEnabled, "Recycled item change must not trigger SaveBtn");
+                    Assert.Equal(Visibility.Collapsed, window.SaveBtn.Visibility);
+
+                    // 3. Select Recycle Bin Root
+                    window.SelectTreeItem(binRoot.Item);
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+
+                    Assert.Equal(Visibility.Collapsed, window.ItemEnabledCheck.Visibility);
+                    Assert.Equal(Visibility.Collapsed, window.TestActionBtn.Visibility);
+                    Assert.False(window.SaveBtn.IsEnabled);
+                    Assert.Equal(Visibility.Collapsed, window.SaveBtn.Visibility);
+
+                    // 4. Select active item
+                    window.SelectTreeItem(activeItem);
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+
+                    Assert.Equal(Visibility.Visible, window.ItemEnabledCheck.Visibility);
+                    Assert.True(window.ItemEnabledCheck.IsEnabled, "Active item enabled checkbox must be enabled");
+                    Assert.Equal(Visibility.Visible, window.TestActionBtn.Visibility);
+                    Assert.Equal(Visibility.Visible, window.SaveBtn.Visibility);
+
+                    window.Close();
+                }
+                finally
+                {
+                    try { System.IO.Directory.Delete(tempDir, true); } catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                caughtEx = new Exception($"Error in STA thread: {ex}\nStackTrace: {ex.StackTrace}");
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join(10000);
+
+        if (caughtEx != null) throw caughtEx;
+    }
+
+    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        int count = VisualTreeHelper.GetChildrenCount(parent);
+        for (int i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T typed) return typed;
+            var nested = FindVisualChild<T>(child);
+            if (nested != null) return nested;
+        }
+        return null;
     }
 }

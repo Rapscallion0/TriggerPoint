@@ -242,6 +242,8 @@ public partial class TagInputControl : UserControl
         return false;
     }
 
+    public bool HasPendingInput => !string.IsNullOrWhiteSpace(InlineInputBox?.Text);
+
     public List<string> GetTags()
     {
         return Tags.Select(x => x.Value).ToList();

@@ -4,6 +4,7 @@ using System.Drawing.Drawing2D;
 using System.IO;
 using System.Windows.Forms;
 using TriggerPoint.Core.Contracts;
+using TriggerPoint.Core.Models;
 
 namespace TriggerPoint.UI.Services;
 
@@ -30,6 +31,7 @@ public class TrayIconService : IDisposable
     private readonly ToolStripMenuItem _settingsMenuItem;
     private readonly ToolStripMenuItem _paletteMenuItem;
     private readonly ToolStripMenuItem? _cheatSheetMenuItem;
+    private readonly ToolStripMenuItem? _updatesMenuItem;
     private readonly ToolStripMenuItem _snoozeMenuItem;
     private Icon? _currentGeneratedIcon;
 
@@ -77,8 +79,8 @@ public class TrayIconService : IDisposable
 
         if (_checkForUpdatesAction != null)
         {
-            var updatesItem = new ToolStripMenuItem("Check for Updates...", null, (s, e) => _checkForUpdatesAction());
-            contextMenu.Items.Add(updatesItem);
+            _updatesMenuItem = new ToolStripMenuItem("Check for Updates...", null, (s, e) => _checkForUpdatesAction());
+            contextMenu.Items.Add(_updatesMenuItem);
         }
 
         _paletteMenuItem = new ToolStripMenuItem(FormatPaletteMenuText(commandPaletteHotkeyText), null, (s, e) => _openPaletteAction());
@@ -143,6 +145,26 @@ public class TrayIconService : IDisposable
             var oldMenuImage = _snoozeMenuItem.Image;
             _snoozeMenuItem.Image = RenderSnoozeMenuImage(_shortcutListener.IsSnoozed);
             oldMenuImage?.Dispose();
+        }
+    }
+
+    public void SetUpdateAvailable(UpdateCheckResult? updateResult)
+    {
+        if (_updatesMenuItem == null) return;
+
+        if (updateResult?.IsUpdateAvailable == true && updateResult.LatestUpdate != null)
+        {
+            _updatesMenuItem.Text = $"✨ Update Available (v{updateResult.LatestUpdate.Version})...";
+            _updatesMenuItem.Font = new Font(_updatesMenuItem.Font, FontStyle.Bold);
+            string tooltip = $"TriggerPoint — Update v{updateResult.LatestUpdate.Version} available";
+            if (tooltip.Length > 63) tooltip = tooltip.Substring(0, 63);
+            _notifyIcon.Text = tooltip;
+        }
+        else
+        {
+            _updatesMenuItem.Text = "Check for Updates...";
+            _updatesMenuItem.Font = new Font(_updatesMenuItem.Font, FontStyle.Regular);
+            _notifyIcon.Text = "TriggerPoint — Precision Shortcuts & Instant Menus";
         }
     }
 

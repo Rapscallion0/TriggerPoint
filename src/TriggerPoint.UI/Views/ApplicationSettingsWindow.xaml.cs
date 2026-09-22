@@ -28,7 +28,7 @@ public partial class ApplicationSettingsWindow : Window
     private AppSettings _currentSettings = new();
     private List<TriggerItem> _allItems = [];
 
-    internal enum SettingsCategory
+    public enum SettingsCategory
     {
         Appearance,
         Shortcuts,
@@ -42,16 +42,17 @@ public partial class ApplicationSettingsWindow : Window
 
     public bool TreeDataChanged { get; private set; }
 
-    public ApplicationSettingsWindow(IConfigRepository repository, ILogManagerService logManagerService, IUpdateService? updateService = null)
+    public ApplicationSettingsWindow(IConfigRepository repository, ILogManagerService logManagerService, IUpdateService? updateService = null, SettingsCategory initialCategory = SettingsCategory.Appearance)
     {
         InitializeComponent();
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _logManagerService = logManagerService ?? throw new ArgumentNullException(nameof(logManagerService));
         _updateService = updateService ?? new GitHubUpdateService(repository);
+        _selectedCategory = initialCategory;
 
         Loaded += async (s, e) =>
         {
-            SelectCategory(SettingsCategory.Appearance);
+            SelectCategory(initialCategory);
             await LoadCurrentSettingsAsync();
         };
 
@@ -747,9 +748,13 @@ public partial class ApplicationSettingsWindow : Window
     {
         try
         {
-            using var key = Registry.CurrentUser.OpenSubKey(StartupRegistryKey, false);
-            var val = key?.GetValue(AppRegistryValueName) as string;
-            return !string.IsNullOrWhiteSpace(val);
+            using var hkcuKey = Registry.CurrentUser.OpenSubKey(StartupRegistryKey, false);
+            var valHkcu = hkcuKey?.GetValue(AppRegistryValueName) as string;
+            if (!string.IsNullOrWhiteSpace(valHkcu)) return true;
+
+            using var hklmKey = Registry.LocalMachine.OpenSubKey(StartupRegistryKey, false);
+            var valHklm = hklmKey?.GetValue(AppRegistryValueName) as string;
+            return !string.IsNullOrWhiteSpace(valHklm);
         }
         catch
         {
@@ -762,21 +767,30 @@ public partial class ApplicationSettingsWindow : Window
         try
         {
             using var key = Registry.CurrentUser.OpenSubKey(StartupRegistryKey, true);
-            if (key == null) return;
-
-            if (enable)
+            if (key != null)
             {
-                var exePath = Environment.ProcessPath;
-                if (!string.IsNullOrWhiteSpace(exePath))
+                if (enable)
                 {
-                    string args = startMinimized ? " --minimized" : "";
-                    key.SetValue(AppRegistryValueName, $"\"{exePath}\"{args}");
+                    var exePath = Environment.ProcessPath;
+                    if (!string.IsNullOrWhiteSpace(exePath))
+                    {
+                        string args = startMinimized ? " --minimized" : "";
+                        key.SetValue(AppRegistryValueName, $"\"{exePath}\"{args}");
+                    }
+                }
+                else
+                {
+                    key.DeleteValue(AppRegistryValueName, false);
                 }
             }
-            else
+
+            // Also clean duplicate/unwanted entry in HKLM if present and writable
+            try
             {
-                key.DeleteValue(AppRegistryValueName, false);
+                using var hklmKey = Registry.LocalMachine.OpenSubKey(StartupRegistryKey, true);
+                hklmKey?.DeleteValue(AppRegistryValueName, false);
             }
+            catch { /* Ignore HKLM write failure if non-elevated */ }
         }
         catch (Exception ex)
         {
@@ -821,12 +835,19 @@ public partial class ApplicationSettingsWindow : Window
                 LastVersionFoundText.Text = $"v{_currentSettings.LastVersionFound} (Update available)";
                 LastVersionFoundText.Foreground = (System.Windows.Media.Brush)FindResource("AccentBrush");
                 UpdateNavBadge.Visibility = Visibility.Visible;
+
+                UpdateAvailableActionCard.Visibility = Visibility.Visible;
+                UpdateActionTitleText.Text = $"TriggerPoint v{_currentSettings.LastVersionFound} is available";
+                CheckForUpdatesBtn.Content = "⚡ Check Again";
             }
             else
             {
                 LastVersionFoundText.Text = $"v{_currentSettings.LastVersionFound} (Up to date)";
                 LastVersionFoundText.Foreground = (System.Windows.Media.Brush)FindResource("TextSecondaryBrush");
                 UpdateNavBadge.Visibility = Visibility.Collapsed;
+
+                UpdateAvailableActionCard.Visibility = Visibility.Collapsed;
+                CheckForUpdatesBtn.Content = "⚡ Check for Updates";
             }
         }
         else
@@ -834,6 +855,9 @@ public partial class ApplicationSettingsWindow : Window
             LastVersionFoundText.Text = "None recorded yet";
             LastVersionFoundText.Foreground = (System.Windows.Media.Brush)FindResource("TextMutedBrush");
             UpdateNavBadge.Visibility = Visibility.Collapsed;
+
+            UpdateAvailableActionCard.Visibility = Visibility.Collapsed;
+            CheckForUpdatesBtn.Content = "⚡ Check for Updates";
         }
 
         // Update Frequency
@@ -887,6 +911,7 @@ public partial class ApplicationSettingsWindow : Window
 
             if (result.IsUpdateAvailable)
             {
+                App.LatestAvailableUpdate = result;
                 SettingsStatusText.Text = $"Update v{result.LatestUpdate?.Version} available!";
                 var updateDlg = new UpdateAvailableDialog(result, _updateService, _repository)
                 {
@@ -925,6 +950,30 @@ public partial class ApplicationSettingsWindow : Window
             SettingsStatusText.Text = "Update check failed.";
             ModernMessageDialog.ShowAlert(this, "Error", $"An unexpected error occurred: {ex.Message}", ModernDialogType.Error);
         }
+    }
+
+    private async void InstallUpdateBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (App.LatestAvailableUpdate?.IsUpdateAvailable == true && App.LatestAvailableUpdate.LatestUpdate != null)
+        {
+            var updateDlg = new UpdateAvailableDialog(App.LatestAvailableUpdate, _updateService, _repository)
+            {
+                Owner = this
+            };
+            updateDlg.ShowDialog();
+
+            _currentSettings = await _repository.LoadSettingsAsync();
+            PopulateUpdateSettingsUI();
+            return;
+        }
+
+        // Fallback to fresh check if cached update result is not in memory
+        CheckForUpdatesBtn_Click(sender, e);
+    }
+
+    private void WhatsNewBtn_Click(object sender, RoutedEventArgs e)
+    {
+        InstallUpdateBtn_Click(sender, e);
     }
 
     private async void ResetIgnoredVersionBtn_Click(object sender, RoutedEventArgs e)

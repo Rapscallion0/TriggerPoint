@@ -310,6 +310,27 @@ public class UpdateServiceTests : IDisposable
         Assert.Equal("2.0.8", loaded.LastKnownAppVersion);
     }
 
+    [Fact]
+    public void UpdateCheckResult_WithNewerVersion_DetectsAvailability()
+    {
+        var result = new UpdateCheckResult
+        {
+            IsUpdateAvailable = true,
+            CurrentVersion = "2.0.8",
+            LatestUpdate = new UpdateInfo
+            {
+                Version = "2.0.9",
+                TagName = "v2.0.9",
+                Title = "Release v2.0.9"
+            }
+        };
+
+        Assert.True(result.IsSuccess);
+        Assert.True(result.IsUpdateAvailable);
+        Assert.False(result.IsIgnored);
+        Assert.Equal("2.0.9", result.LatestUpdate.Version);
+    }
+
     private class MockHttpMessageHandler : HttpMessageHandler
     {
         private readonly string _responseContent;

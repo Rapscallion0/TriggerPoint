@@ -36,6 +36,8 @@ public partial class App : Application
     private IReadOnlyList<TriggerItem> _cachedItems = [];
     private ChordHudView? _activeChordHud;
 
+    public static UpdateCheckResult? LatestAvailableUpdate { get; set; }
+
     public static List<TriggerItem> CreateVirtualApplicationItems(AppSettings? settings)
     {
         var list = new List<TriggerItem>();
@@ -278,7 +280,8 @@ public partial class App : Application
             cheatSheetHotkeyText: appSettings.CheatSheetHotkey?.DisplayText ?? "Ctrl+Shift+/");
 
         // Show action settings window if not configured to start minimized or if launched with --settings
-        if (!appSettings.StartMinimized || e.Args.Contains("--settings", StringComparer.OrdinalIgnoreCase))
+        bool shouldStartMinimized = appSettings.StartMinimized || e.Args.Contains("--minimized", StringComparer.OrdinalIgnoreCase);
+        if (!shouldStartMinimized || e.Args.Contains("--settings", StringComparer.OrdinalIgnoreCase))
         {
             ShowSettingsWindow();
         }
@@ -348,9 +351,11 @@ public partial class App : Application
                     var result = await updateService.CheckForUpdatesAsync(isManualCheck: false);
                     if (result.IsUpdateAvailable && !result.IsIgnored && result.LatestUpdate != null)
                     {
+                        LatestAvailableUpdate = result;
                         Dispatcher.Invoke(() =>
                         {
                             _settingsWindow?.NotifyUpdateAvailable(result);
+                            _trayIconService?.SetUpdateAvailable(result);
 
                             // Unobtrusive toast that notifies the user
                             toastService.ShowSuccess(
@@ -641,6 +646,11 @@ public partial class App : Application
             workflowTemplateService,
             updateService);
 
+        if (LatestAvailableUpdate != null)
+        {
+            _settingsWindow.NotifyUpdateAvailable(LatestAvailableUpdate);
+        }
+
         MainWindow = _settingsWindow;
     }
 
@@ -703,20 +713,22 @@ public partial class App : Application
         }
     }
 
-    public async Task ShowApplicationSettingsWindowAsync()
+    public async Task ShowApplicationSettingsWindowAsync(ApplicationSettingsWindow.SettingsCategory? initialCategory = null)
     {
         if (_repository == null || _logManagerService == null) return;
 
         var updateService = _serviceProvider?.GetService<IUpdateService>();
-        var appSettingsWin = new ApplicationSettingsWindow(_repository, _logManagerService, updateService);
+        var appSettingsWin = initialCategory.HasValue
+            ? new ApplicationSettingsWindow(_repository, _logManagerService, updateService, initialCategory.Value)
+            : new ApplicationSettingsWindow(_repository, _logManagerService, updateService);
         appSettingsWin.ShowDialog();
 
         await ReloadApplicationSettingsAndHotkeysAsync();
     }
 
-    public void ShowApplicationSettingsWindow()
+    public void ShowApplicationSettingsWindow(ApplicationSettingsWindow.SettingsCategory? initialCategory = null)
     {
-        _ = ShowApplicationSettingsWindowAsync();
+        _ = ShowApplicationSettingsWindowAsync(initialCategory);
     }
 
     public async Task PerformManualUpdateCheckAsync()
@@ -730,6 +742,10 @@ public partial class App : Application
             var result = await updateService.CheckForUpdatesAsync(isManualCheck: true);
             if (result.IsUpdateAvailable)
             {
+                LatestAvailableUpdate = result;
+                _settingsWindow?.NotifyUpdateAvailable(result);
+                _trayIconService?.SetUpdateAvailable(result);
+
                 var dlg = new UpdateAvailableDialog(result, updateService, _repository);
                 dlg.ShowDialog();
             }
@@ -773,7 +789,10 @@ public partial class App : Application
         Dispatcher.Invoke(() =>
         {
             Log.Information("Secondary instance signaled message: '{Message}'", message);
-            ShowSettingsWindow();
+            if (!message.Contains("--minimized", StringComparison.OrdinalIgnoreCase))
+            {
+                ShowSettingsWindow();
+            }
         });
     }
 

@@ -122,12 +122,12 @@ public class SettingsIconAndThemeTests
 
                 // Dark Theme Test
                 ThemeManager.ApplyTheme(AppTheme.Dark);
-                var darkIcon = Application.Current!.Resources["AppIconSource"] as BitmapFrame;
+                var darkIcon = Application.Current!.Resources["AppIconSource"] as ImageSource;
                 Assert.NotNull(darkIcon);
 
                 // Light Theme Test
                 ThemeManager.ApplyTheme(AppTheme.Light);
-                var lightIcon = Application.Current!.Resources["AppIconSource"] as BitmapFrame;
+                var lightIcon = Application.Current!.Resources["AppIconSource"] as ImageSource;
                 Assert.NotNull(lightIcon);
 
                 // ApplyWindowIcons on a dummy Window
@@ -207,5 +207,89 @@ public class SettingsIconAndThemeTests
             throw new InvalidOperationException($"RichTextEditorGeometries test failed: {caughtEx.Message}", caughtEx);
         }
     }
+
+    [Fact]
+    public void TextBlock_DefaultForeground_ResolvesTextPrimaryBrush_InDarkAndLightModes()
+    {
+        Exception? caughtEx = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                if (Application.Current == null)
+                {
+                    new Application();
+                }
+
+                if (!Application.Current!.Resources.MergedDictionaries.Any(d => d.Source?.OriginalString?.Contains("ThemeResources.xaml") == true))
+                {
+                    Application.Current!.Resources.MergedDictionaries.Add(new ResourceDictionary
+                    {
+                        Source = new Uri("pack://application:,,,/TriggerPoint;component/Theme/ThemeResources.xaml", UriKind.Absolute)
+                    });
+                }
+
+                // 1. Dark Theme Test
+                ThemeManager.ApplyTheme(AppTheme.Dark);
+                var winDark = new Window();
+                var spDark = new System.Windows.Controls.StackPanel();
+                var tbDark = new System.Windows.Controls.TextBlock { Text = "🌐 Browser Tab & URL Rules" };
+                var accentStyle = Application.Current.TryFindResource("AccentButtonStyle") as Style;
+                var btnDark = new System.Windows.Controls.Button { Style = accentStyle, Content = "💾 Save" };
+                spDark.Children.Add(tbDark);
+                spDark.Children.Add(btnDark);
+                winDark.Content = spDark;
+                winDark.Show();
+                winDark.UpdateLayout();
+
+                Assert.IsType<SolidColorBrush>(tbDark.Foreground);
+                Assert.Equal(Color.FromRgb(242, 243, 245), ((SolidColorBrush)tbDark.Foreground).Color);
+
+                var btnDarkTb = FindVisualChild<System.Windows.Controls.TextBlock>(btnDark);
+                Assert.NotNull(btnDarkTb);
+                Assert.Equal(Colors.White, ((SolidColorBrush)btnDarkTb.Foreground).Color);
+
+                // 2. Light Theme Test
+                ThemeManager.ApplyTheme(AppTheme.Light);
+                winDark.UpdateLayout();
+
+                Assert.IsType<SolidColorBrush>(tbDark.Foreground);
+                Assert.Equal(Color.FromRgb(15, 23, 42), ((SolidColorBrush)tbDark.Foreground).Color);
+
+                var btnLightTb = FindVisualChild<System.Windows.Controls.TextBlock>(btnDark);
+                Assert.NotNull(btnLightTb);
+                Assert.Equal(Colors.White, ((SolidColorBrush)btnLightTb.Foreground).Color);
+
+                winDark.Close();
+            }
+            catch (Exception ex)
+            {
+                caughtEx = ex;
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join(5000);
+
+        if (caughtEx != null)
+        {
+            throw new InvalidOperationException($"TextBlock default foreground test failed: {caughtEx.Message}", caughtEx);
+        }
+    }
+
+    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        int count = VisualTreeHelper.GetChildrenCount(parent);
+        for (int i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T typed) return typed;
+            var nested = FindVisualChild<T>(child);
+            if (nested != null) return nested;
+        }
+        return null;
+    }
 }
+
 

@@ -276,14 +276,10 @@ public partial class SettingsWindow
             {
                 card.BorderBrush = Application.Current.TryFindResource("WorkflowBrush") as Brush ?? Brushes.Purple;
                 card.BorderThickness = new Thickness(1.5);
-                card.Background = new SolidColorBrush(Color.FromArgb(0x20, 0xA8, 0x55, 0xF7));
-                card.Effect = new System.Windows.Media.Effects.DropShadowEffect
-                {
-                    Color = Color.FromRgb(0xA8, 0x55, 0xF7),
-                    BlurRadius = 10,
-                    ShadowDepth = 0,
-                    Opacity = 0.35
-                };
+                card.Background = new SolidColorBrush(ThemeManager.CurrentTheme == AppTheme.Dark 
+                    ? Color.FromArgb(0x20, 0xA8, 0x55, 0xF7) 
+                    : Color.FromArgb(0x15, 0x93, 0x33, 0xEA));
+                card.Effect = null;
 
                 if (focusFirstInput)
                 {
@@ -792,20 +788,14 @@ public partial class SettingsWindow
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(7),
             Padding = new Thickness(12, 10, 12, 10),
-            Margin = new Thickness(0, 2, 0, 2)
+            Margin = new Thickness(0, 2, 0, 2),
+            SnapsToDevicePixels = true,
+            UseLayoutRounding = true
         };
 
-        if (ThemeManager.CurrentTheme == AppTheme.Light)
-        {
-            card.Effect = new System.Windows.Media.Effects.DropShadowEffect
-            {
-                BlurRadius = 8,
-                ShadowDepth = 1.5,
-                Opacity = 0.08,
-                Direction = 270,
-                Color = Colors.Black
-            };
-        }
+        TextOptions.SetTextFormattingMode(card, TextFormattingMode.Display);
+        TextOptions.SetTextRenderingMode(card, TextRenderingMode.ClearType);
+        RenderOptions.SetClearTypeHint(card, ClearTypeHint.Enabled);
 
         card.PreviewMouseDown += (s, e) => SetActiveWorkflowStep(step.Id);
         card.GotFocus += (s, e) => SetActiveWorkflowStep(step.Id);
@@ -3252,6 +3242,8 @@ public partial class SettingsWindow
                 ?? new SolidColorBrush(Color.FromArgb(0x30, 0xA8, 0x55, 0xF7));
             WorkflowToggleMiniMapBtn.BorderBrush = Application.Current.TryFindResource("WorkflowBrush") as Brush 
                 ?? Brushes.Purple;
+            WorkflowToggleMiniMapBtn.Foreground = Application.Current.TryFindResource("WorkflowBrush") as Brush 
+                ?? Brushes.Purple;
             WorkflowToggleMiniMapBtn.BorderThickness = new Thickness(1.5);
             WorkflowToggleMiniMapBtn.FontWeight = FontWeights.SemiBold;
             WorkflowToggleMiniMapBtn.ToolTip = "Workflow Mini-Map is ON. Click to hide.";
@@ -3261,6 +3253,7 @@ public partial class SettingsWindow
             WorkflowToggleMiniMapBtn.Content = "🗺️ Mini-Map";
             WorkflowToggleMiniMapBtn.ClearValue(BackgroundProperty);
             WorkflowToggleMiniMapBtn.ClearValue(BorderBrushProperty);
+            WorkflowToggleMiniMapBtn.ClearValue(ForegroundProperty);
             WorkflowToggleMiniMapBtn.ClearValue(BorderThicknessProperty);
             WorkflowToggleMiniMapBtn.ClearValue(FontWeightProperty);
             WorkflowToggleMiniMapBtn.ToolTip = "Workflow Mini-Map is OFF. Click to show.";

@@ -97,8 +97,8 @@
                         Click="PlayButton_Click"
                         ToolTip="Replay recorded macro immediately">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock Text="▶" FontSize="11" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                        <TextBlock Text="Test Playback" FontSize="11.5" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <TextBlock Text="▶" FontSize="11" Margin="0,0,6,0" VerticalAlignment="Center" Foreground="White"/>
+                        <TextBlock Text="Test Playback" FontSize="11.5" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="White"/>
                     </StackPanel>
                 </Button>
             </Grid>

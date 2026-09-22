@@ -5,9 +5,9 @@
 
 [![.NET](https://img.shields.io/badge/.NET-9.0--windows-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011%20x64-0078D6?logo=windows)](https://microsoft.com/windows)
-[![Version](https://img.shields.io/badge/Version-v2.0.9-blue.svg)](https://github.com/Rapscallion0/TriggerPoint/releases/tag/v2.0.9)
+[![Version](https://img.shields.io/badge/Version-v2.0.10-blue.svg)](https://github.com/Rapscallion0/TriggerPoint/releases/tag/v2.0.10)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-383%20Passed%20(100%25)-brightgreen)]()
+[![Tests](https://img.shields.io/badge/Tests-391%20Passed%20(100%25)-brightgreen)]()
 
 ---
 
@@ -16,6 +16,22 @@
 **TriggerPoint** is a fast, lightweight Windows productivity tool that puts your most frequent actions at your fingertips. Launch apps, run scripts, execute multi-step workflows, paste dynamic snippets, and open custom menus anywhere on your screen using simple system-wide shortcuts.
 
 Designed to stay out of your way, TriggerPoint runs quietly in your system tray with near-zero memory footprint, zero telemetry, and lightning-fast response times.
+
+---
+
+## What's New in v2.0.10 🚀
+
+- **Theme & Contrast Polish (Dark & Light Mode)**:
+  - Fixed dark mode text and icon contrast regressions: window-level foreground tokens and global system color mappings guarantee crisp, high-contrast text and icons across all dialogs, cards, navigation items, and headers.
+  - Hardened text and emoji icons (such as the `🌐` globe icon next to "Browser Tab & URL Rules") so they dynamically render in bright light-gray/white in Dark Mode (`#F2F3F5`) and dark slate in Light Mode (`#0F172A`).
+  - Added multi-size high-DPI scaling for taskbar and window icons in Light Theme.
+- **Recycle Bin Safety & UX Enhancements**:
+  - The **Save** button is now completely hidden (`Visibility.Collapsed`) rather than disabled when viewing recycled items or the Recycle Bin root overview, eliminating confusion and preventing accidental save attempts on discarded items.
+  - Disabled the Enabled/Disabled toggle on recycled items and suppressed the Test button to prevent executing or modifying actions residing in the bin.
+- **Tag Input & Context Rules Visual Synchronization**:
+  - Pill icons inside allowed and excluded process/URL tags now dynamically inherit the pill theme color (emerald for allowed, red for excluded).
+- **Expanded Test Suite**:
+  - Test suite expanded to 391 unit and UI tests (100% passing) with automated regression coverage for theme token resolution and button child typography.
 
 ---
 
@@ -167,7 +183,7 @@ dotnet run --project src/TriggerPoint.UI
 #### Package Installer (`TriggerPointSetup.exe`)
 To package the app into a standalone installer:
 ```powershell
-powershell -ExecutionPolicy Bypass -File build/package.ps1 -AppVersion "2.0.9"
+powershell -ExecutionPolicy Bypass -File build/package.ps1 -AppVersion "2.0.10"
 ```
 The output installer will be produced at `artifacts/TriggerPointSetup.exe`.
 
