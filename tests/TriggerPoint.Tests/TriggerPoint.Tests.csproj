@@ -15,6 +15,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="xunit.runner.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\TriggerPoint.Core\TriggerPoint.Core.csproj" />
     <ProjectReference Include="..\..\src\TriggerPoint.Infrastructure\TriggerPoint.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\TriggerPoint.UI\TriggerPoint.UI.csproj" />

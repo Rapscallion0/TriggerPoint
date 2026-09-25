@@ -19,7 +19,7 @@ public static class HotkeyRegistryValidator
             .Where(x => x.ActionType == ActionType.Folder)
             .ToDictionary(x => x.Id, x => x.Name);
 
-        var registeredMap = new Dictionary<ShortcutBinding, TriggerItem>();
+        var registeredMap = new Dictionary<ShortcutBinding, List<TriggerItem>>();
 
         foreach (var item in itemsList)
         {
@@ -73,47 +73,81 @@ public static class HotkeyRegistryValidator
                 }
             }
 
-            if (registeredMap.TryGetValue(item.Hotkey, out var existingItem))
+            if (registeredMap.TryGetValue(item.Hotkey, out var existingList))
             {
-                // Internal Collision!
-                string existingFolder = existingItem.ParentId.HasValue && folderLookup.TryGetValue(existingItem.ParentId.Value, out var efName)
-                    ? efName
-                    : "Root";
-
-                string currentFolder = item.ParentId.HasValue && folderLookup.TryGetValue(item.ParentId.Value, out var cfName)
-                    ? cfName
-                    : "Root";
-
-                // Flag the current item
-                var currentConflict = HotkeyConflictStatus.CreateInternal(
-                    existingItem.Id,
-                    existingItem.Name,
-                    existingFolder,
-                    item.Hotkey.DisplayText);
-
-                conflicts[item.Id] = currentConflict;
-                item.ConflictStatus = currentConflict;
-
-                // Also flag existing item if not already flagged
-                if (!conflicts.ContainsKey(existingItem.Id))
+                var existingItem = existingList.FirstOrDefault(ex => ContextFiltersOverlap(item, ex));
+                if (existingItem != null)
                 {
-                    var existingConflict = HotkeyConflictStatus.CreateInternal(
-                        item.Id,
-                        item.Name,
-                        currentFolder,
+                    // Internal Collision!
+                    string existingFolder = existingItem.ParentId.HasValue && folderLookup.TryGetValue(existingItem.ParentId.Value, out var efName)
+                        ? efName
+                        : "Root";
+
+                    string currentFolder = item.ParentId.HasValue && folderLookup.TryGetValue(item.ParentId.Value, out var cfName)
+                        ? cfName
+                        : "Root";
+
+                    // Flag the current item
+                    var currentConflict = HotkeyConflictStatus.CreateInternal(
+                        existingItem.Id,
+                        existingItem.Name,
+                        existingFolder,
                         item.Hotkey.DisplayText);
 
-                    conflicts[existingItem.Id] = existingConflict;
-                    existingItem.ConflictStatus = existingConflict;
+                    conflicts[item.Id] = currentConflict;
+                    item.ConflictStatus = currentConflict;
+
+                    // Also flag existing item if not already flagged
+                    if (!conflicts.ContainsKey(existingItem.Id))
+                    {
+                        var existingConflict = HotkeyConflictStatus.CreateInternal(
+                            item.Id,
+                            item.Name,
+                            currentFolder,
+                            item.Hotkey.DisplayText);
+
+                        conflicts[existingItem.Id] = existingConflict;
+                        existingItem.ConflictStatus = existingConflict;
+                    }
+                }
+                else
+                {
+                    existingList.Add(item);
                 }
             }
             else
             {
-                registeredMap[item.Hotkey] = item;
+                registeredMap[item.Hotkey] = [item];
             }
         }
 
         return conflicts;
+    }
+
+    public static bool ContextFiltersOverlap(TriggerItem itemA, TriggerItem itemB)
+    {
+        var filterA = itemA.ContextFilter;
+        var filterB = itemB.ContextFilter;
+
+        // If either item has no filter or no AllowedProcesses, it applies globally (to all processes)
+        if (filterA == null || filterA.AllowedProcesses.Count == 0 ||
+            filterB == null || filterB.AllowedProcesses.Count == 0)
+        {
+            return true; // Overlap! Global vs Specific or Global vs Global
+        }
+
+        // Both items specify AllowedProcesses. Check if their sets intersect.
+        var setA = new HashSet<string>(filterA.AllowedProcesses.Select(p => p.Trim().ToLowerInvariant()), StringComparer.OrdinalIgnoreCase);
+        foreach (var proc in filterB.AllowedProcesses)
+        {
+            if (setA.Contains(proc.Trim().ToLowerInvariant()))
+            {
+                return true; // Overlap! Both claim the same process!
+            }
+        }
+
+        // Disjoint sets of allowed processes -> NO conflict! Multiplexed!
+        return false;
     }
 
     public static HotkeyConflictStatus? CheckPotentialConflict(
@@ -166,6 +200,11 @@ public static class HotkeyRegistryValidator
 
             if (item.Hotkey == newBinding)
             {
+                if (!ContextFiltersOverlap(candidateItem, item))
+                {
+                    continue; // Non-overlapping context filters -> Allowed!
+                }
+
                 string folder = item.ParentId.HasValue && folderLookup.TryGetValue(item.ParentId.Value, out var fName)
                     ? fName
                     : "Root";

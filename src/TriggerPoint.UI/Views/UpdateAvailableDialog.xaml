@@ -47,13 +47,13 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="🚀" FontSize="20" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="DialogHeaderIcon" Text="🚀" FontSize="20" Margin="0,0,10,0" VerticalAlignment="Center"/>
                     <StackPanel>
-                        <TextBlock Text="New Update Available" 
+                        <TextBlock x:Name="DialogTitleText" Text="New Update Available" 
                                    FontSize="16" 
                                    FontWeight="Bold" 
                                    Foreground="{DynamicResource TextPrimaryBrush}"/>
-                        <TextBlock Text="A new version of TriggerPoint is ready to install" 
+                        <TextBlock x:Name="DialogSubtitleText" Text="A new version of TriggerPoint is ready to install" 
                                    FontSize="11.5" 
                                    Foreground="{DynamicResource TextSecondaryBrush}" 
                                    Margin="0,2,0,0"/>
@@ -176,18 +176,15 @@
                         BorderBrush="{DynamicResource BorderBrush}"
                         BorderThickness="1"
                         CornerRadius="6"
-                        MaxHeight="240"
+                        MaxHeight="260"
                         Visibility="Collapsed"
-                        Padding="12,10">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                        <TextBlock x:Name="ChangelogContentText"
-                                   Text="No changelog available."
-                                   FontSize="12"
-                                   FontFamily="Consolas, Segoe UI, sans-serif"
-                                   Foreground="{DynamicResource TextSecondaryBrush}"
-                                   TextWrapping="Wrap"
-                                   LineHeight="18"/>
-                    </ScrollViewer>
+                        Padding="12,8">
+                    <FlowDocumentScrollViewer x:Name="ChangelogViewer"
+                                              IsToolBarVisible="False"
+                                              VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              Background="Transparent"
+                                              BorderThickness="0"/>
                 </Border>
             </StackPanel>
 
@@ -259,6 +256,14 @@
                 <StackPanel Grid.Column="1" 
                             Orientation="Horizontal" 
                             HorizontalAlignment="Right">
+                    <Button x:Name="CloseViewOnlyBtn" 
+                            Content="Close" 
+                            Style="{StaticResource SecondaryButtonStyle}" 
+                            FontSize="12.5"
+                            Padding="16,6"
+                            Visibility="Collapsed"
+                            Click="CloseBtn_Click"/>
+
                     <Button x:Name="UpdateLaterBtn" 
                             Content="Update Later" 
                             Style="{StaticResource SecondaryButtonStyle}" 

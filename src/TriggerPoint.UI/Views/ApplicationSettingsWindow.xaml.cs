@@ -27,6 +27,7 @@ public partial class ApplicationSettingsWindow : Window
     private readonly IUpdateService _updateService;
     private AppSettings _currentSettings = new();
     private List<TriggerItem> _allItems = [];
+    private bool _savedExplorerMenuEnabled;
 
     public enum SettingsCategory
     {
@@ -227,6 +228,11 @@ public partial class ApplicationSettingsWindow : Window
 
             ValidateOnStartupCheck.IsChecked = _currentSettings.ValidateShortcutsOnStartup;
             ConfirmRevertChangesCheck.IsChecked = _currentSettings.ConfirmRevertChanges;
+
+            // Populate Explorer Context Menu
+            _savedExplorerMenuEnabled = ExplorerContextMenuHelper.IsRegistered();
+            EnableExplorerMenuCheck.IsChecked = _savedExplorerMenuEnabled;
+            UpdateExplorerMenuStatusBadge();
 
             // Populate Global Shortcuts
             OpenSettingsHotkeyRecorder.Binding = _currentSettings.OpenSettingsHotkey;
@@ -456,6 +462,20 @@ public partial class ApplicationSettingsWindow : Window
             };
             _currentSettings.ValidateShortcutsOnStartup = ValidateOnStartupCheck.IsChecked == true;
             _currentSettings.ConfirmRevertChanges = ConfirmRevertChangesCheck.IsChecked == true;
+
+            bool enableExplorerMenu = EnableExplorerMenuCheck.IsChecked == true;
+            _currentSettings.EnableExplorerContextMenu = enableExplorerMenu;
+            if (enableExplorerMenu)
+            {
+                ExplorerContextMenuHelper.Register();
+            }
+            else
+            {
+                ExplorerContextMenuHelper.Unregister();
+            }
+            _savedExplorerMenuEnabled = ExplorerContextMenuHelper.IsRegistered();
+            UpdateExplorerMenuStatusBadge();
+
             _currentSettings.OpenSettingsHotkey = openSettingsHotkey;
             _currentSettings.CommandPaletteHotkey = cmdPaletteHotkey;
             _currentSettings.CheatSheetHotkey = cheatSheetHotkey;
@@ -498,6 +518,39 @@ public partial class ApplicationSettingsWindow : Window
         {
             Logger.Error(ex, "Failed to save application settings.");
             ModernMessageDialog.ShowAlert(this, "Settings Error", $"Failed to save application settings: {ex.Message}", ModernDialogType.Error);
+        }
+    }
+
+    private void EnableExplorerMenuCheck_Click(object sender, RoutedEventArgs e)
+    {
+        UpdateExplorerMenuStatusBadge();
+    }
+
+    private void UpdateExplorerMenuStatusBadge()
+    {
+        if (ExplorerMenuStatusText == null || ExplorerMenuStatusBadge == null) return;
+        bool isChecked = EnableExplorerMenuCheck.IsChecked == true;
+
+        if (isChecked == _savedExplorerMenuEnabled)
+        {
+            if (_savedExplorerMenuEnabled)
+            {
+                ExplorerMenuStatusText.Text = "Enabled";
+                ExplorerMenuStatusBadge.Background = (System.Windows.Media.Brush)FindResource("SuccessSubtleBrush");
+                ExplorerMenuStatusText.Foreground = (System.Windows.Media.Brush)FindResource("SuccessBrush");
+            }
+            else
+            {
+                ExplorerMenuStatusText.Text = "Disabled";
+                ExplorerMenuStatusBadge.Background = (System.Windows.Media.Brush)FindResource("ErrorSubtleBrush");
+                ExplorerMenuStatusText.Foreground = (System.Windows.Media.Brush)FindResource("ErrorBrush");
+            }
+        }
+        else
+        {
+            ExplorerMenuStatusText.Text = isChecked ? "Enable after save" : "Disable after save";
+            ExplorerMenuStatusBadge.Background = (System.Windows.Media.Brush)FindResource("WarningSubtleBrush");
+            ExplorerMenuStatusText.Foreground = (System.Windows.Media.Brush)FindResource("WarningBrush");
         }
     }
 
@@ -925,12 +978,23 @@ public partial class ApplicationSettingsWindow : Window
             }
             else if (result.IsSuccess)
             {
+                App.LatestAvailableUpdate = result;
                 SettingsStatusText.Text = "TriggerPoint is up to date.";
-                ModernMessageDialog.ShowAlert(
+                bool viewNotes = ModernMessageDialog.ShowConfirm(
                     this,
                     "TriggerPoint is Up to Date",
-                    $"You are running TriggerPoint v{_updateService.GetCurrentVersion()}.\nNo newer releases were found on GitHub.",
-                    ModernDialogType.Info);
+                    $"You are running TriggerPoint v{_updateService.GetCurrentVersion()}.\nNo newer releases were found on GitHub.\n\nWould you like to view the latest release notes?",
+                    primaryText: "📋 View Release Notes",
+                    secondaryText: "Close");
+
+                if (viewNotes && result.LatestUpdate != null)
+                {
+                    var viewDlg = new UpdateAvailableDialog(result, _updateService, _repository, isViewOnly: true)
+                    {
+                        Owner = this
+                    };
+                    viewDlg.ShowDialog();
+                }
             }
             else
             {
@@ -949,6 +1013,68 @@ public partial class ApplicationSettingsWindow : Window
             CheckForUpdatesBtn.IsEnabled = true;
             SettingsStatusText.Text = "Update check failed.";
             ModernMessageDialog.ShowAlert(this, "Error", $"An unexpected error occurred: {ex.Message}", ModernDialogType.Error);
+        }
+    }
+
+    private void ViewReleaseNotesBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (App.LatestAvailableUpdate?.LatestUpdate != null)
+        {
+            var dlg = new UpdateAvailableDialog(App.LatestAvailableUpdate, _updateService, _repository, isViewOnly: true)
+            {
+                Owner = this
+            };
+            dlg.ShowDialog();
+            return;
+        }
+
+        FetchAndShowReleaseNotes();
+    }
+
+    private async void FetchAndShowReleaseNotes()
+    {
+        UpdateCheckingPanel.Visibility = Visibility.Visible;
+        UpdateCheckingStatusText.Text = "Fetching release notes from GitHub...";
+        try
+        {
+            var result = await _updateService.CheckForUpdatesAsync(isManualCheck: true);
+            App.LatestAvailableUpdate = result;
+            UpdateCheckingPanel.Visibility = Visibility.Collapsed;
+
+            if (result.LatestUpdate != null)
+            {
+                var dlg = new UpdateAvailableDialog(result, _updateService, _repository, isViewOnly: true)
+                {
+                    Owner = this
+                };
+                dlg.ShowDialog();
+            }
+            else
+            {
+                ModernMessageDialog.ShowAlert(this, "Release Notes Unavailable", "Could not retrieve release notes from GitHub. Check your internet connection.", ModernDialogType.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Warning(ex, "Failed to load release notes.");
+            UpdateCheckingPanel.Visibility = Visibility.Collapsed;
+            ModernMessageDialog.ShowAlert(this, "Error", $"Failed to fetch release notes: {ex.Message}", ModernDialogType.Error);
+        }
+    }
+
+    private void ViewGitHubReleasesBtn_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "https://github.com/Rapscallion0/TriggerPoint/releases",
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.Warning(ex, "Failed to open GitHub releases URL.");
         }
     }
 
@@ -973,7 +1099,7 @@ public partial class ApplicationSettingsWindow : Window
 
     private void WhatsNewBtn_Click(object sender, RoutedEventArgs e)
     {
-        InstallUpdateBtn_Click(sender, e);
+        ViewReleaseNotesBtn_Click(sender, e);
     }
 
     private async void ResetIgnoredVersionBtn_Click(object sender, RoutedEventArgs e)
@@ -1109,7 +1235,7 @@ public partial class ApplicationSettingsWindow : Window
     {
         [SettingsCategory.Appearance] = ["appearance", "theme", "dark", "light", "system default", "mica", "acrylic", "material", "transparency", "translucent", "animation", "animations", "micro-transitions", "visual", "look"],
         [SettingsCategory.Shortcuts] = ["shortcut", "shortcuts", "hotkey", "hotkeys", "global", "action manager", "command palette", "cheat sheet", "hud", "overlay", "conflict", "key", "recorder"],
-        [SettingsCategory.System] = ["system", "startup", "login", "windows", "minimized", "tray", "system tray", "hide window", "crosshair", "targeting", "toast", "toasts", "notification", "notifications", "monitor", "display", "active monitor", "primary monitor", "screen", "location", "placement", "validate", "path", "revert", "confirm", "unsaved"],
+        [SettingsCategory.System] = ["system", "startup", "login", "windows", "minimized", "tray", "system tray", "hide window", "crosshair", "targeting", "toast", "toasts", "notification", "notifications", "monitor", "display", "active monitor", "primary monitor", "screen", "location", "placement", "validate", "path", "revert", "confirm", "unsaved", "explorer", "context menu", "right-click", "add to triggerpoint", "shell"],
         [SettingsCategory.Logging] = ["serilog", "log", "logs", "logging", "diagnostics", "minimum log level", "retention", "days", "split", "threshold", "mb", "folder", "open logs", "verbose", "debug", "information", "warning", "error", "fatal"],
         [SettingsCategory.Updates] = ["update", "updates", "maintenance", "check for updates", "version", "latest", "frequency", "startup", "daily", "weekly", "monthly", "manual", "silent install", "restart", "pre-release", "beta", "preview", "ignored", "ignore", "release"],
         [SettingsCategory.Data] = ["backup", "data", "management", "recycle", "recycle bin", "retention", "purge", "empty", "delete", "telemetry", "export", "import", "restore", "json", "actions", "folders"]

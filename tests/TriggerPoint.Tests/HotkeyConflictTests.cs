@@ -112,4 +112,98 @@ public class HotkeyConflictTests
         Assert.Equal("Command Palette", conflict2.ConflictingActionName);
         Assert.Equal("Application Settings", conflict2.ConflictingFolderName);
     }
+
+    [Fact]
+    public void ValidateTier1Conflicts_DisjointAllowedProcesses_DoesNotFlagConflict()
+    {
+        var itemVscode = new TriggerItem
+        {
+            Id = Guid.NewGuid(),
+            Name = "Format in VSCode",
+            Hotkey = new ShortcutBinding(ModifierKeys.Control | ModifierKeys.Shift, 70, "F"),
+            ContextFilter = new ContextFilter
+            {
+                AllowedProcesses = ["Code.exe"]
+            }
+        };
+
+        var itemChrome = new TriggerItem
+        {
+            Id = Guid.NewGuid(),
+            Name = "Search in Chrome",
+            Hotkey = new ShortcutBinding(ModifierKeys.Control | ModifierKeys.Shift, 70, "F"),
+            ContextFilter = new ContextFilter
+            {
+                AllowedProcesses = ["chrome.exe"]
+            }
+        };
+
+        var items = new List<TriggerItem> { itemVscode, itemChrome };
+        var conflicts = HotkeyRegistryValidator.ValidateTier1Conflicts(items);
+
+        Assert.Empty(conflicts);
+    }
+
+    [Fact]
+    public void ValidateTier1Conflicts_OverlappingAllowedProcesses_FlagsConflict()
+    {
+        var item1 = new TriggerItem
+        {
+            Id = Guid.NewGuid(),
+            Name = "Action 1",
+            Hotkey = new ShortcutBinding(ModifierKeys.Control | ModifierKeys.Shift, 70, "F"),
+            ContextFilter = new ContextFilter
+            {
+                AllowedProcesses = ["Code.exe", "devenv.exe"]
+            }
+        };
+
+        var item2 = new TriggerItem
+        {
+            Id = Guid.NewGuid(),
+            Name = "Action 2",
+            Hotkey = new ShortcutBinding(ModifierKeys.Control | ModifierKeys.Shift, 70, "F"),
+            ContextFilter = new ContextFilter
+            {
+                AllowedProcesses = ["code.exe"]
+            }
+        };
+
+        var items = new List<TriggerItem> { item1, item2 };
+        var conflicts = HotkeyRegistryValidator.ValidateTier1Conflicts(items);
+
+        Assert.Equal(2, conflicts.Count);
+        Assert.True(conflicts.ContainsKey(item1.Id));
+        Assert.True(conflicts.ContainsKey(item2.Id));
+    }
+
+    [Fact]
+    public void CheckPotentialConflict_DisjointProcessContext_Allowed()
+    {
+        var existing = new TriggerItem
+        {
+            Id = Guid.NewGuid(),
+            Name = "VSCode Build",
+            Hotkey = new ShortcutBinding(ModifierKeys.Control | ModifierKeys.Shift, 66, "B"),
+            ContextFilter = new ContextFilter
+            {
+                AllowedProcesses = ["Code.exe"]
+            }
+        };
+
+        var candidate = new TriggerItem
+        {
+            Id = Guid.NewGuid(),
+            Name = "Chrome Bookmark",
+            ContextFilter = new ContextFilter
+            {
+                AllowedProcesses = ["chrome.exe"]
+            }
+        };
+
+        var newBinding = new ShortcutBinding(ModifierKeys.Control | ModifierKeys.Shift, 66, "B");
+        var conflict = HotkeyRegistryValidator.CheckPotentialConflict(candidate, newBinding, [existing]);
+
+        Assert.Null(conflict);
+    }
 }

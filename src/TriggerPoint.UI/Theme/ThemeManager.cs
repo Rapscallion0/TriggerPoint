@@ -127,7 +127,9 @@ public static class ThemeManager
             res["WarningBrush"] = new SolidColorBrush(Color.FromRgb(245, 158, 11));       // Amber
             res["WarningSubtleBrush"] = new SolidColorBrush(Color.FromArgb(45, 245, 158, 11));
             res["ErrorBrush"] = new SolidColorBrush(Color.FromRgb(239, 68, 68));          // Red
+            res["ErrorSubtleBrush"] = new SolidColorBrush(Color.FromArgb(40, 239, 68, 68));
             res["SuccessBrush"] = new SolidColorBrush(Color.FromRgb(16, 185, 129));       // Emerald
+            res["SuccessSubtleBrush"] = new SolidColorBrush(Color.FromArgb(40, 16, 185, 129));
 
             // Semantic Action Types
             res["FolderBrush"] = new SolidColorBrush(Color.FromRgb(245, 158, 11));       // #F59E0B Amber
@@ -192,7 +194,9 @@ public static class ThemeManager
             res["WarningBrush"] = new SolidColorBrush(Color.FromRgb(217, 119, 6));        // Amber dark
             res["WarningSubtleBrush"] = new SolidColorBrush(Color.FromArgb(35, 217, 119, 6));
             res["ErrorBrush"] = new SolidColorBrush(Color.FromRgb(220, 38, 38));          // Red
+            res["ErrorSubtleBrush"] = new SolidColorBrush(Color.FromArgb(35, 220, 38, 38));
             res["SuccessBrush"] = new SolidColorBrush(Color.FromRgb(5, 150, 105));        // Emerald
+            res["SuccessSubtleBrush"] = new SolidColorBrush(Color.FromArgb(35, 5, 150, 105));
 
             // Semantic Action Types
             res["FolderBrush"] = new SolidColorBrush(Color.FromRgb(217, 119, 6));        // #D97706 Amber Dark

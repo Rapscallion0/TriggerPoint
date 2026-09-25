@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Interop;
 using System.Windows.Threading;
 using TriggerPoint.Core.Models;
 using TriggerPoint.Infrastructure.Win32;
@@ -74,6 +75,13 @@ public partial class ToastNotificationWindow : Window
     {
         base.OnSourceInitialized(e);
         Reposition();
+
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle != IntPtr.Zero)
+        {
+            int exStyle = NativeMethods.GetWindowLong(handle, NativeMethods.GWL_EXSTYLE);
+            NativeMethods.SetWindowLong(handle, NativeMethods.GWL_EXSTYLE, exStyle | NativeMethods.WS_EX_NOACTIVATE | NativeMethods.WS_EX_TOOLWINDOW);
+        }
     }
 
     private void Window_Loaded(object sender, RoutedEventArgs e)

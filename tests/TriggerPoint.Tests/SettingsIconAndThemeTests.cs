@@ -218,7 +218,7 @@ public class SettingsIconAndThemeTests
             {
                 if (Application.Current == null)
                 {
-                    new Application();
+                    new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
                 }
 
                 if (!Application.Current!.Resources.MergedDictionaries.Any(d => d.Source?.OriginalString?.Contains("ThemeResources.xaml") == true))
@@ -241,24 +241,28 @@ public class SettingsIconAndThemeTests
                 winDark.Content = spDark;
                 winDark.Show();
                 winDark.UpdateLayout();
+                btnDark.ApplyTemplate();
 
                 Assert.IsType<SolidColorBrush>(tbDark.Foreground);
                 Assert.Equal(Color.FromRgb(242, 243, 245), ((SolidColorBrush)tbDark.Foreground).Color);
 
-                var btnDarkTb = FindVisualChild<System.Windows.Controls.TextBlock>(btnDark);
+                var btnDarkTb = (DependencyObject?)FindVisualChild<System.Windows.Controls.TextBlock>(btnDark) ?? FindVisualChild<System.Windows.Controls.AccessText>(btnDark);
                 Assert.NotNull(btnDarkTb);
-                Assert.Equal(Colors.White, ((SolidColorBrush)btnDarkTb.Foreground).Color);
+                var brushDark = (SolidColorBrush)(btnDarkTb is System.Windows.Controls.TextBlock tbD ? tbD.Foreground : ((System.Windows.Controls.AccessText)btnDarkTb).Foreground);
+                Assert.Equal(Colors.White, brushDark.Color);
 
                 // 2. Light Theme Test
                 ThemeManager.ApplyTheme(AppTheme.Light);
                 winDark.UpdateLayout();
+                btnDark.ApplyTemplate();
 
                 Assert.IsType<SolidColorBrush>(tbDark.Foreground);
                 Assert.Equal(Color.FromRgb(15, 23, 42), ((SolidColorBrush)tbDark.Foreground).Color);
 
-                var btnLightTb = FindVisualChild<System.Windows.Controls.TextBlock>(btnDark);
+                var btnLightTb = (DependencyObject?)FindVisualChild<System.Windows.Controls.TextBlock>(btnDark) ?? FindVisualChild<System.Windows.Controls.AccessText>(btnDark);
                 Assert.NotNull(btnLightTb);
-                Assert.Equal(Colors.White, ((SolidColorBrush)btnLightTb.Foreground).Color);
+                var brushLight = (SolidColorBrush)(btnLightTb is System.Windows.Controls.TextBlock tbL ? tbL.Foreground : ((System.Windows.Controls.AccessText)btnLightTb).Foreground);
+                Assert.Equal(Colors.White, brushLight.Color);
 
                 winDark.Close();
             }

@@ -10,8 +10,8 @@ namespace TriggerPoint.Core.Services;
 
 public static partial class PlaceholderParser
 {
-    // Pattern to match any dynamic token {...}
-    private static readonly Regex TokenRegex = new(@"\{(?<tag>[^{}]+)\}", RegexOptions.Compiled);
+    // Pattern to match any dynamic token {{...}} or {...}
+    private static readonly Regex TokenRegex = new(@"\{\{(?<tag>[^{}]+)\}\}|\{(?<tag>[^{}]+)\}", RegexOptions.Compiled);
 
     public const string CursorToken = "{cursor}";
 
@@ -28,7 +28,8 @@ public static partial class PlaceholderParser
             var rawTag = match.Groups["tag"].Value.Trim();
             if (seenTags.Contains(rawTag)) continue;
 
-            var token = ParsePromptToken(rawTag);
+            bool isDoubleBraced = match.Value.StartsWith("{{", StringComparison.Ordinal) && match.Value.EndsWith("}}", StringComparison.Ordinal);
+            var token = ParsePromptToken(rawTag, null, isDoubleBraced);
             if (token != null)
             {
                 seenTags.Add(rawTag);
@@ -39,24 +40,261 @@ public static partial class PlaceholderParser
         return list;
     }
 
-    private static PromptToken? ParsePromptToken(string rawTag, DateTime? referenceTime = null)
+    public static int CountCursorTokens(string template)
     {
-        // Check if it starts with a prompt identifier
-        var colonIndex = rawTag.IndexOf(':');
-        if (colonIndex <= 0) return null;
+        if (string.IsNullOrEmpty(template)) return 0;
+        return Regex.Matches(template, @"\{\{?cursor\}\}?", RegexOptions.IgnoreCase).Count;
+    }
 
-        var typeStr = rawTag[..colonIndex].Trim().ToLowerInvariant();
-        var rest = rawTag[(colonIndex + 1)..].Trim();
+    public static List<PromptToken> ExtractAllPromptTokenOccurrences(string template)
+    {
+        if (string.IsNullOrEmpty(template)) return [];
 
-        return typeStr switch
+        var list = new List<PromptToken>();
+        var matches = TokenRegex.Matches(template);
+        foreach (Match match in matches)
         {
-            "text" => ParseTextToken(rawTag, rest),
-            "number" => ParseNumberToken(rawTag, rest),
-            "choice" => ParseChoiceToken(rawTag, rest),
-            "multiline" => ParseMultilineToken(rawTag, rest),
-            "date_picker" => ParseDatePickerToken(rawTag, rest, referenceTime),
-            _ => null
+            var rawTag = match.Groups["tag"].Value.Trim();
+            bool isDoubleBraced = match.Value.StartsWith("{{", StringComparison.Ordinal) && match.Value.EndsWith("}}", StringComparison.Ordinal);
+            var token = ParsePromptToken(rawTag, null, isDoubleBraced);
+            if (token != null)
+            {
+                list.Add(token);
+            }
+        }
+
+        return list;
+    }
+
+    public static string GetDisambiguatedPromptToken(string tokenTag, string currentTemplate)
+    {
+        if (string.IsNullOrWhiteSpace(tokenTag)) return tokenTag;
+
+        string trimmed = tokenTag.Trim();
+        bool isDouble = trimmed.StartsWith("{{", StringComparison.Ordinal) && trimmed.EndsWith("}}", StringComparison.Ordinal);
+        bool isSingle = trimmed.StartsWith('{') && trimmed.EndsWith('}');
+        if (!isSingle && !isDouble) return tokenTag;
+
+        string inner = isDouble ? trimmed[2..^2].Trim() : trimmed[1..^1].Trim();
+        int colonIdx = inner.IndexOf(':');
+        if (colonIdx <= 0) return tokenTag;
+
+        string prefix = inner[..colonIdx].Trim();
+        string prefixLower = prefix.ToLowerInvariant();
+        if (prefixLower is not ("text" or "number" or "choice" or "multiline" or "date_picker"))
+        {
+            return tokenTag;
+        }
+
+        string rest = inner[(colonIdx + 1)..];
+        int pipeIdx = rest.IndexOf('|');
+        string baseLabel = pipeIdx >= 0 ? rest[..pipeIdx].Trim() : rest.Trim();
+        string suffix = pipeIdx >= 0 ? rest[pipeIdx..] : string.Empty;
+
+        var existingTokens = ExtractAllPromptTokenOccurrences(currentTemplate);
+        if (!existingTokens.Any(t => string.Equals(t.Label, baseLabel, StringComparison.OrdinalIgnoreCase)))
+        {
+            return tokenTag;
+        }
+
+        // Duplicate label found in existing template. Calculate next unique increment.
+        string root = Regex.Replace(baseLabel, @"\s+\d+$", "").Trim();
+        var usedNumbers = new HashSet<int>();
+
+        foreach (var t in existingTokens)
+        {
+            if (string.Equals(t.Label, root, StringComparison.OrdinalIgnoreCase))
+            {
+                usedNumbers.Add(1);
+            }
+            else if (t.Label.StartsWith(root + " ", StringComparison.OrdinalIgnoreCase))
+            {
+                var numPart = t.Label[(root.Length + 1)..].Trim();
+                if (int.TryParse(numPart, out int n))
+                {
+                    usedNumbers.Add(n);
+                }
+            }
+        }
+
+        int next = 2;
+        while (usedNumbers.Contains(next))
+        {
+            next++;
+        }
+
+        string newLabel = $"{root} {next}";
+        string newInner = $"{prefix}:{newLabel}{suffix}";
+        return isDouble ? $"{{{{{newInner}}}}}" : $"{{{newInner}}}";
+    }
+
+    public static string DisambiguateDuplicatePromptTokens(string template)
+    {
+        if (string.IsNullOrEmpty(template)) return template;
+
+        var matches = TokenRegex.Matches(template);
+        if (matches.Count == 0) return template;
+
+        var seenLabels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var labelCounters = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var sb = new StringBuilder();
+        int lastIndex = 0;
+
+        foreach (Match match in matches)
+        {
+            sb.Append(template[lastIndex..match.Index]);
+            lastIndex = match.Index + match.Length;
+
+            var rawTag = match.Groups["tag"].Value.Trim();
+            bool isDoubleBraced = match.Value.StartsWith("{{", StringComparison.Ordinal) && match.Value.EndsWith("}}", StringComparison.Ordinal);
+            var token = ParsePromptToken(rawTag, null, isDoubleBraced);
+
+            if (token != null)
+            {
+                string baseLabel = token.Label;
+                string root = Regex.Replace(baseLabel, @"\s+\d+$", "").Trim();
+
+                if (!seenLabels.Contains(baseLabel))
+                {
+                    seenLabels.Add(baseLabel);
+                    labelCounters[root] = Math.Max(labelCounters.GetValueOrDefault(root, 1), 1);
+                    sb.Append(match.Value);
+                }
+                else
+                {
+                    int nextNum = labelCounters.GetValueOrDefault(root, 1) + 1;
+                    labelCounters[root] = nextNum;
+                    string newLabel = $"{root} {nextNum}";
+                    seenLabels.Add(newLabel);
+
+                    // Reconstruct token with new label
+                    int colonIdx = rawTag.IndexOf(':');
+                    if (colonIdx > 0)
+                    {
+                        string prefix = rawTag[..colonIdx].Trim();
+                        string rest = rawTag[(colonIdx + 1)..];
+                        int pipeIdx = rest.IndexOf('|');
+                        string suffix = pipeIdx >= 0 ? rest[pipeIdx..] : string.Empty;
+                        string newInner = $"{prefix}:{newLabel}{suffix}";
+                        sb.Append(isDoubleBraced ? $"{{{{{newInner}}}}}" : $"{{{newInner}}}");
+                    }
+                    else
+                    {
+                        sb.Append(match.Value);
+                    }
+                }
+            }
+            else
+            {
+                sb.Append(match.Value);
+            }
+        }
+
+        sb.Append(template[lastIndex..]);
+        return sb.ToString();
+    }
+
+    private static bool IsSystemToken(string rawTag)
+    {
+        var colonIdx = rawTag.IndexOf(':');
+        if (colonIdx > 0)
+        {
+            var prefix = rawTag[..colonIdx].Trim().ToLowerInvariant();
+            return prefix switch
+            {
+                "date" => true,
+                "time" => true,
+                "datetime" => true,
+                "clipboard" => true,
+                "guid" or "uuid" => true,
+                "random" or "rand" => true,
+                "env" => true,
+                _ => false
+            };
+        }
+
+        var lower = rawTag.Trim().ToLowerInvariant();
+        return lower switch
+        {
+            "cursor" => true,
+            "date" => true,
+            "time" => true,
+            "datetime" => true,
+            "clipboard" => true,
+            "guid" or "uuid" => true,
+            "random" or "rand" => true,
+            "username" or "user" => true,
+            "machine" or "computer" or "machinename" => true,
+            "active_window" => true,
+            "active_process" => true,
+            _ => false
         };
+    }
+
+    private static PromptToken? ParsePromptToken(string rawTag, DateTime? referenceTime = null, bool isDoubleBraced = false)
+    {
+        if (IsSystemToken(rawTag)) return null;
+
+        var colonIndex = rawTag.IndexOf(':');
+        if (colonIndex > 0)
+        {
+            var typeStr = rawTag[..colonIndex].Trim().ToLowerInvariant();
+            var rest = rawTag[(colonIndex + 1)..].Trim();
+
+            // Known single-prefix syntax
+            switch (typeStr)
+            {
+                case "text":
+                    return ParseTextToken(rawTag, rest);
+                case "number":
+                    return ParseNumberToken(rawTag, rest);
+                case "choice":
+                    return ParseChoiceToken(rawTag, rest);
+                case "multiline":
+                    return ParseMultilineToken(rawTag, rest);
+                case "date_picker":
+                    return ParseDatePickerToken(rawTag, rest, referenceTime);
+            }
+
+            // Shorthand field with default: {Field:Default} or {{Field:Default}}
+            var fieldName = rawTag[..colonIndex].Trim();
+            return new PromptToken
+            {
+                Type = TokenType.PromptText,
+                RawTag = rawTag,
+                Label = fieldName,
+                DefaultValue = rest
+            };
+        }
+
+        // Shorthand text with equals default: {Field=Default}
+        var eqIndex = rawTag.IndexOf('=');
+        if (eqIndex > 0)
+        {
+            var fieldName = rawTag[..eqIndex].Trim();
+            var defaultVal = rawTag[(eqIndex + 1)..].Trim();
+            return new PromptToken
+            {
+                Type = TokenType.PromptText,
+                RawTag = rawTag,
+                Label = fieldName,
+                DefaultValue = defaultVal
+            };
+        }
+
+        // Shorthand simple text: {{FieldName}}
+        if (isDoubleBraced)
+        {
+            return new PromptToken
+            {
+                Type = TokenType.PromptText,
+                RawTag = rawTag,
+                Label = rawTag,
+                DefaultValue = string.Empty
+            };
+        }
+
+        return null;
     }
 
     private static PromptToken ParseTextToken(string rawTag, string rest)
@@ -315,21 +553,27 @@ public static partial class PlaceholderParser
                 result.Append(activeProcessName ?? string.Empty);
             }
             // 8. Interactive prompt responses (or fallback to default values)
-            else if (promptResponses != null && promptResponses.TryGetValue(rawTag, out var responseValue))
+            else if (promptResponses != null && (promptResponses.TryGetValue(rawTag, out var responseValue) ||
+                     (rawTag.Contains(':') && promptResponses.TryGetValue(rawTag[..rawTag.IndexOf(':')].Trim(), out responseValue))))
             {
                 result.Append(responseValue);
             }
             else
             {
-                // Check if prompt has a default value defined (e.g. {text:Label|Default})
-                var prompt = ParsePromptToken(rawTag, now);
-                if (prompt != null && !string.IsNullOrEmpty(prompt.DefaultValue))
+                // Check if prompt has a default value defined (e.g. {{Name:John}} or {text:Label|Default})
+                bool isDoubleBraced = match.Value.StartsWith("{{", StringComparison.Ordinal) && match.Value.EndsWith("}}", StringComparison.Ordinal);
+                var prompt = ParsePromptToken(rawTag, now, isDoubleBraced);
+                if (promptResponses != null)
+                {
+                    result.Append(prompt != null ? prompt.DefaultValue : string.Empty);
+                }
+                else if (prompt != null && !string.IsNullOrEmpty(prompt.DefaultValue))
                 {
                     result.Append(prompt.DefaultValue);
                 }
                 else
                 {
-                    // Leave original token if unhandled
+                    // Leave original token if unhandled or in preview
                     result.Append(match.Value);
                 }
             }
@@ -548,8 +792,37 @@ public static partial class PlaceholderParser
 
         // Remove the {cursor} token
         var cleanText = textWithCursor.Remove(cursorIdx, CursorToken.Length);
-        // Caret offset from end of clean text: how many left arrow keystrokes to get to cursor position
-        var offsetFromEnd = cleanText.Length - cursorIdx;
+        // Caret offset from end of clean text: calculate navigation steps (CRLF and surrogate pairs count as 1 step)
+        var suffix = cleanText[cursorIdx..];
+        var offsetFromEnd = CalculateCaretStepDistance(suffix);
         return (cleanText, offsetFromEnd);
+    }
+
+    /// <summary>
+    /// Calculates the number of cursor movement steps required to traverse the given text from end to start,
+    /// counting \r\n as a single step and Unicode surrogate pairs (e.g. emojis) as a single step.
+    /// </summary>
+    public static int CalculateCaretStepDistance(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return 0;
+        int steps = 0;
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (text[i] == '\r' && i + 1 < text.Length && text[i + 1] == '\n')
+            {
+                steps++;
+                i++; // Skip \n
+            }
+            else if (char.IsSurrogatePair(text, i))
+            {
+                steps++;
+                i++; // Skip low surrogate
+            }
+            else
+            {
+                steps++;
+            }
+        }
+        return steps;
     }
 }

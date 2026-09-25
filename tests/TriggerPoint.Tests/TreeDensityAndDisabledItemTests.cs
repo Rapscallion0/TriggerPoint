@@ -27,7 +27,7 @@ public class TreeDensityAndDisabledItemTests
     {
         if (Application.Current == null)
         {
-            new Application();
+            new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         }
 
         if (!Application.Current!.Resources.MergedDictionaries.Any(d => d.Source?.OriginalString?.Contains("ThemeResources.xaml") == true))
@@ -580,16 +580,20 @@ public class TreeDensityAndDisabledItemTests
 
                 win.Show();
                 win.UpdateLayout();
+                btnEnabled.ApplyTemplate();
+                btnDisabled.ApplyTemplate();
 
-                // Inspect visual children of enabled button
-                TextBlock? tbEnabled = FindVisualChild<TextBlock>(btnEnabled);
+                // Inspect visual children of enabled button (may be TextBlock or AccessText depending on RecognizesAccessKey)
+                var tbEnabled = (DependencyObject?)FindVisualChild<TextBlock>(btnEnabled) ?? FindVisualChild<AccessText>(btnEnabled);
                 Assert.NotNull(tbEnabled);
-                Assert.Equal(Colors.White, ((SolidColorBrush)tbEnabled.Foreground).Color);
+                var enabledBrush = (SolidColorBrush)(tbEnabled is TextBlock tbe ? tbe.Foreground : ((AccessText)tbEnabled).Foreground);
+                Assert.Equal(Colors.White, enabledBrush.Color);
 
                 // Inspect visual children of disabled button
-                TextBlock? tbDisabled = FindVisualChild<TextBlock>(btnDisabled);
+                var tbDisabled = (DependencyObject?)FindVisualChild<TextBlock>(btnDisabled) ?? FindVisualChild<AccessText>(btnDisabled);
                 Assert.NotNull(tbDisabled);
-                Assert.Equal(Colors.White, ((SolidColorBrush)tbDisabled.Foreground).Color);
+                var disabledBrush = (SolidColorBrush)(tbDisabled is TextBlock tbd ? tbd.Foreground : ((AccessText)tbDisabled).Foreground);
+                Assert.Equal(Colors.White, disabledBrush.Color);
 
                 win.Close();
             }

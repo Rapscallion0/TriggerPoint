@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using TriggerPoint.Core.Contracts;
 using TriggerPoint.Core.Models;
@@ -72,6 +73,18 @@ public class PaletteItemViewModel
     public Visibility ActionVisibility => IsSelectable ? Visibility.Visible : Visibility.Collapsed;
     public bool IsSystemAction => Item != null && (Item.Id == App.OpenSettingsActionId || Item.Id == CommandPaletteView.AppSettingsVirtualId);
     public bool IsCalculatorResult { get; init; }
+    public CalculatorResult? CalcResult { get; init; }
+
+    public IReadOnlyList<AlternativeMeasurement> CommonAlternatives =>
+        CalcResult?.Alternatives?.Where(a => a.IsCommon).Take(4).ToList() ?? (IReadOnlyList<AlternativeMeasurement>)Array.Empty<AlternativeMeasurement>();
+
+    public string? HierarchicalBreakdown => CalcResult?.HierarchicalBreakdown;
+    public string? CumulativeBreakdown => CalcResult?.CumulativeBreakdown;
+
+    public bool HasAlternatives => CalcResult?.Alternatives != null && CalcResult.Alternatives.Count > 0;
+    public Visibility AlternativesVisibility => (IsCalculatorResult && HasAlternatives) ? Visibility.Visible : Visibility.Collapsed;
+    public Cursor SubtitleCursor => (IsCalculatorResult && HasAlternatives) ? Cursors.Hand : Cursors.Arrow;
+    public string? SubtitleTooltip => (IsCalculatorResult && HasAlternatives) ? "Click to view and choose other measurement units" : null;
 
     public string Name => Item?.Name ?? string.Empty;
     public string Description => Item?.Description ?? string.Empty;
@@ -244,12 +257,8 @@ public class PaletteItemViewModel
     {
         get
         {
-            if (IsSectionHeader || IsSystemAction || Item == null || Item.ActionType != ActionType.Shell) return false;
-            var cmd = Item.Payload.Command;
-            if (string.IsNullOrWhiteSpace(cmd)) return false;
-            if (cmd.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || cmd.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) return false;
-            var expanded = Environment.ExpandEnvironmentVariables(cmd);
-            return File.Exists(expanded) || Directory.Exists(expanded);
+            if (IsSectionHeader || IsSystemAction || Item == null) return false;
+            return ActionShortcutRelevanceHelper.CanRevealInExplorer(Item);
         }
     }
 
@@ -364,6 +373,42 @@ public class PaletteItemViewModel
     }
 }
 
+public sealed class FolderActionPreviewItem
+{
+    public TriggerItem Item { get; init; } = null!;
+    public string Name => Item.Name;
+    public string PathBreadcrumb { get; init; } = string.Empty;
+    public Visibility BreadcrumbVisibility => !string.IsNullOrEmpty(PathBreadcrumb) ? Visibility.Visible : Visibility.Collapsed;
+    public string IconEmoji => Item.ActionType switch
+    {
+        ActionType.Shell => "⚙️",
+        ActionType.Snippet => "📝",
+        ActionType.Workflow => "⚡",
+        _ => "▶"
+    };
+    public string TypeBadgeText => Item.ActionType switch
+    {
+        ActionType.Shell => "APP",
+        ActionType.Snippet => "SNIPPET",
+        ActionType.Workflow => "WORKFLOW",
+        _ => "ACTION"
+    };
+    public Brush TypeBadgeBg => Item.ActionType switch
+    {
+        ActionType.Shell => (Brush)Application.Current.TryFindResource("ShellSubtleBrush") ?? Brushes.LightSkyBlue,
+        ActionType.Snippet => (Brush)Application.Current.TryFindResource("SnippetSubtleBrush") ?? Brushes.LightGreen,
+        ActionType.Workflow => (Brush)Application.Current.TryFindResource("WorkflowSubtleBrush") ?? Brushes.MediumPurple,
+        _ => Brushes.Transparent
+    };
+    public Brush TypeBadgeFg => Item.ActionType switch
+    {
+        ActionType.Shell => (Brush)Application.Current.TryFindResource("ShellBrush") ?? Brushes.SkyBlue,
+        ActionType.Snippet => (Brush)Application.Current.TryFindResource("SnippetBrush") ?? Brushes.Green,
+        ActionType.Workflow => (Brush)Application.Current.TryFindResource("WorkflowBrush") ?? Brushes.Purple,
+        _ => (Brush)Application.Current.TryFindResource("TextPrimaryBrush") ?? Brushes.White
+    };
+}
+
 public partial class CommandPaletteView : Window
 {
     public static readonly Guid AppSettingsVirtualId = Guid.Parse("00000000-0000-0000-0000-000000000003");
@@ -383,6 +428,9 @@ public partial class CommandPaletteView : Window
     private readonly DispatcherTimer _feedbackTimer;
     private bool _isLoaded;
 
+    private TriggerItem? _folderConfirmTargetFolder;
+    private List<TriggerItem> _folderConfirmResolvedActions = [];
+
     private readonly TriggerItem _virtualActionManagerItem;
     private readonly TriggerItem _virtualAppSettingsItem;
 
@@ -393,6 +441,8 @@ public partial class CommandPaletteView : Window
         new("@snip", "Snippets & Templates", "Ctrl+3", "📝", CommandPaletteFilterType.Snippet),
         new("@flow", "Workflows", "Ctrl+4", "🔀", CommandPaletteFilterType.Workflow),
         new("@folder", "Folders", "Ctrl+5", "📁", CommandPaletteFilterType.Folder),
+        new("@calc", "Calculator & Math", "=", "🧮", CommandPaletteFilterType.All),
+        new("@current", "Current App Context", "", "🎯", CommandPaletteFilterType.All),
     ];
 
     public CommandPaletteView(
@@ -469,6 +519,7 @@ public partial class CommandPaletteView : Window
             }
             catch { }
 
+            SelectCalcGuideTab("Popular");
             SearchTextBox.Focus();
             Keyboard.Focus(SearchTextBox);
             FilterResults();
@@ -622,6 +673,22 @@ public partial class CommandPaletteView : Window
     private void ApplyPrefixSuggestion(PrefixSuggestionItem suggestion)
     {
         PrefixAutoCompletePopup.IsOpen = false;
+        if (suggestion.Prefix.Equals("@calc", StringComparison.OrdinalIgnoreCase))
+        {
+            SearchTextBox.Text = "= ";
+            SearchTextBox.CaretIndex = 2;
+            SearchTextBox.Focus();
+            return;
+        }
+
+        if (suggestion.Prefix.Equals("@current", StringComparison.OrdinalIgnoreCase))
+        {
+            SearchTextBox.Text = "@current ";
+            SearchTextBox.CaretIndex = 9;
+            SearchTextBox.Focus();
+            return;
+        }
+
         _activeFilter = suggestion.FilterType;
         UpdateFilterPillsUi();
         SearchTextBox.Text = string.Empty;
@@ -655,6 +722,14 @@ public partial class CommandPaletteView : Window
     {
         var rawQuery = SearchTextBox.Text.Trim();
         var effectiveQuery = rawQuery;
+
+        bool filterCurrentContext = false;
+        if (rawQuery.StartsWith("@current", StringComparison.OrdinalIgnoreCase))
+        {
+            filterCurrentContext = true;
+            int spaceIdx = rawQuery.IndexOf(' ');
+            effectiveQuery = spaceIdx >= 0 ? rawQuery.Substring(spaceIdx).Trim() : string.Empty;
+        }
 
         // Auto-detect and trim prefixes
         if (rawQuery.StartsWith("@app", StringComparison.OrdinalIgnoreCase) || rawQuery.StartsWith("@cmd", StringComparison.OrdinalIgnoreCase))
@@ -722,9 +797,23 @@ public partial class CommandPaletteView : Window
         // 2. Update pill count badges
         UpdatePillCounts(scopeCandidates);
 
-        // 3. Apply active category filter
+        // 3. Apply active category filter and @current context filter
+        string? currentProcName = null;
+        if (filterCurrentContext && _targetHwnd != IntPtr.Zero)
+        {
+            currentProcName = NativeMethods.GetProcessNameForWindow(_targetHwnd);
+        }
+
         var filteredCandidates = scopeCandidates.Where(x =>
         {
+            if (filterCurrentContext && !string.IsNullOrWhiteSpace(currentProcName))
+            {
+                if (x.ContextFilter != null && !x.ContextFilter.IsActiveForProcess(currentProcName))
+                {
+                    return false;
+                }
+            }
+
             return _activeFilter switch
             {
                 CommandPaletteFilterType.App => x.ActionType == ActionType.Shell && x.Id != App.OpenSettingsActionId && x.Id != AppSettingsVirtualId,
@@ -793,47 +882,346 @@ public partial class CommandPaletteView : Window
                 r.Item.ParentId.HasValue && _folderPaths.TryGetValue(r.Item.ParentId.Value, out var path) ? path : null)));
         }
 
+        bool isCalcMode = rawQuery.StartsWith("=") || rawQuery.StartsWith("@calc", StringComparison.OrdinalIgnoreCase);
+
         // Evaluate quick math or unit conversion utility
         var calcResult = QuickCalculatorService.TryEvaluate(rawQuery);
-        if (calcResult != null)
+
+        if (isCalcMode)
         {
-            var calcItem = new TriggerItem
+            FilterPillsBar.Visibility = Visibility.Collapsed;
+            ResultsListBox.Visibility = Visibility.Collapsed;
+            EmptyStateCard.Visibility = Visibility.Collapsed;
+            CalculatorGuideCard.Visibility = Visibility.Visible;
+            AnimateWindowHeight(Math.Min(640, SystemParameters.WorkArea.Height - 60));
+
+            if (calcResult != null)
             {
-                Id = Guid.NewGuid(),
-                Name = $"{calcResult.FormattedResult}  ({calcResult.Expression})",
-                Description = calcResult.Description,
-                ActionType = ActionType.Snippet,
-                Payload = new ActionPayload
+                _activeCalcResult = calcResult;
+                var calcItem = new TriggerItem
                 {
-                    SnippetTemplate = calcResult.FormattedResult
-                },
-                IsEnabled = true
-            };
-            vms.Insert(0, new PaletteItemViewModel(calcItem, null) { IsCalculatorResult = true });
-        }
+                    Id = Guid.NewGuid(),
+                    Name = $"{calcResult.FormattedResult}  ({calcResult.Expression})",
+                    Description = calcResult.Description,
+                    ActionType = ActionType.Snippet,
+                    Payload = new ActionPayload
+                    {
+                        SnippetTemplate = calcResult.FormattedResult
+                    },
+                    IsEnabled = true
+                };
+                var calcVm = new PaletteItemViewModel(calcItem, null)
+                {
+                    IsCalculatorResult = true,
+                    CalcResult = calcResult
+                };
+                _activeCalcVm = calcVm;
+                vms.Clear();
+                vms.Add(calcVm);
+                ResultsListBox.ItemsSource = vms;
+                ResultsListBox.SelectedItem = calcVm;
 
-        ResultsListBox.ItemsSource = vms;
+                CalcResultBanner.Visibility = Visibility.Visible;
+                CalcDraftBanner.Visibility = Visibility.Collapsed;
+                CalcResultValueText.Text = calcResult.FormattedResult;
+                CalcResultValueText.ToolTip = $"Calculation: {calcResult.Expression.TrimStart('=', ' ').Trim()} = {calcResult.FormattedResult} (Enter to paste)";
+                CalcResultDescText.Text = !string.IsNullOrWhiteSpace(calcResult.Description) ? calcResult.Description : "Calculation result";
+                CalcResultMoreUnitsBtn.Visibility = (calcResult.Alternatives != null && calcResult.Alternatives.Count > 0) ? Visibility.Visible : Visibility.Collapsed;
+            }
+            else
+            {
+                _activeCalcResult = null;
+                _activeCalcVm = null;
+                vms.Clear();
+                ResultsListBox.ItemsSource = vms;
+                ResultsListBox.SelectedItem = null;
 
-        // Empty state handling
-        bool hasSelectable = vms.Any(x => x.IsSelectable);
-        if (!hasSelectable)
-        {
-            EmptyStateCard.Visibility = Visibility.Visible;
-            EmptyStatePromptText.Text = !string.IsNullOrWhiteSpace(effectiveQuery)
-                ? $"Press Enter to create a new action for \"{effectiveQuery}\""
-                : "No actions found in this category.";
+                CalcResultBanner.Visibility = Visibility.Collapsed;
+                CalcDraftBanner.Visibility = Visibility.Visible;
+                string cleanQuery = rawQuery;
+                if (cleanQuery.StartsWith("@calc", StringComparison.OrdinalIgnoreCase))
+                {
+                    cleanQuery = cleanQuery.Substring(5).TrimStart(':', ' ');
+                }
+                else if (cleanQuery.StartsWith("="))
+                {
+                    cleanQuery = cleanQuery.Substring(1).Trim();
+                }
+
+                CalcDraftTitleText.Text = !string.IsNullOrWhiteSpace(cleanQuery) ? $"🧮 {cleanQuery} ..." : "🧮 Calculator Mode";
+                CalcDraftSubtitleText.Text = "Enter math expressions, dates (next friday, now + 3d), or unit conversions";
+            }
         }
         else
         {
-            EmptyStateCard.Visibility = Visibility.Collapsed;
-            var firstSelectable = vms.FirstOrDefault(x => x.IsSelectable);
-            if (firstSelectable != null)
+            FilterPillsBar.Visibility = Visibility.Visible;
+            ResultsListBox.Visibility = Visibility.Visible;
+            CalculatorGuideCard.Visibility = Visibility.Collapsed;
+            CalcResultBanner.Visibility = Visibility.Collapsed;
+            CalcDraftBanner.Visibility = Visibility.Collapsed;
+            AnimateWindowHeight(520);
+
+            if (calcResult != null)
             {
-                ResultsListBox.SelectedItem = firstSelectable;
+                _activeCalcResult = calcResult;
+                var calcItem = new TriggerItem
+                {
+                    Id = Guid.NewGuid(),
+                    Name = $"{calcResult.FormattedResult}  ({calcResult.Expression})",
+                    Description = calcResult.Description,
+                    ActionType = ActionType.Snippet,
+                    Payload = new ActionPayload
+                    {
+                        SnippetTemplate = calcResult.FormattedResult
+                    },
+                    IsEnabled = true
+                };
+                var calcVm = new PaletteItemViewModel(calcItem, null)
+                {
+                    IsCalculatorResult = true,
+                    CalcResult = calcResult
+                };
+                _activeCalcVm = calcVm;
+                vms.Insert(0, calcVm);
+            }
+            else
+            {
+                _activeCalcResult = null;
+                _activeCalcVm = null;
+            }
+
+            ResultsListBox.ItemsSource = vms;
+
+            bool hasSelectable = vms.Any(x => x.IsSelectable);
+            if (!hasSelectable)
+            {
+                EmptyStateCard.Visibility = Visibility.Visible;
+                if (_currentScopeFolderId.HasValue)
+                {
+                    if (string.IsNullOrWhiteSpace(effectiveQuery))
+                    {
+                        EmptyStateIconText.Text = "📁";
+                        EmptyStateTitleText.Text = $"\"{_currentScopeFolderName}\" is empty";
+                        EmptyStatePromptText.Text = "There are no actions in this folder yet. Press Backspace or Esc to return.";
+                        CreateActionEmptyBtnText.Text = $"➕ Create Action in {_currentScopeFolderName}";
+                    }
+                    else
+                    {
+                        EmptyStateIconText.Text = "🔍";
+                        EmptyStateTitleText.Text = $"No actions matching \"{effectiveQuery}\" in {_currentScopeFolderName}";
+                        EmptyStatePromptText.Text = $"Press Enter to create a new action for \"{effectiveQuery}\" in this folder";
+                        CreateActionEmptyBtnText.Text = $"➕ Create Action in {_currentScopeFolderName}";
+                    }
+                }
+                else
+                {
+                    EmptyStateIconText.Text = "🔍";
+                    EmptyStateTitleText.Text = "No matching actions found.";
+                    EmptyStatePromptText.Text = !string.IsNullOrWhiteSpace(effectiveQuery)
+                        ? $"Press Enter to create a new action for \"{effectiveQuery}\""
+                        : "No actions found in this category.";
+                    CreateActionEmptyBtnText.Text = "➕ Create Action";
+                }
+                ResultsListBox.SelectedItem = null;
+            }
+            else
+            {
+                EmptyStateCard.Visibility = Visibility.Collapsed;
+                var firstSelectable = vms.FirstOrDefault(x => x.IsSelectable);
+                if (firstSelectable != null)
+                {
+                    ResultsListBox.SelectedItem = firstSelectable;
+                }
             }
         }
 
         UpdatePreviewAndHints();
+    }
+
+    private double _currentAnimatedTargetHeight = 520;
+
+    private void AnimateWindowHeight(double targetHeight)
+    {
+        if (Math.Abs(_currentAnimatedTargetHeight - targetHeight) < 1) return;
+        _currentAnimatedTargetHeight = targetHeight;
+
+        var anim = new DoubleAnimation
+        {
+            To = targetHeight,
+            Duration = TimeSpan.FromMilliseconds(200),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        BeginAnimation(HeightProperty, anim);
+    }
+
+    private void CalcGuideTab_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is string tag)
+        {
+            SelectCalcGuideTab(tag);
+        }
+    }
+
+    private void SelectCalcGuideTab(string tag)
+    {
+        if (CalcPanelPopular == null || CalcPanelDate == null || CalcPanelScientific == null ||
+            CalcPanelProgrammer == null || CalcPanelUnits == null) return;
+
+        CalcPanelPopular.Visibility = tag == "Popular" ? Visibility.Visible : Visibility.Collapsed;
+        CalcPanelDate.Visibility = tag == "Date" ? Visibility.Visible : Visibility.Collapsed;
+        CalcPanelScientific.Visibility = tag == "Scientific" ? Visibility.Visible : Visibility.Collapsed;
+        CalcPanelProgrammer.Visibility = tag == "Programmer" ? Visibility.Visible : Visibility.Collapsed;
+        CalcPanelUnits.Visibility = tag == "Units" ? Visibility.Visible : Visibility.Collapsed;
+
+        UpdateTabButtonStyle(CalcTabPopular, tag == "Popular");
+        UpdateTabButtonStyle(CalcTabDate, tag == "Date");
+        UpdateTabButtonStyle(CalcTabScientific, tag == "Scientific");
+        UpdateTabButtonStyle(CalcTabProgrammer, tag == "Programmer");
+        UpdateTabButtonStyle(CalcTabUnits, tag == "Units");
+    }
+
+    private void UpdateTabButtonStyle(Button? btn, bool isSelected)
+    {
+        if (btn == null) return;
+
+        if (isSelected)
+        {
+            btn.Background = Application.Current?.TryFindResource("AccentBrush") as Brush ?? Brushes.CornflowerBlue;
+            btn.Foreground = Brushes.White;
+            btn.BorderBrush = Application.Current?.TryFindResource("AccentBrush") as Brush ?? Brushes.CornflowerBlue;
+            btn.FontWeight = FontWeights.Bold;
+        }
+        else
+        {
+            btn.Background = Brushes.Transparent;
+            btn.Foreground = Application.Current?.TryFindResource("TextSecondaryBrush") as Brush ?? Brushes.LightGray;
+            btn.BorderBrush = Application.Current?.TryFindResource("BorderSubtleBrush") as Brush ?? Brushes.DarkGray;
+            btn.FontWeight = FontWeights.SemiBold;
+        }
+    }
+
+    private void CalcOperatorButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is string op)
+        {
+            string current = SearchTextBox.Text;
+            if (!current.StartsWith("=") && !current.StartsWith("@calc", StringComparison.OrdinalIgnoreCase))
+            {
+                current = "= " + current.TrimStart();
+            }
+
+            int selStart = SearchTextBox.SelectionStart;
+            if (selStart < 0 || selStart > current.Length)
+            {
+                selStart = current.Length;
+            }
+
+            if (op.EndsWith("()"))
+            {
+                string funcName = op[..^1]; // e.g. "sin("
+                string newText = current.Insert(selStart, op);
+                SearchTextBox.Text = newText;
+                SearchTextBox.CaretIndex = selStart + funcName.Length;
+            }
+            else
+            {
+                string toInsert = op.StartsWith("to ") || op.StartsWith("in ") ? " " + op + " " : (op.EndsWith(" ") ? op : op + " ");
+                string newText = current.Insert(selStart, toInsert);
+                SearchTextBox.Text = newText;
+                SearchTextBox.CaretIndex = selStart + toInsert.Length;
+            }
+            SearchTextBox.Focus();
+        }
+    }
+
+    private void CalcExamplePill_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement fe && fe.Tag is string query)
+        {
+            SearchTextBox.Text = query;
+            SearchTextBox.CaretIndex = SearchTextBox.Text.Length;
+            SearchTextBox.Focus();
+        }
+    }
+
+    private void PasteActiveCalcResult()
+    {
+        if (_activeCalcResult == null) return;
+        var calcItem = new TriggerItem
+        {
+            Id = Guid.NewGuid(),
+            Name = $"{_activeCalcResult.FormattedResult}  ({_activeCalcResult.Expression})",
+            Description = _activeCalcResult.Description,
+            ActionType = ActionType.Snippet,
+            Payload = new ActionPayload
+            {
+                SnippetTemplate = _activeCalcResult.FormattedResult
+            },
+            IsEnabled = true
+        };
+        SafeClose();
+        _ = _executor.ExecuteAsync(calcItem, ExecutionOverride.Standard, _targetHwnd);
+    }
+
+    private void CalcResultPasteBtn_Click(object sender, RoutedEventArgs e)
+    {
+        PasteActiveCalcResult();
+    }
+
+    private void CalcResultCopyValueBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeCalcResult != null)
+        {
+            Clipboard.SetText(_activeCalcResult.FormattedResult);
+            ShowInlineFeedback($"Copied answer ({_activeCalcResult.FormattedResult})! 📋");
+        }
+    }
+
+    private void CalcResultCopyFullBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeCalcResult != null)
+        {
+            string expr = _activeCalcResult.Expression.TrimStart('=', ' ').Trim();
+            string full = $"{expr} = {_activeCalcResult.FormattedResult}";
+            Clipboard.SetText(full);
+            ShowInlineFeedback($"Copied: {full} 📋");
+        }
+    }
+
+    private void CalcResultChainBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeCalcResult != null && SearchTextBox != null)
+        {
+            SearchTextBox.Text = $"= {_activeCalcResult.FormattedResult} ";
+            SearchTextBox.CaretIndex = SearchTextBox.Text.Length;
+            SearchTextBox.Focus();
+        }
+    }
+
+    private void CalcResultMoreUnitsBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeCalcVm != null)
+        {
+            OpenCalculatorUnitsOverlay(_activeCalcVm);
+        }
+        else if (_activeCalcResult != null)
+        {
+            var calcItem = new TriggerItem
+            {
+                Id = Guid.NewGuid(),
+                Name = $"{_activeCalcResult.FormattedResult}  ({_activeCalcResult.Expression})",
+                Description = _activeCalcResult.Description,
+                ActionType = ActionType.Snippet,
+                Payload = new ActionPayload { SnippetTemplate = _activeCalcResult.FormattedResult },
+                IsEnabled = true
+            };
+            var vm = new PaletteItemViewModel(calcItem, null)
+            {
+                IsCalculatorResult = true,
+                CalcResult = _activeCalcResult
+            };
+            OpenCalculatorUnitsOverlay(vm);
+        }
     }
 
     private void UpdatePillCounts(IEnumerable<TriggerItem> scopeItems)
@@ -895,14 +1283,39 @@ public partial class CommandPaletteView : Window
 
     private void UpdatePreviewAndHints()
     {
+        string rawQuery = SearchTextBox?.Text?.Trim() ?? string.Empty;
+        bool isCalcMode = rawQuery.StartsWith("=") || rawQuery.StartsWith("@calc", StringComparison.OrdinalIgnoreCase);
+
+        if (isCalcMode)
+        {
+            if (_activeCalcResult != null)
+            {
+                PreviewDetailText.Text = $"Calculator • {_activeCalcResult.Expression} = {_activeCalcResult.FormattedResult}";
+                FooterHintsText.Text = $"Enter Paste Answer   •   Ctrl+C Copy Answer ({_activeCalcResult.FormattedResult})   •   Ctrl+Shift+C Copy Question & Answer   •   Tab Chain";
+            }
+            else
+            {
+                PreviewDetailText.Text = "Calculator Mode • Active";
+                FooterHintsText.Text = "Click keypad to insert operators   •   Esc Exit Calculator";
+            }
+            return;
+        }
+
         if (ResultsListBox.SelectedItem is PaletteItemViewModel vm && vm.IsSelectable)
         {
             PreviewDetailText.Text = vm.DetailPreviewText;
 
             // Contextual footer hints
-            if (vm.Item.ActionType == ActionType.Snippet)
+            if (vm.IsCalculatorResult)
             {
-                FooterHintsText.Text = "Enter Paste   •   Ctrl+C Copy   •   Alt+Enter Edit in Action Manager";
+                string ans = vm.CalcResult?.FormattedResult ?? string.Empty;
+                FooterHintsText.Text = string.IsNullOrEmpty(ans)
+                    ? "Enter Paste Answer   •   Ctrl+C Copy Answer   •   Ctrl+Shift+C Copy Question & Answer   •   Tab Chain"
+                    : $"Enter Paste Answer   •   Ctrl+C Copy Answer ({ans})   •   Ctrl+Shift+C Copy Question & Answer   •   Tab Chain";
+            }
+            else if (vm.Item.ActionType == ActionType.Snippet)
+            {
+                FooterHintsText.Text = "Enter Paste   •   Ctrl+C Copy Snippet   •   Alt+Enter Edit in Action Manager";
             }
             else if (vm.Item.ActionType == ActionType.Shell)
             {
@@ -910,22 +1323,54 @@ public partial class CommandPaletteView : Window
                 {
                     FooterHintsText.Text = "Enter Open   •   Ctrl+M Action Manager   •   Ctrl+, Settings";
                 }
-                else if (vm.CanRevealInExplorer)
-                {
-                    FooterHintsText.Text = "Enter Run   •   Ctrl+Enter Run as Admin   •   Shift+Enter Reveal in Explorer   •   Ctrl+C Copy   •   Alt+Enter Edit";
-                }
                 else
                 {
-                    FooterHintsText.Text = "Enter Run   •   Ctrl+Enter Run as Admin   •   Ctrl+C Copy   •   Alt+Enter Edit in Action Manager";
+                    var shortcuts = ActionShortcutRelevanceHelper.GetContextualShortcuts(vm.Item);
+                    var hints = new List<string> { $"Enter {shortcuts.PrimaryActionVerb}" };
+
+                    if (shortcuts.CanRunAsAdmin)
+                    {
+                        hints.Add("Ctrl+Enter Run as Admin");
+                    }
+
+                    if (shortcuts.CanRevealInExplorer)
+                    {
+                        hints.Add("Shift+Enter Reveal in Explorer");
+                    }
+
+                    if (!string.IsNullOrEmpty(shortcuts.CopyLabel))
+                    {
+                        hints.Add($"Ctrl+C {shortcuts.CopyLabel}");
+                    }
+
+                    hints.Add("Alt+Enter Edit in Action Manager");
+                    FooterHintsText.Text = string.Join("   •   ", hints);
                 }
             }
             else if (vm.Item.ActionType == ActionType.Workflow)
             {
-                FooterHintsText.Text = "Enter Run   •   Ctrl+C Copy Summary   •   Alt+Enter Edit in Action Manager";
+                var shortcuts = ActionShortcutRelevanceHelper.GetContextualShortcuts(vm.Item);
+                var hints = new List<string> { $"Enter {shortcuts.PrimaryActionVerb}" };
+
+                if (shortcuts.CanRunAsAdmin)
+                {
+                    hints.Add("Ctrl+Enter Run as Admin");
+                }
+
+                if (!string.IsNullOrEmpty(shortcuts.CopyLabel))
+                {
+                    hints.Add($"Ctrl+C {shortcuts.CopyLabel}");
+                }
+
+                hints.Add("Alt+Enter Edit in Action Manager");
+                FooterHintsText.Text = string.Join("   •   ", hints);
             }
             else if (vm.Item.ActionType == ActionType.Folder)
             {
-                FooterHintsText.Text = "Enter Drill into folder   •   Alt+Enter View in Action Manager";
+                int count = ResolveFolderActions(vm.Item, _allItems, includeSubfolders: true).Count;
+                FooterHintsText.Text = count > 0
+                    ? $"Enter Drill into folder   •   Ctrl+Enter Run all ({count})   •   Shift+Enter Cursor menu   •   Alt+Enter Action Manager"
+                    : "Enter Drill into folder   •   Shift+Enter Cursor menu   •   Alt+Enter Action Manager";
             }
         }
         else
@@ -945,6 +1390,35 @@ public partial class CommandPaletteView : Window
             if (key == Key.Escape || key == Key.F1 || (key == Key.OemQuestion && (Keyboard.Modifiers & ModifierKeys.Shift) == 0))
             {
                 CheatSheetOverlay.Visibility = Visibility.Collapsed;
+                e.Handled = true;
+                return;
+            }
+        }
+
+        // Alternative Units Overlay Escape
+        if (CalculatorUnitsOverlay.Visibility == Visibility.Visible)
+        {
+            if (key == Key.Escape)
+            {
+                CloseCalculatorUnitsOverlay();
+                e.Handled = true;
+                return;
+            }
+        }
+
+        // Folder Execution Confirmation Overlay Escape / Enter
+        if (FolderExecutionConfirmOverlay.Visibility == Visibility.Visible)
+        {
+            if (key == Key.Escape)
+            {
+                CloseFolderExecutionConfirmOverlay();
+                e.Handled = true;
+                return;
+            }
+
+            if (key == Key.Enter)
+            {
+                FolderConfirmRunBtn_Click(sender, e);
                 e.Handled = true;
                 return;
             }
@@ -1039,11 +1513,46 @@ public partial class CommandPaletteView : Window
                 return;
             }
 
-            if (key == Key.C && ResultsListBox.SelectedItem is PaletteItemViewModel selVm && SearchTextBox.SelectedText.Length == 0)
+            if (key == Key.C)
             {
-                CopyItemToClipboard(selVm);
-                e.Handled = true;
-                return;
+                bool isShift = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
+                if (isShift)
+                {
+                    if (_activeCalcResult != null)
+                    {
+                        string expr = _activeCalcResult.Expression.TrimStart('=', ' ').Trim();
+                        string full = $"{expr} = {_activeCalcResult.FormattedResult}";
+                        Clipboard.SetText(full);
+                        ShowInlineFeedback($"Copied: {full} 📋");
+                        e.Handled = true;
+                        return;
+                    }
+                    if (ResultsListBox.SelectedItem is PaletteItemViewModel calcVm && calcVm.IsCalculatorResult && calcVm.CalcResult != null)
+                    {
+                        string expr = calcVm.CalcResult.Expression.TrimStart('=', ' ').Trim();
+                        string full = $"{expr} = {calcVm.CalcResult.FormattedResult}";
+                        Clipboard.SetText(full);
+                        ShowInlineFeedback($"Copied: {full} 📋");
+                        e.Handled = true;
+                        return;
+                    }
+                }
+                else
+                {
+                    if (SearchTextBox.SelectedText.Length == 0 && _activeCalcResult != null)
+                    {
+                        Clipboard.SetText(_activeCalcResult.FormattedResult);
+                        ShowInlineFeedback($"Copied answer ({_activeCalcResult.FormattedResult})! 📋");
+                        e.Handled = true;
+                        return;
+                    }
+                    else if (ResultsListBox.SelectedItem is PaletteItemViewModel selVm && SearchTextBox.SelectedText.Length == 0)
+                    {
+                        CopyItemToClipboard(selVm);
+                        e.Handled = true;
+                        return;
+                    }
+                }
             }
 
             if (key >= Key.D1 && key <= Key.D5)
@@ -1083,14 +1592,50 @@ public partial class CommandPaletteView : Window
             return;
         }
 
-        if (key == Key.Tab && string.IsNullOrEmpty(SearchTextBox.Text))
+        if (key == Key.Tab)
         {
-            // Cycle filter pills
-            int next = ((int)_activeFilter + 1) % 5;
-            _activeFilter = (CommandPaletteFilterType)next;
-            FilterResults();
-            e.Handled = true;
-            return;
+            if (SearchTextBox == null) return;
+            string rawQuery = SearchTextBox.Text?.Trim() ?? string.Empty;
+            bool isCalcMode = rawQuery.StartsWith("=") || rawQuery.StartsWith("@calc", StringComparison.OrdinalIgnoreCase);
+
+            if (_activeCalcResult != null)
+            {
+                var ans = _activeCalcResult.FormattedResult;
+                if (!string.IsNullOrWhiteSpace(ans))
+                {
+                    SearchTextBox.Text = $"= {ans} ";
+                    SearchTextBox.CaretIndex = SearchTextBox.Text.Length;
+                    e.Handled = true;
+                    return;
+                }
+            }
+            else if (ResultsListBox.SelectedItem is PaletteItemViewModel calcVm && calcVm.IsCalculatorResult)
+            {
+                var ans = calcVm.Item?.Payload?.SnippetTemplate ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(ans))
+                {
+                    SearchTextBox.Text = $"= {ans} ";
+                    SearchTextBox.CaretIndex = SearchTextBox.Text.Length;
+                    e.Handled = true;
+                    return;
+                }
+            }
+            else if (isCalcMode)
+            {
+                // Incomplete calculation in calculator mode: suppress tab focus loss
+                e.Handled = true;
+                return;
+            }
+
+            if (string.IsNullOrEmpty(SearchTextBox.Text))
+            {
+                // Cycle filter pills
+                int next = ((int)_activeFilter + 1) % 5;
+                _activeFilter = (CommandPaletteFilterType)next;
+                FilterResults();
+                e.Handled = true;
+                return;
+            }
         }
 
         if (key == Key.Down)
@@ -1109,8 +1654,34 @@ public partial class CommandPaletteView : Window
 
         if (key == Key.Enter)
         {
+            string rawQuery = SearchTextBox?.Text?.Trim() ?? string.Empty;
+            bool isCalcMode = rawQuery.StartsWith("=") || rawQuery.StartsWith("@calc", StringComparison.OrdinalIgnoreCase);
+            if (isCalcMode)
+            {
+                if (_activeCalcResult != null)
+                {
+                    PasteActiveCalcResult();
+                    e.Handled = true;
+                    return;
+                }
+                // Incomplete input: do nothing on Enter
+                e.Handled = true;
+                return;
+            }
+
             if (EmptyStateCard.Visibility == Visibility.Visible)
             {
+                if ((Keyboard.Modifiers & ModifierKeys.Control) != 0 && _currentScopeFolderId.HasValue)
+                {
+                    var scopedFolder = _allItems.FirstOrDefault(x => x.Id == _currentScopeFolderId.Value && x.ActionType == ActionType.Folder);
+                    if (scopedFolder != null)
+                    {
+                        OpenFolderExecutionConfirmOverlay(scopedFolder);
+                        e.Handled = true;
+                        return;
+                    }
+                }
+
                 CreateActionEmptyBtn_Click(sender, e);
                 e.Handled = true;
                 return;
@@ -1151,7 +1722,12 @@ public partial class CommandPaletteView : Window
             string copyText = string.Empty;
             string feedbackMsg = "Copied to clipboard! 📋";
 
-            if (vm.Item.ActionType == ActionType.Snippet)
+            if (vm.IsCalculatorResult && vm.CalcResult != null)
+            {
+                copyText = vm.CalcResult.FormattedResult;
+                feedbackMsg = $"Copied answer ({vm.CalcResult.FormattedResult})! 📋";
+            }
+            else if (vm.Item.ActionType == ActionType.Snippet)
             {
                 string raw = vm.Item.Payload.SnippetTemplate ?? string.Empty;
                 copyText = raw.Replace("{{Date}}", DateTime.Now.ToString("yyyy-MM-dd"))
@@ -1338,6 +1914,8 @@ public partial class CommandPaletteView : Window
             _currentScopeFolderName = null;
         }
 
+        _activeFilter = CommandPaletteFilterType.All;
+        UpdateFilterPillsUi();
         UpdateScopeUi();
         SearchTextBox.Text = string.Empty;
         FilterResults();
@@ -1347,6 +1925,8 @@ public partial class CommandPaletteView : Window
     {
         _currentScopeFolderId = folder.Id;
         _currentScopeFolderName = folder.Name;
+        _activeFilter = CommandPaletteFilterType.All;
+        UpdateFilterPillsUi();
         UpdateScopeUi();
         SearchTextBox.Text = string.Empty;
         FilterResults();
@@ -1364,7 +1944,7 @@ public partial class CommandPaletteView : Window
     {
         var rawQuery = SearchTextBox.Text.Trim();
         SafeClose();
-        (Application.Current as App)?.ShowSettingsWindowAndCreate(rawQuery);
+        (Application.Current as App)?.ShowSettingsWindowAndCreate(rawQuery, _currentScopeFolderId);
     }
 
     private static ExecutionOverride DetermineOverride()
@@ -1394,6 +1974,14 @@ public partial class CommandPaletteView : Window
             {
                 SortContextMenu.IsOpen = false;
             }
+            if (CalculatorUnitsOverlay != null)
+            {
+                CalculatorUnitsOverlay.Visibility = Visibility.Collapsed;
+            }
+            if (FolderExecutionConfirmOverlay != null)
+            {
+                FolderExecutionConfirmOverlay.Visibility = Visibility.Collapsed;
+            }
             Close();
         }
         catch { }
@@ -1406,8 +1994,24 @@ public partial class CommandPaletteView : Window
 
     private void ExecuteCurrentSelection(ExecutionOverride executionOverride)
     {
-        if (ResultsListBox.SelectedItem is PaletteItemViewModel vm && vm.IsSelectable)
+        var vm = ResultsListBox.SelectedItem as PaletteItemViewModel ?? _activeCalcVm;
+        if (vm != null && vm.IsSelectable)
         {
+            // Calculator result
+            if (vm.IsCalculatorResult)
+            {
+                if (executionOverride == ExecutionOverride.OpenSettings)
+                {
+                    // Suppress opening Action Manager for ephemeral calculator results; copy answer instead
+                    CopyItemToClipboard(vm);
+                    return;
+                }
+
+                SafeClose();
+                _ = _executor.ExecuteAsync(vm.Item, executionOverride, _targetHwnd);
+                return;
+            }
+
             // Virtual: Action Manager
             if (vm.Item.Id == App.OpenSettingsActionId)
             {
@@ -1427,6 +2031,19 @@ public partial class CommandPaletteView : Window
             // Folder
             if (vm.Item.ActionType == ActionType.Folder)
             {
+                if (executionOverride == ExecutionOverride.RunAsAdmin)
+                {
+                    OpenFolderExecutionConfirmOverlay(vm.Item);
+                    return;
+                }
+
+                if (executionOverride == ExecutionOverride.RevealInExplorer)
+                {
+                    SafeClose();
+                    (Application.Current as App)?.OpenCursorMenu(vm.Item, _targetHwnd);
+                    return;
+                }
+
                 if (executionOverride == ExecutionOverride.OpenSettings)
                 {
                     SafeClose();
@@ -1447,5 +2064,443 @@ public partial class CommandPaletteView : Window
     {
         if (!_isLoaded) return;
         SafeClose();
+    }
+
+    private CalculatorResult? _activeCalcResult;
+    private PaletteItemViewModel? _activeCalcVm;
+    private IReadOnlyList<AlternativeMeasurement>? _currentAlternatives;
+    private string _selectedCategory = "All";
+
+    private void UpdateCategoryChipsUi()
+    {
+        var chips = new[] { ChipAll, ChipDateFormats, ChipCommon, ChipPhysics, ChipSpace, ChipPopCulture, ChipNature, ChipHistorical };
+        foreach (var chip in chips)
+        {
+            if (chip == null) continue;
+            string tag = chip.Tag as string ?? "All";
+            bool isSelected = string.Equals(tag, _selectedCategory, StringComparison.OrdinalIgnoreCase);
+            if (isSelected)
+            {
+                chip.Background = (Brush)FindResource("AccentSubtleBrush");
+                chip.BorderBrush = (Brush)FindResource("AccentBrush");
+                chip.Foreground = (Brush)FindResource("AccentBrush");
+            }
+            else
+            {
+                chip.Background = (Brush)FindResource("BgTertiaryBrush");
+                chip.BorderBrush = (Brush)FindResource("BorderSubtleBrush");
+                chip.Foreground = (Brush)FindResource("TextSecondaryBrush");
+            }
+        }
+    }
+
+    private double _previousWindowHeight = 520;
+    private double _previousWindowTop = 0;
+
+    private void OpenCalculatorUnitsOverlay(PaletteItemViewModel vm)
+    {
+        _activeCalcVm = vm;
+        _currentAlternatives = vm.CalcResult?.Alternatives ?? Array.Empty<AlternativeMeasurement>();
+        _selectedCategory = "All";
+
+        bool hasDateFormats = _currentAlternatives.Any(a => a.Category == "Date Formats");
+        if (ChipDateFormats != null)
+        {
+            ChipDateFormats.Visibility = hasDateFormats ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        UpdateCategoryChipsUi();
+
+        if (!string.IsNullOrWhiteSpace(vm.CalcResult?.HierarchicalBreakdown))
+        {
+            HeroBreakdownCard.Visibility = Visibility.Visible;
+            HeroHierarchicalValueText.Text = vm.CalcResult.HierarchicalBreakdown;
+            HeroCumulativeValueText.Text = vm.CalcResult.CumulativeBreakdown ?? vm.CalcResult.HierarchicalBreakdown;
+        }
+        else
+        {
+            HeroBreakdownCard.Visibility = Visibility.Collapsed;
+        }
+
+        UnitsSearchTextBox.Text = string.Empty;
+        ApplyAlternativesFilter();
+
+        _previousWindowHeight = this.Height;
+        _previousWindowTop = this.Top;
+
+        double targetHeight = Math.Min(680, SystemParameters.WorkArea.Height - 60);
+        if (targetHeight > this.Height)
+        {
+            double diff = targetHeight - this.Height;
+            double newTop = this.Top - (diff / 2.0);
+            if (newTop < SystemParameters.WorkArea.Top + 20)
+            {
+                newTop = SystemParameters.WorkArea.Top + 20;
+            }
+            this.Top = newTop;
+            this.Height = targetHeight;
+        }
+
+        CalculatorUnitsOverlay.Visibility = Visibility.Visible;
+        UnitsSearchTextBox.Focus();
+    }
+
+    private void CloseCalculatorUnitsOverlay()
+    {
+        CalculatorUnitsOverlay.Visibility = Visibility.Collapsed;
+        if (Math.Abs(this.Height - _previousWindowHeight) > 1.0)
+        {
+            this.Height = _previousWindowHeight;
+            this.Top = _previousWindowTop;
+        }
+        SearchTextBox.Focus();
+    }
+
+    private void CloseUnitsOverlayBtn_Click(object sender, RoutedEventArgs e)
+    {
+        CloseCalculatorUnitsOverlay();
+    }
+
+    private void CategoryChip_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is string cat)
+        {
+            _selectedCategory = cat;
+            UpdateCategoryChipsUi();
+            ApplyAlternativesFilter();
+        }
+    }
+
+    private void UnitsSearchTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        ApplyAlternativesFilter();
+    }
+
+    private void ApplyAlternativesFilter()
+    {
+        if (_currentAlternatives == null) return;
+        var query = UnitsSearchTextBox.Text?.Trim() ?? string.Empty;
+        var filtered = _currentAlternatives.Where(a =>
+        {
+            bool catMatch = _selectedCategory == "All" || string.Equals(a.Category, _selectedCategory, StringComparison.OrdinalIgnoreCase);
+            if (!catMatch) return false;
+
+            if (string.IsNullOrWhiteSpace(query)) return true;
+
+            return a.FormattedValue.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                   a.Label.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                   (a.ConceptTitle != null && a.ConceptTitle.Contains(query, StringComparison.OrdinalIgnoreCase)) ||
+                   (a.ConversationalSentence != null && a.ConversationalSentence.Contains(query, StringComparison.OrdinalIgnoreCase)) ||
+                   a.Description.Contains(query, StringComparison.OrdinalIgnoreCase);
+        }).ToList();
+
+        UnitsItemsControl.ItemsSource = filtered;
+    }
+
+    private void SecondaryDetail_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is TextBlock tb && tb.DataContext is PaletteItemViewModel vm && vm.IsCalculatorResult && vm.HasAlternatives)
+        {
+            OpenCalculatorUnitsOverlay(vm);
+            e.Handled = true;
+        }
+    }
+
+    private void CalcUnitPill_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.DataContext is AlternativeMeasurement alt)
+        {
+            try
+            {
+                Clipboard.SetText(alt.FormattedValue);
+                ShowInlineFeedback($"Copied {alt.FormattedValue} to clipboard! 📋");
+            }
+            catch { }
+            e.Handled = true;
+        }
+    }
+
+    private void CalcMoreUnitsBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.DataContext is PaletteItemViewModel vm)
+        {
+            OpenCalculatorUnitsOverlay(vm);
+            e.Handled = true;
+        }
+    }
+
+    private void HeroHierarchicalPaste_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeCalcVm != null && !string.IsNullOrWhiteSpace(_activeCalcVm.CalcResult?.HierarchicalBreakdown))
+        {
+            _activeCalcVm.Item.Payload.SnippetTemplate = _activeCalcVm.CalcResult.HierarchicalBreakdown;
+            _activeCalcVm.Item.Name = $"{_activeCalcVm.CalcResult.HierarchicalBreakdown}  ({_activeCalcVm.CalcResult.Expression})";
+            CloseCalculatorUnitsOverlay();
+            ExecuteCurrentSelection(DetermineOverride());
+        }
+    }
+
+    private void HeroHierarchicalCopyValue_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeCalcVm != null && !string.IsNullOrWhiteSpace(_activeCalcVm.CalcResult?.HierarchicalBreakdown))
+        {
+            try
+            {
+                Clipboard.SetText(_activeCalcVm.CalcResult.HierarchicalBreakdown);
+                ShowInlineFeedback($"Copied {_activeCalcVm.CalcResult.HierarchicalBreakdown} to clipboard! 📋");
+                CloseCalculatorUnitsOverlay();
+            }
+            catch { }
+        }
+    }
+
+    private void HeroHierarchicalCopySentence_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeCalcVm != null)
+        {
+            string sentence = _activeCalcVm.CalcResult?.Alternatives?.FirstOrDefault(a => a.Label == "Time Breakdown")?.ConversationalSentence
+                              ?? _activeCalcVm.CalcResult?.Description
+                              ?? _activeCalcVm.CalcResult?.HierarchicalBreakdown
+                              ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(sentence))
+            {
+                try
+                {
+                    Clipboard.SetText(sentence);
+                    ShowInlineFeedback("Copied sentence to clipboard! 💬");
+                    CloseCalculatorUnitsOverlay();
+                }
+                catch { }
+            }
+        }
+    }
+
+    private void HeroCumulativePaste_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeCalcVm != null)
+        {
+            string val = _activeCalcVm.CalcResult?.CumulativeBreakdown ?? _activeCalcVm.CalcResult?.HierarchicalBreakdown ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(val))
+            {
+                _activeCalcVm.Item.Payload.SnippetTemplate = val;
+                _activeCalcVm.Item.Name = $"{val}  ({_activeCalcVm.CalcResult?.Expression})";
+                CloseCalculatorUnitsOverlay();
+                ExecuteCurrentSelection(DetermineOverride());
+            }
+        }
+    }
+
+    private void HeroCumulativeCopyValue_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeCalcVm != null)
+        {
+            string val = _activeCalcVm.CalcResult?.CumulativeBreakdown ?? _activeCalcVm.CalcResult?.HierarchicalBreakdown ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(val))
+            {
+                try
+                {
+                    Clipboard.SetText(val);
+                    ShowInlineFeedback($"Copied {val} to clipboard! 📋");
+                    CloseCalculatorUnitsOverlay();
+                }
+                catch { }
+            }
+        }
+    }
+
+    private void HeroCumulativeCopySentence_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeCalcVm != null)
+        {
+            string sentence = _activeCalcVm.CalcResult?.Alternatives?.FirstOrDefault(a => a.Label == "Days & Time")?.ConversationalSentence
+                              ?? _activeCalcVm.CalcResult?.CumulativeBreakdown
+                              ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(sentence))
+            {
+                try
+                {
+                    Clipboard.SetText(sentence);
+                    ShowInlineFeedback("Copied sentence to clipboard! 💬");
+                    CloseCalculatorUnitsOverlay();
+                }
+                catch { }
+            }
+        }
+    }
+
+    private void FlyoutUseUnitBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.DataContext is AlternativeMeasurement alt && _activeCalcVm != null)
+        {
+            _activeCalcVm.Item.Payload.SnippetTemplate = alt.FormattedValue;
+            _activeCalcVm.Item.Name = $"{alt.FormattedValue}  ({_activeCalcVm.CalcResult?.Expression ?? alt.Label})";
+            CloseCalculatorUnitsOverlay();
+            ExecuteCurrentSelection(DetermineOverride());
+        }
+    }
+
+    private void FlyoutCopyValueBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.DataContext is AlternativeMeasurement alt)
+        {
+            try
+            {
+                Clipboard.SetText(alt.FormattedValue);
+                ShowInlineFeedback($"Copied {alt.FormattedValue} to clipboard! 📋");
+                CloseCalculatorUnitsOverlay();
+            }
+            catch { }
+        }
+    }
+
+    private void FlyoutCopySentenceBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.DataContext is AlternativeMeasurement alt)
+        {
+            try
+            {
+                string sentence = !string.IsNullOrWhiteSpace(alt.ConversationalSentence)
+                    ? alt.ConversationalSentence
+                    : $"{_activeCalcVm?.CalcResult?.Expression ?? "Result"} is {alt.FormattedValue}.";
+                Clipboard.SetText(sentence);
+                ShowInlineFeedback("Copied sentence to clipboard! 💬");
+                CloseCalculatorUnitsOverlay();
+            }
+            catch { }
+        }
+    }
+
+    public static List<TriggerItem> ResolveFolderActions(TriggerItem folder, IEnumerable<TriggerItem> allItems, bool includeSubfolders)
+    {
+        if (folder == null) return [];
+        var itemsList = allItems.ToList();
+        var result = new List<TriggerItem>();
+
+        if (!includeSubfolders)
+        {
+            return itemsList
+                .Where(x => x.ParentId == folder.Id && x.ActionType != ActionType.Folder && x.IsEnabled)
+                .OrderBy(x => x.OrderIndex)
+                .ThenBy(x => x.Name)
+                .ToList();
+        }
+
+        var folderQueue = new Queue<TriggerItem>();
+        folderQueue.Enqueue(folder);
+
+        while (folderQueue.Count > 0)
+        {
+            var currFolder = folderQueue.Dequeue();
+            var children = itemsList.Where(x => x.ParentId == currFolder.Id && x.IsEnabled).ToList();
+
+            var actions = children.Where(x => x.ActionType != ActionType.Folder)
+                                  .OrderBy(x => x.OrderIndex)
+                                  .ThenBy(x => x.Name);
+            result.AddRange(actions);
+
+            var subfolders = children.Where(x => x.ActionType == ActionType.Folder)
+                                     .OrderBy(x => x.OrderIndex)
+                                     .ThenBy(x => x.Name);
+            foreach (var sf in subfolders)
+            {
+                folderQueue.Enqueue(sf);
+            }
+        }
+
+        return result;
+    }
+
+    public static bool FolderHasSubfolders(TriggerItem folder, IEnumerable<TriggerItem> allItems)
+    {
+        if (folder == null) return false;
+        return allItems.Any(x => x.ParentId == folder.Id && x.ActionType == ActionType.Folder);
+    }
+
+    private void OpenFolderExecutionConfirmOverlay(TriggerItem folder)
+    {
+        _folderConfirmTargetFolder = folder;
+        bool hasSubfolders = FolderHasSubfolders(folder, _allItems);
+        FolderConfirmIncludeSubfoldersCheck.Visibility = hasSubfolders ? Visibility.Visible : Visibility.Collapsed;
+        FolderConfirmIncludeSubfoldersCheck.IsChecked = true;
+
+        UpdateFolderConfirmUi();
+        FolderExecutionConfirmOverlay.Visibility = Visibility.Visible;
+        FolderConfirmRunBtn.Focus();
+    }
+
+    private void UpdateFolderConfirmUi()
+    {
+        if (_folderConfirmTargetFolder == null) return;
+
+        bool includeSubfolders = FolderConfirmIncludeSubfoldersCheck.IsChecked == true;
+        _folderConfirmResolvedActions = ResolveFolderActions(_folderConfirmTargetFolder, _allItems, includeSubfolders);
+
+        FolderConfirmTitleText.Text = $"Execute Folder: {_folderConfirmTargetFolder.Name}";
+        int count = _folderConfirmResolvedActions.Count;
+        FolderConfirmSubtitleText.Text = count == 1
+            ? "The following 1 action will be executed:"
+            : $"The following {count} actions will be executed sequentially:";
+        FolderConfirmRunBtnText.Text = count > 0 ? $"Run All ({count})" : "Run All";
+        FolderConfirmRunBtn.IsEnabled = count > 0;
+
+        var previewItems = _folderConfirmResolvedActions.Select(action =>
+        {
+            string breadcrumb = string.Empty;
+            if (action.ParentId.HasValue && action.ParentId.Value != _folderConfirmTargetFolder.Id && _folderPaths.TryGetValue(action.ParentId.Value, out var path))
+            {
+                breadcrumb = path;
+            }
+            return new FolderActionPreviewItem
+            {
+                Item = action,
+                PathBreadcrumb = breadcrumb
+            };
+        }).ToList();
+
+        FolderConfirmActionsList.ItemsSource = previewItems;
+    }
+
+    private void CloseFolderExecutionConfirmOverlay()
+    {
+        FolderExecutionConfirmOverlay.Visibility = Visibility.Collapsed;
+        _folderConfirmTargetFolder = null;
+        _folderConfirmResolvedActions.Clear();
+        SearchTextBox.Focus();
+    }
+
+    private void CloseFolderConfirmBtn_Click(object sender, RoutedEventArgs e)
+    {
+        CloseFolderExecutionConfirmOverlay();
+    }
+
+    private void FolderConfirmCancelBtn_Click(object sender, RoutedEventArgs e)
+    {
+        CloseFolderExecutionConfirmOverlay();
+    }
+
+    private void FolderConfirmIncludeSubfoldersCheck_Click(object sender, RoutedEventArgs e)
+    {
+        UpdateFolderConfirmUi();
+    }
+
+    private void FolderConfirmRunBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_folderConfirmResolvedActions.Count == 0)
+        {
+            CloseFolderExecutionConfirmOverlay();
+            return;
+        }
+
+        var actionsToRun = _folderConfirmResolvedActions.ToList();
+        SafeClose();
+
+        _ = Task.Run(async () =>
+        {
+            foreach (var action in actionsToRun)
+            {
+                await _executor.ExecuteAsync(action, ExecutionOverride.Standard, _targetHwnd);
+                await Task.Delay(100);
+            }
+        });
     }
 }

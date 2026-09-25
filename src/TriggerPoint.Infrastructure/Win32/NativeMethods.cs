@@ -515,9 +515,75 @@ public static class NativeMethods
     public const int SM_CXSMICON = 49;
     public const int SM_CYSMICON = 50;
 
+    // Win32 Edit Control Messages
+    public const uint EM_GETSEL = 0x00B0;
+    public const uint EM_SETSEL = 0x00B1;
+    public const uint EM_SCROLLCARET = 0x00B7;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct GUITHREADINFO
+    {
+        public int cbSize;
+        public int flags;
+        public IntPtr hwndActive;
+        public IntPtr hwndFocus;
+        public IntPtr hwndCapture;
+        public IntPtr hwndMenuOwner;
+        public IntPtr hwndMoveSize;
+        public IntPtr hwndCaret;
+        public RECT rcCaret;
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool GetGUIThreadInfo(uint idThread, ref GUITHREADINFO lpgui);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    public static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+
+    public static string GetWindowClassName(IntPtr hWnd)
+    {
+        if (hWnd == IntPtr.Zero) return string.Empty;
+        var sb = new StringBuilder(256);
+        return GetClassName(hWnd, sb, sb.Capacity) > 0 ? sb.ToString() : string.Empty;
+    }
+
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     public static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
+    [DllImport("user32.dll", EntryPoint = "SendMessage", CharSet = CharSet.Auto)]
+    public static extern IntPtr SendMessage(IntPtr hWnd, uint msg, out int wParam, out int lParam);
+
     [DllImport("user32.dll")]
     public static extern int GetSystemMetrics(int nIndex);
+
+    public const int GWL_EXSTYLE = -20;
+    public const int WS_EX_NOACTIVATE = 0x08000000;
+    public const int WS_EX_TOOLWINDOW = 0x00000080;
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtr", SetLastError = true)]
+    private static extern IntPtr GetWindowLongPtr64(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLong", SetLastError = true)]
+    private static extern int GetWindowLong32(IntPtr hWnd, int nIndex);
+
+    public static int GetWindowLong(IntPtr hWnd, int nIndex)
+    {
+        if (IntPtr.Size == 8)
+            return (int)GetWindowLongPtr64(hWnd, nIndex).ToInt64();
+        return GetWindowLong32(hWnd, nIndex);
+    }
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtr", SetLastError = true)]
+    private static extern IntPtr SetWindowLongPtr64(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLong", SetLastError = true)]
+    private static extern int SetWindowLong32(IntPtr hWnd, int nIndex, int dwNewLong);
+
+    public static int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong)
+    {
+        if (IntPtr.Size == 8)
+            return (int)SetWindowLongPtr64(hWnd, nIndex, new IntPtr(dwNewLong)).ToInt64();
+        return SetWindowLong32(hWnd, nIndex, dwNewLong);
+    }
 }

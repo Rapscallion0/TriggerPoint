@@ -317,7 +317,7 @@ public static class RichTextService
             {
                 // Caret offset is distance from the end of the text after removing the token
                 var textAfter = docText[(cursorIdx + cursorToken.Length)..];
-                caretOffset = textAfter.Length;
+                caretOffset = PlaceholderParser.CalculateCaretStepDistance(textAfter);
                 ReplaceTextInDocument(doc, cursorToken, string.Empty);
             }
 

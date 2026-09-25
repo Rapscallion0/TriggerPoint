@@ -4,7 +4,7 @@
 ; =====================================================================
 
 #ifndef AppVersion
-#define AppVersion "2.0.10"
+#define AppVersion "2.0.11"
 #endif
 
 #ifndef PublishDir
@@ -52,6 +52,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 Name: "autostart"; Description: "Start TriggerPoint automatically on Windows login"; GroupDescription: "Windows Startup Options:"; Flags: unchecked
+Name: "explorermenu"; Description: "Add 'Add to TriggerPoint' to Windows Explorer right-click context menu"; GroupDescription: "Windows Explorer Integration:"; Flags: unchecked
 
 [Files]
 Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -64,6 +65,15 @@ Name: "{autodesktop}\TriggerPoint"; Filename: "{app}\TriggerPoint.exe"; IconFile
 
 [Registry]
 Root: HKA; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "TriggerPoint"; ValueData: """{app}\TriggerPoint.exe"" --minimized"; Tasks: autostart; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Classes\*\shell\TriggerPoint"; ValueType: string; ValueData: "Add to TriggerPoint"; Tasks: explorermenu; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\*\shell\TriggerPoint"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\TriggerPoint.exe"""; Tasks: explorermenu; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\*\shell\TriggerPoint\command"; ValueType: string; ValueData: """{app}\TriggerPoint.exe"" --add-action ""%1"""; Tasks: explorermenu; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\Directory\shell\TriggerPoint"; ValueType: string; ValueData: "Add to TriggerPoint"; Tasks: explorermenu; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\Directory\shell\TriggerPoint"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\TriggerPoint.exe"""; Tasks: explorermenu; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\Directory\shell\TriggerPoint\command"; ValueType: string; ValueData: """{app}\TriggerPoint.exe"" --add-action ""%1"""; Tasks: explorermenu; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\Directory\Background\shell\TriggerPoint"; ValueType: string; ValueData: "Add to TriggerPoint"; Tasks: explorermenu; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\Directory\Background\shell\TriggerPoint"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\TriggerPoint.exe"""; Tasks: explorermenu; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\Directory\Background\shell\TriggerPoint\command"; ValueType: string; ValueData: """{app}\TriggerPoint.exe"" --add-action ""%V"""; Tasks: explorermenu; Flags: uninsdeletekey
 
 [Run]
 Filename: "{app}\TriggerPoint.exe"; Description: "{cm:LaunchProgram,TriggerPoint}"; Flags: nowait postinstall skipifsilent

@@ -86,37 +86,59 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
-        // Global unhandled exception handlers for fatal logging
+        var baseDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TriggerPoint");
+        var logDir = Path.Combine(baseDir, "logs");
+        Directory.CreateDirectory(logDir);
+
+        // Bootstrap logger to guarantee early diagnostics are never lost before settings load
+        Log.Logger = new LoggerConfiguration()
+            .MinimumLevel.Verbose()
+            .WriteTo.File(
+                Path.Combine(logDir, "triggerpoint-.log"),
+                rollingInterval: RollingInterval.Day,
+                flushToDiskInterval: TimeSpan.FromSeconds(1),
+                shared: true,
+                outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff}] [{Level:u3}] ({SourceContext}) {Message:lj}{NewLine}{Exception}")
+            .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] ({SourceContext}) {Message:lj}{NewLine}{Exception}")
+            .CreateLogger();
+
+        // Global unhandled exception handlers for fatal logging and crash prevention
         AppDomain.CurrentDomain.UnhandledException += (s, args) =>
         {
-            Log.Fatal(args.ExceptionObject as Exception, "FATAL: Unhandled AppDomain exception encountered.");
+            var ex = args.ExceptionObject as Exception;
+            Log.Fatal(ex, "FATAL: Unhandled AppDomain exception encountered. IsTerminating={IsTerminating}", args.IsTerminating);
             Log.CloseAndFlush();
         };
 
         DispatcherUnhandledException += (s, args) =>
         {
             Log.Error(args.Exception, "Unhandled Dispatcher exception caught.");
+            Log.CloseAndFlush();
             // Prevent termination if possible
             args.Handled = true;
         };
 
-        // 1. Setup Configuration Repository early to load AppSettings
-        var baseDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TriggerPoint");
-        var logDir = Path.Combine(baseDir, "logs");
-        Directory.CreateDirectory(logDir);
+        TaskScheduler.UnobservedTaskException += (s, args) =>
+        {
+            Log.Error(args.Exception, "Unobserved TaskException caught.");
+            Log.CloseAndFlush();
+            args.SetObserved();
+        };
 
+        // 1. Setup Configuration Repository early to load AppSettings
         var tempRepo = new JsonConfigRepository(baseDir);
         AppSettings appSettings;
         try
         {
             appSettings = await tempRepo.LoadSettingsAsync();
         }
-        catch
+        catch (Exception ex)
         {
+            Log.Warning(ex, "Failed to load AppSettings during bootstrap; using defaults.");
             appSettings = new AppSettings();
         }
 
-        // 2. Configure Serilog logging with dynamic LoggingLevelSwitch
+        // 2. Configure Serilog logging with dynamic LoggingLevelSwitch and configured settings
         _levelSwitch = new Serilog.Core.LoggingLevelSwitch(LogManagerService.ToLogEventLevel(appSettings.LogLevel));
 
         Log.Logger = new LoggerConfiguration()
@@ -127,13 +149,14 @@ public partial class App : Application
                 fileSizeLimitBytes: (long)appSettings.LogSplitThresholdMb * 1024L * 1024L,
                 rollOnFileSizeLimit: true,
                 shared: true,
+                flushToDiskInterval: TimeSpan.FromSeconds(1),
                 retainedFileCountLimit: appSettings.LogRetentionDays,
                 outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff}] [{Level:u3}] ({SourceContext}) {Message:lj}{NewLine}{Exception}")
             .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] ({SourceContext}) {Message:lj}{NewLine}{Exception}")
             .CreateLogger();
 
-        Log.Information("Starting TriggerPoint daemon (LogLevel: {LogLevel}, Retention: {Retention} days, SplitThreshold: {SplitThreshold}MB)...", 
-            appSettings.LogLevel, appSettings.LogRetentionDays, appSettings.LogSplitThresholdMb);
+        Log.Information("TriggerPoint daemon started. Version: {Version}, LogLevel: {LogLevel}, Retention: {Retention}d, Threshold: {SplitThreshold}MB, Args: {Args}", 
+            typeof(App).Assembly.GetName().Version, appSettings.LogLevel, appSettings.LogRetentionDays, appSettings.LogSplitThresholdMb, string.Join(" ", e.Args));
 
         // 3. Single-Instance Enforcement
         _singleInstanceService = new SingleInstanceService();
@@ -170,6 +193,12 @@ public partial class App : Application
             shellExec.OpenSettingsRequested += item => Dispatcher.Invoke(() => ShowSettingsWindow(item));
             shellExec.ExecutionSucceeded += (item, detail) =>
             {
+                // Snippet text expansions are inline and must never display disruptive desktop toasts
+                if (item.ActionType == ActionType.Snippet)
+                {
+                    return;
+                }
+
                 if (appSettings.ShowSuccessToasts)
                 {
                     toastService.ShowSuccess(item.Name, detail);
@@ -279,11 +308,18 @@ public partial class App : Application
             openCheatSheetAction: () => Dispatcher.Invoke(() => OpenCheatSheetHud()),
             cheatSheetHotkeyText: appSettings.CheatSheetHotkey?.DisplayText ?? "Ctrl+Shift+/");
 
-        // Show action settings window if not configured to start minimized or if launched with --settings
-        bool shouldStartMinimized = appSettings.StartMinimized || e.Args.Contains("--minimized", StringComparer.OrdinalIgnoreCase);
-        if (!shouldStartMinimized || e.Args.Contains("--settings", StringComparer.OrdinalIgnoreCase))
+        if (TryExtractAddActionPath(e.Args, out var addPath))
         {
-            ShowSettingsWindow();
+            ShowSettingsWindowAndCreateActionForPath(addPath);
+        }
+        else
+        {
+            // Show action settings window if not configured to start minimized or if launched with --settings
+            bool shouldStartMinimized = appSettings.StartMinimized || e.Args.Contains("--minimized", StringComparer.OrdinalIgnoreCase);
+            if (!shouldStartMinimized || e.Args.Contains("--settings", StringComparer.OrdinalIgnoreCase))
+            {
+                ShowSettingsWindow();
+            }
         }
 
         // 10. Defer background maintenance (recycle bin purge & shortcut health check) by 3 seconds for instant cold startup
@@ -454,7 +490,7 @@ public partial class App : Application
         });
     }
 
-    private void OpenCursorMenu(TriggerItem triggerItem, IntPtr targetHwnd = default)
+    public void OpenCursorMenu(TriggerItem triggerItem, IntPtr targetHwnd = default)
     {
         if (_repository == null || _executor == null) return;
 
@@ -616,10 +652,16 @@ public partial class App : Application
         catch { }
     }
 
-    public void ShowSettingsWindowAndCreate(string initialName)
+    public void ShowSettingsWindowAndCreate(string initialName, Guid? parentFolderId = null)
     {
         ShowSettingsWindow();
-        _settingsWindow?.CreateAndEditNewItem(initialName);
+        _settingsWindow?.CreateAndEditNewItem(initialName, parentFolderId: parentFolderId);
+    }
+
+    public void ShowSettingsWindowAndCreateActionForPath(string path)
+    {
+        ShowSettingsWindow();
+        _settingsWindow?.CreateAndEditShellActionForPath(path);
     }
 
     private void EnsureSettingsWindowCreated()
@@ -789,11 +831,50 @@ public partial class App : Application
         Dispatcher.Invoke(() =>
         {
             Log.Information("Secondary instance signaled message: '{Message}'", message);
+            if (TryExtractAddActionPath(message, out var addPath))
+            {
+                ShowSettingsWindowAndCreateActionForPath(addPath);
+                return;
+            }
+
             if (!message.Contains("--minimized", StringComparison.OrdinalIgnoreCase))
             {
                 ShowSettingsWindow();
             }
         });
+    }
+
+    private static bool TryExtractAddActionPath(string[] args, out string path)
+    {
+        path = string.Empty;
+        for (int i = 0; i < args.Length; i++)
+        {
+            if (args[i].Equals("--add-action", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+            {
+                path = args[i + 1].Trim('\"');
+                return !string.IsNullOrWhiteSpace(path);
+            }
+        }
+        return false;
+    }
+
+    private static bool TryExtractAddActionPath(string rawMessage, out string path)
+    {
+        path = string.Empty;
+        if (string.IsNullOrWhiteSpace(rawMessage)) return false;
+
+        const string prefix = "--add-action";
+        int idx = rawMessage.IndexOf(prefix, StringComparison.OrdinalIgnoreCase);
+        if (idx >= 0)
+        {
+            var rest = rawMessage[(idx + prefix.Length)..].Trim().Trim('\"');
+            if (!string.IsNullOrWhiteSpace(rest))
+            {
+                path = rest;
+                return true;
+            }
+        }
+        return false;
     }
 
     private void ExitApplication()
@@ -816,9 +897,11 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        Log.Information("TriggerPoint exiting with code {ExitCode}.", e.ApplicationExitCode);
         _trayIconService?.Dispose();
         _shortcutListener?.Dispose();
         _singleInstanceService?.Dispose();
+        Log.CloseAndFlush();
         base.OnExit(e);
     }
 }

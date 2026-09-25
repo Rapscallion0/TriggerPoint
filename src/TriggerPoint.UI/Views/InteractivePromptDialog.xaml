@@ -9,8 +9,10 @@
         AllowsTransparency="True"
         Background="Transparent"
         Topmost="True"
+        ShowActivated="True"
+        FocusManager.IsFocusScope="True"
         ShowInTaskbar="False"
-        KeyDown="Window_KeyDown">
+        PreviewKeyDown="Window_PreviewKeyDown">
 
     <Border Background="{DynamicResource BgSecondaryBrush}"
             BorderBrush="{DynamicResource BorderBrush}"
@@ -43,7 +45,7 @@
             </StackPanel>
 
             <!-- Dynamic Input Fields Container -->
-            <ScrollViewer Grid.Row="1" MaxHeight="400" VerticalScrollBarVisibility="Auto">
+            <ScrollViewer Grid.Row="1" MaxHeight="400" VerticalScrollBarVisibility="Auto" Focusable="False">
                 <StackPanel x:Name="FieldsContainer" Margin="0,0,4,0"/>
             </ScrollViewer>
 

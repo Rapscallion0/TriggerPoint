@@ -283,21 +283,58 @@ public class Win32HotkeyListener : IShortcutListener
             {
                 if (!IsSnoozed)
                 {
-                    // Case 1: Exactly 1 non-chord item mapped to this key
-                    if (items.Count == 1 && !items[0].Hotkey!.IsChord)
+                    var nonChords = items.Where(x => !x.Hotkey!.IsChord).ToList();
+                    var chords = items.Where(x => x.Hotkey!.IsChord).ToList();
+
+                    if (nonChords.Count > 0)
                     {
-                        var single = items[0];
-                        _logger.Information("Hotkey triggered: '{Hotkey}' for action '{Name}'", 
-                            single.Hotkey?.DisplayText, single.Name);
-                        HotkeyTriggered?.Invoke(this, single);
+                        if (nonChords.Count == 1 && chords.Count == 0)
+                        {
+                            var single = nonChords[0];
+                            _logger.Information("Hotkey triggered: '{Hotkey}' for action '{Name}'", 
+                                single.Hotkey?.DisplayText, single.Name);
+                            HotkeyTriggered?.Invoke(this, single);
+                        }
+                        else
+                        {
+                            // Multiple multiplexed actions for this hotkey!
+                            // Resolve the matching item based on active foreground process
+                            var fgHwnd = NativeMethods.GetForegroundWindow();
+                            var fgProc = fgHwnd != IntPtr.Zero ? NativeMethods.GetProcessNameForWindow(fgHwnd) : null;
+                            
+                            TriggerItem? matchedItem = null;
+                            if (!string.IsNullOrWhiteSpace(fgProc))
+                            {
+                                matchedItem = nonChords.FirstOrDefault(x => x.ContextFilter != null && x.ContextFilter.IsActiveForProcess(fgProc));
+                            }
+
+                            // If no process-specific match, look for a global fallback (if any)
+                            matchedItem ??= nonChords.FirstOrDefault(x => x.ContextFilter == null || x.ContextFilter.AllowedProcesses.Count == 0);
+
+                            if (matchedItem != null)
+                            {
+                                _logger.Information("Multiplexed context-aware hotkey '{Hotkey}' matched action '{Name}' for process '{Proc}'",
+                                    matchedItem.Hotkey?.DisplayText, matchedItem.Name, fgProc);
+                                HotkeyTriggered?.Invoke(this, matchedItem);
+                            }
+                            else if (chords.Count > 0)
+                            {
+                                // Fall back to chord mode if chords are also defined on this leader key
+                                BeginChordMode(items[0].Hotkey!.GetLeaderBinding(), chords);
+                            }
+                            else
+                            {
+                                _logger.Debug("Multiplexed hotkey '{Hotkey}' pressed, but active process '{Proc}' matched no scoped action.",
+                                    items[0].Hotkey?.DisplayText, fgProc);
+                            }
+                        }
                     }
-                    else
+                    else if (chords.Count > 0)
                     {
-                        // Case 2: Leader key for Chorded sequence(s)
-                        var leader = items[0].Hotkey!.GetLeaderBinding();
+                        var leader = chords[0].Hotkey!.GetLeaderBinding();
                         _logger.Information("Leader hotkey '{Leader}' triggered. Entering Chord Mode with {Count} candidates.", 
-                            leader.DisplayText, items.Count);
-                        BeginChordMode(leader, items);
+                            leader.DisplayText, chords.Count);
+                        BeginChordMode(leader, chords);
                     }
                 }
                 else

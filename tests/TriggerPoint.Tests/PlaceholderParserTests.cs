@@ -108,8 +108,28 @@ public class PlaceholderParserTests
         var (cleanText, offset) = PlaceholderParser.ProcessCursorPosition(textWithCursor);
 
         Assert.Equal("function hello() {\n\t\n}", cleanText);
-        // The characters remaining after {cursor} are "\n}" -> 2 characters
+        // The characters remaining after {cursor} are "\n}" -> 2 steps
         Assert.Equal(2, offset);
+    }
+
+    [Fact]
+    public void ProcessCursorPosition_TreatsCrlfAsSingleStep()
+    {
+        var textWithCursor = "Hello {cursor}\r\nWorld";
+        var (cleanText, offset) = PlaceholderParser.ProcessCursorPosition(textWithCursor);
+
+        Assert.Equal("Hello \r\nWorld", cleanText);
+        // "\r\n" is 1 step, "World" is 5 steps -> total 6 steps (not 7)
+        Assert.Equal(6, offset);
+    }
+
+    [Fact]
+    public void CalculateCaretStepDistance_HandlesSurrogatePairsAndCrlf()
+    {
+        // 1 emoji (surrogate pair) + CRLF + 3 chars = 1 + 1 + 3 = 5 steps
+        var text = "\U0001F600\r\nabc";
+        int steps = PlaceholderParser.CalculateCaretStepDistance(text);
+        Assert.Equal(5, steps);
     }
 
     [Fact]
@@ -248,6 +268,112 @@ public class PlaceholderParserTests
 
         var result = await PlaceholderParser.EvaluateAsync(template, promptResponses: responses);
         Assert.Equal("Meeting: 2026-12-25", result);
+    }
+
+    [Fact]
+    public void ExtractPromptTokens_ParsesDoubleBracedFieldDefault()
+    {
+        var template = "Hello {{Name:World}}, welcome to {{Location}}!";
+        var tokens = PlaceholderParser.ExtractPromptTokens(template);
+
+        Assert.Equal(2, tokens.Count);
+        Assert.Equal("Name", tokens[0].Label);
+        Assert.Equal("World", tokens[0].DefaultValue);
+        Assert.Equal(TokenType.PromptText, tokens[0].Type);
+
+        Assert.Equal("Location", tokens[1].Label);
+        Assert.Equal(string.Empty, tokens[1].DefaultValue);
+        Assert.Equal(TokenType.PromptText, tokens[1].Type);
+    }
+
+    [Fact]
+    public void ExtractPromptTokens_ParsesShorthandFieldTokensWithDefaults()
+    {
+        var template = "Status: {choice:Status|Active,Pending,Closed*}\nNotes: {multiline:Notes|Default notes}\nAlias: {Name=John}";
+        var tokens = PlaceholderParser.ExtractPromptTokens(template);
+
+        Assert.Equal(3, tokens.Count);
+        Assert.Equal(TokenType.PromptChoice, tokens[0].Type);
+        Assert.Equal("Status", tokens[0].Label);
+        Assert.Equal(3, tokens[0].Choices.Count);
+        Assert.Equal("Closed", tokens[0].DefaultValue);
+
+        Assert.Equal(TokenType.PromptMultiline, tokens[1].Type);
+        Assert.Equal("Notes", tokens[1].Label);
+        Assert.Equal("Default notes", tokens[1].DefaultValue);
+
+        Assert.Equal(TokenType.PromptText, tokens[2].Type);
+        Assert.Equal("Name", tokens[2].Label);
+        Assert.Equal("John", tokens[2].DefaultValue);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_ReplacesPromptResponsesAndDefaults()
+    {
+        var template = "User {User:John Doe} selected {choice:Role|Admin,User,Guest} with comment: {multiline:Comment}.";
+
+        // 1. Fallback to defaults when promptResponses is empty
+        var defaultEval = await PlaceholderParser.EvaluateAsync(template, promptResponses: null);
+        Assert.Equal("User John Doe selected {choice:Role|Admin,User,Guest} with comment: {multiline:Comment}.", defaultEval);
+
+        // 2. Evaluates with user submitted answers
+        var responses = new Dictionary<string, string>
+        {
+            ["User:John Doe"] = "Alice Smith",
+            ["choice:Role|Admin,User,Guest"] = "Admin",
+            ["multiline:Comment"] = "Looks good!"
+        };
+
+        var answerEval = await PlaceholderParser.EvaluateAsync(template, promptResponses: responses);
+        Assert.Equal("User Alice Smith selected Admin with comment: Looks good!.", answerEval);
+    }
+
+    [Theory]
+    [InlineData("No cursor here", 0)]
+    [InlineData("Start {cursor} End", 1)]
+    [InlineData("Start {{cursor}} End", 1)]
+    [InlineData("Double {cursor} and {cursor}", 2)]
+    [InlineData("Mixed {{cursor}} and {cursor} and {{cursor}}", 3)]
+    public void CountCursorTokens_CountsOccurrencesCorrectly(string template, int expectedCount)
+    {
+        var count = PlaceholderParser.CountCursorTokens(template);
+        Assert.Equal(expectedCount, count);
+    }
+
+    [Fact]
+    public void GetDisambiguatedPromptToken_IncrementsWhenLabelAlreadyExists()
+    {
+        var template = "Hello {text:Name} and {number:Quantity}";
+
+        // Same label and same type
+        var token1 = PlaceholderParser.GetDisambiguatedPromptToken("{text:Name}", template);
+        Assert.Equal("{text:Name 2}", token1);
+
+        // Same label different type
+        var token2 = PlaceholderParser.GetDisambiguatedPromptToken("{choice:Quantity|A,B}", template);
+        Assert.Equal("{choice:Quantity 2|A,B}", token2);
+
+        // Non-conflicting label remains untouched
+        var token3 = PlaceholderParser.GetDisambiguatedPromptToken("{date_picker:DueDate|yyyy-MM-dd}", template);
+        Assert.Equal("{date_picker:DueDate|yyyy-MM-dd}", token3);
+    }
+
+    [Fact]
+    public void DisambiguateDuplicatePromptTokens_RewritesDuplicatesProperly()
+    {
+        var template = "Enter {text:Name} here, and duplicate {text:Name} here, and third {text:Name}";
+        var disambiguated = PlaceholderParser.DisambiguateDuplicatePromptTokens(template);
+
+        Assert.Equal("Enter {text:Name} here, and duplicate {text:Name 2} here, and third {text:Name 3}", disambiguated);
+    }
+
+    [Fact]
+    public void DisambiguateDuplicatePromptTokens_LeavesUniqueTokensUnchanged()
+    {
+        var template = "Enter {text:FirstName} and {text:LastName} with {date_picker:Birthday|yyyy-MM-dd}";
+        var disambiguated = PlaceholderParser.DisambiguateDuplicatePromptTokens(template);
+
+        Assert.Equal(template, disambiguated);
     }
 }
 

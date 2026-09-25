@@ -3,7 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Shapes;
 using TriggerPoint.Core.Contracts;
 using TriggerPoint.Core.Models;
 using TriggerPoint.Core.Services;
@@ -117,12 +121,14 @@ public partial class CursorContextMenuView : Window
         {
             EmptyFolderNotice.Visibility = Visibility.Visible;
             ItemsListBox.Visibility = Visibility.Collapsed;
+            UpdateFooterHints();
         }
         else
         {
             EmptyFolderNotice.Visibility = Visibility.Collapsed;
             ItemsListBox.Visibility = Visibility.Visible;
             ItemsListBox.SelectedIndex = 0;
+            UpdateFooterHints();
         }
 
         HeaderBorder.Visibility = Visibility.Visible;
@@ -180,6 +186,105 @@ public partial class CursorContextMenuView : Window
     private void BackBtn_Click(object sender, RoutedEventArgs e)
     {
         NavigateBack();
+    }
+
+    private void ItemsListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        UpdateFooterHints();
+    }
+
+    private InlineUIContainer CreateEnterKeyIcon(double width = 9.5, double height = 9.5)
+    {
+        var geom = TryFindResource("EnterKeyGeometry") as Geometry;
+        var brush = TryFindResource("TextPrimaryBrush") as Brush ?? Brushes.Gray;
+        var path = new System.Windows.Shapes.Path
+        {
+            Data = geom,
+            Fill = brush,
+            Width = width,
+            Height = height,
+            Stretch = Stretch.Uniform,
+            Margin = new Thickness(0, 0, 2, 0)
+        };
+        return new InlineUIContainer(path) { BaselineAlignment = BaselineAlignment.Center };
+    }
+
+    private void UpdateFooterHints()
+    {
+        if (PrimaryHintsText == null || ModifierHintsText == null) return;
+
+        PrimaryHintsText.Inlines.Clear();
+        ModifierHintsText.Inlines.Clear();
+
+        var selectedVm = ItemsListBox.SelectedItem as CursorMenuItemViewModel;
+        if (selectedVm == null)
+        {
+            if (_navHistory.Count > 0)
+            {
+                PrimaryHintsText.Inlines.Add(new Run("◀ ") { FontWeight = FontWeights.SemiBold, Foreground = TryFindResource("TextPrimaryBrush") as Brush });
+                PrimaryHintsText.Inlines.Add(new Run("Back (Esc)"));
+            }
+            else
+            {
+                PrimaryHintsText.Inlines.Add(new Run("Esc Close"));
+            }
+            ModifierHintsText.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var shortcuts = ActionShortcutRelevanceHelper.GetContextualShortcuts(selectedVm.Item, _navHistory.Count > 0);
+
+        // Row 1: Primary action + Navigation
+        PrimaryHintsText.Inlines.Add(CreateEnterKeyIcon(10, 10));
+        PrimaryHintsText.Inlines.Add(new Run(shortcuts.PrimaryActionVerb + "   •   "));
+
+        if (_navHistory.Count > 0)
+        {
+            PrimaryHintsText.Inlines.Add(new Run("◀ ") { FontWeight = FontWeights.SemiBold, Foreground = TryFindResource("TextPrimaryBrush") as Brush });
+            PrimaryHintsText.Inlines.Add(new Run("Back (Esc)"));
+        }
+        else
+        {
+            PrimaryHintsText.Inlines.Add(new Run("Esc Close"));
+        }
+
+        // Row 2: Relevant modifier overrides only
+        bool hasModifier = false;
+        var secondaryBrush = TryFindResource("TextSecondaryBrush") as Brush ?? Brushes.Gray;
+
+        if (shortcuts.CanRunAsAdmin)
+        {
+            ModifierHintsText.Inlines.Add(new Run("Ctrl+") { Foreground = secondaryBrush });
+            ModifierHintsText.Inlines.Add(CreateEnterKeyIcon(9.5, 9.5));
+            ModifierHintsText.Inlines.Add(new Run("Admin"));
+            hasModifier = true;
+        }
+
+        if (shortcuts.CanRevealInExplorer)
+        {
+            if (hasModifier)
+            {
+                ModifierHintsText.Inlines.Add(new Run("   •   "));
+            }
+            ModifierHintsText.Inlines.Add(new Run("Shift+") { Foreground = secondaryBrush });
+            ModifierHintsText.Inlines.Add(CreateEnterKeyIcon(9.5, 9.5));
+            ModifierHintsText.Inlines.Add(new Run("Reveal"));
+            hasModifier = true;
+        }
+
+        if (shortcuts.CanOpenSettings)
+        {
+            if (hasModifier)
+            {
+                ModifierHintsText.Inlines.Add(new Run("   •   "));
+            }
+            ModifierHintsText.Inlines.Add(new Run("Alt+") { Foreground = secondaryBrush });
+            ModifierHintsText.Inlines.Add(CreateEnterKeyIcon(9.5, 9.5));
+            ModifierHintsText.Inlines.Add(new Run("Settings"));
+            hasModifier = true;
+        }
+
+        ModifierHintsText.Visibility = hasModifier ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void CursorContextMenuView_Loaded(object sender, RoutedEventArgs e)
@@ -368,13 +473,21 @@ public partial class CursorContextMenuView : Window
 
             if (accelMatch != null)
             {
+                var execOverride = DetermineOverride();
                 if (accelMatch.IsFolder)
                 {
-                    DrillDown(accelMatch.Item);
+                    if (execOverride == ExecutionOverride.OpenSettings)
+                    {
+                        ExecuteItem(accelMatch.Item, execOverride);
+                    }
+                    else
+                    {
+                        DrillDown(accelMatch.Item);
+                    }
                 }
                 else
                 {
-                    ExecuteItem(accelMatch.Item, DetermineOverride());
+                    ExecuteItem(accelMatch.Item, execOverride);
                 }
                 e.Handled = true;
                 return;
@@ -388,13 +501,21 @@ public partial class CursorContextMenuView : Window
 
             if (selectedVm != null)
             {
+                var execOverride = DetermineOverride();
                 if (selectedVm.IsFolder)
                 {
-                    DrillDown(selectedVm.Item);
+                    if (execOverride == ExecutionOverride.OpenSettings)
+                    {
+                        ExecuteItem(selectedVm.Item, execOverride);
+                    }
+                    else
+                    {
+                        DrillDown(selectedVm.Item);
+                    }
                 }
                 else
                 {
-                    ExecuteItem(selectedVm.Item, DetermineOverride());
+                    ExecuteItem(selectedVm.Item, execOverride);
                 }
                 e.Handled = true;
             }
@@ -416,13 +537,21 @@ public partial class CursorContextMenuView : Window
     {
         if (sender is FrameworkElement { DataContext: CursorMenuItemViewModel vm })
         {
+            var execOverride = DetermineOverride();
             if (vm.IsFolder)
             {
-                DrillDown(vm.Item);
+                if (execOverride == ExecutionOverride.OpenSettings)
+                {
+                    ExecuteItem(vm.Item, execOverride);
+                }
+                else
+                {
+                    DrillDown(vm.Item);
+                }
             }
             else
             {
-                ExecuteItem(vm.Item, DetermineOverride());
+                ExecuteItem(vm.Item, execOverride);
             }
         }
     }
@@ -443,6 +572,11 @@ public partial class CursorContextMenuView : Window
     private void ExecuteItem(TriggerItem item, ExecutionOverride executionOverride)
     {
         SafeClose();
+        if (executionOverride == ExecutionOverride.OpenSettings)
+        {
+            (Application.Current as App)?.ShowSettingsWindow(item);
+            return;
+        }
         _ = _executor.ExecuteAsync(item, executionOverride, _targetHwnd);
     }
 

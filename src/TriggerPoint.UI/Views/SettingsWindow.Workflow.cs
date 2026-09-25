@@ -1369,6 +1369,7 @@ public partial class SettingsWindow
 
                     var fVarStack = new StackPanel();
                     fVarStack.Children.Add(new TextBlock { Text = "Variable Name", FontSize = 10.5, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 3) });
+                    string origPromptVarName = (field.VariableName ?? string.Empty).Trim();
                     var fVarBox = new TextBox
                     {
                         Text = field.VariableName,
@@ -1377,13 +1378,38 @@ public partial class SettingsWindow
                         VerticalContentAlignment = VerticalAlignment.Center,
                         Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style
                     };
+                    fVarBox.GotFocus += (s, e) =>
+                    {
+                        origPromptVarName = (fVarBox.Text ?? string.Empty).Trim();
+                    };
                     fVarBox.TextChanged += (s, e) =>
                     {
-                        field.VariableName = fVarBox.Text.Trim();
+                        field.VariableName = (fVarBox.Text ?? string.Empty).Trim();
                         fieldNumText.Text = $"Field #{fieldDisplayNum}: {field.VariableName}";
                         SyncPrimaryPromptField(step);
                         summaryText.Text = GetStepLiveSummary(step);
                         OnFormEdited();
+                    };
+                    fVarBox.LostFocus += (s, e) =>
+                    {
+                        var newName = (fVarBox.Text ?? string.Empty).Trim();
+                        if (!string.Equals(origPromptVarName, newName, StringComparison.Ordinal))
+                        {
+                            PromptAndExecuteVariableRename(origPromptVarName, newName, () =>
+                            {
+                                field.VariableName = newName;
+                                SyncPrimaryPromptField(step);
+                            }, definingStep: step);
+                            origPromptVarName = newName;
+                        }
+                    };
+                    fVarBox.KeyDown += (s, e) =>
+                    {
+                        if (e.Key == Key.Enter)
+                        {
+                            Keyboard.ClearFocus();
+                            e.Handled = true;
+                        }
                     };
                     fVarStack.Children.Add(fVarBox);
                     Grid.SetColumn(fVarStack, 0);
@@ -1616,7 +1642,7 @@ public partial class SettingsWindow
                 container.Children.Add(urlStack);
 
                 // Variable insertion chips
-                RenderVariableChips(container, urlBox, availableVariables);
+                RenderVariableChips(container, urlBox, availableVariables, step);
 
                 // Browser & Profile Target Row
                 var browserGrid = new Grid { Margin = new Thickness(0, 6, 0, 8) };
@@ -1784,7 +1810,7 @@ public partial class SettingsWindow
                 container.Children.Add(dirStack);
 
                 // Variable insertion chips
-                RenderVariableChips(container, pathBox, availableVariables);
+                RenderVariableChips(container, pathBox, availableVariables, step);
 
                 // Creation Policy Row
                 var policyGrid = new Grid { Margin = new Thickness(0, 4, 0, 4) };
@@ -1908,7 +1934,7 @@ public partial class SettingsWindow
                 cmdStack.Children.Add(grid);
                 container.Children.Add(cmdStack);
 
-                RenderVariableChips(container, cmdBox, availableVariables);
+                RenderVariableChips(container, cmdBox, availableVariables, step);
 
                 // Arguments Box
                 var argsStack = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
@@ -1929,7 +1955,7 @@ public partial class SettingsWindow
                 argsStack.Children.Add(argsBox);
                 container.Children.Add(argsStack);
 
-                RenderVariableChips(container, argsBox, availableVariables);
+                RenderVariableChips(container, argsBox, availableVariables, step);
 
                 // Working Directory Box
                 var workStack = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
@@ -1950,7 +1976,7 @@ public partial class SettingsWindow
                 workStack.Children.Add(workBox);
                 container.Children.Add(workStack);
 
-                RenderVariableChips(container, workBox, availableVariables);
+                RenderVariableChips(container, workBox, availableVariables, step);
 
                 // Run as Admin Checkbox
                 var adminCheck = new CheckBox
@@ -2000,7 +2026,7 @@ public partial class SettingsWindow
                 snipStack.Children.Add(snipBox);
                 container.Children.Add(snipStack);
 
-                RenderVariableChips(container, snipBox, availableVariables);
+                RenderVariableChips(container, snipBox, availableVariables, step);
                 break;
             }
 
@@ -2290,7 +2316,7 @@ public partial class SettingsWindow
                 msgStack.Children.Add(msgBox);
                 container.Children.Add(msgStack);
 
-                RenderVariableChips(container, msgBox, availableVariables);
+                RenderVariableChips(container, msgBox, availableVariables, step);
 
                 // Buttons & Export Row
                 var optionsGrid = new Grid { Margin = new Thickness(0, 4, 0, 8) };
@@ -2380,6 +2406,7 @@ public partial class SettingsWindow
                     FontWeight = FontWeights.SemiBold, 
                     Margin = new Thickness(0, 0, 0, 3) 
                 });
+                string origSetVarName = (step.SetVariableName ?? string.Empty).Trim();
                 var nameBox = new TextBox
                 {
                     Text = step.SetVariableName ?? string.Empty,
@@ -2389,11 +2416,32 @@ public partial class SettingsWindow
                     Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style,
                     Tag = "e.g. buildDir, ticket"
                 };
+                nameBox.GotFocus += (s, e) =>
+                {
+                    origSetVarName = (nameBox.Text ?? string.Empty).Trim();
+                };
                 nameBox.TextChanged += (s, e) =>
                 {
                     step.SetVariableName = nameBox.Text.Trim();
                     summaryText.Text = GetStepLiveSummary(step);
                     OnFormEdited();
+                };
+                nameBox.LostFocus += (s, e) =>
+                {
+                    var newName = (nameBox.Text ?? string.Empty).Trim();
+                    if (!string.Equals(origSetVarName, newName, StringComparison.Ordinal))
+                    {
+                        PromptAndExecuteVariableRename(origSetVarName, newName, () => step.SetVariableName = newName, definingStep: step);
+                        origSetVarName = newName;
+                    }
+                };
+                nameBox.KeyDown += (s, e) =>
+                {
+                    if (e.Key == Key.Enter)
+                    {
+                        Keyboard.ClearFocus();
+                        e.Handled = true;
+                    }
                 };
                 nameStack.Children.Add(nameBox);
                 Grid.SetColumn(nameStack, 0);
@@ -2424,7 +2472,7 @@ public partial class SettingsWindow
                     OnFormEdited();
                 };
                 valStack.Children.Add(valBox);
-                RenderVariableChips(valStack, valBox, availableVariables);
+                RenderVariableChips(valStack, valBox, availableVariables, step);
 
                 Grid.SetColumn(valStack, 2);
                 grid.Children.Add(valStack);
@@ -2441,11 +2489,17 @@ public partial class SettingsWindow
         }
     }
 
-    private void ShowVariablePickerDialog(TextBox targetBox, List<string>? availableVariables = null)
+    private void ShowVariablePickerDialog(TextBox targetBox, WorkflowStep? stepContext = null, List<string>? fallbackVars = null)
     {
-        var dialog = new VariablePickerDialog(availableVariables)
+        var resolvedVars = GetCurrentWorkflowVariables(stepContext);
+        if (resolvedVars.Count == 0 && fallbackVars != null && fallbackVars.Count > 0)
         {
-            Owner = Window.GetWindow(this) ?? Application.Current.MainWindow
+            resolvedVars = fallbackVars.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
+        var dialog = new VariablePickerDialog(resolvedVars)
+        {
+            Owner = this
         };
 
         if (dialog.ShowDialog() == true && !string.IsNullOrEmpty(dialog.SelectedToken))
@@ -2454,7 +2508,7 @@ public partial class SettingsWindow
         }
     }
 
-    private void RenderVariableChips(StackPanel container, TextBox targetBox, List<string> availableVariables)
+    private void RenderVariableChips(StackPanel container, TextBox targetBox, List<string> availableVariables, WorkflowStep? stepContext = null)
     {
         var wrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 6) };
 
@@ -2468,18 +2522,22 @@ public partial class SettingsWindow
             Margin = new Thickness(0, 0, 4, 0),
             ToolTip = "Insert Windows Environment Variables, Date/Time tokens, Clipboard, or Workflow variables (Click to search & filter, right-click for quick menu)"
         };
-        tokenBtn.Click += (s, e) => ShowVariablePickerDialog(targetBox, availableVariables);
+        tokenBtn.Click += (s, e) => ShowVariablePickerDialog(targetBox, stepContext, availableVariables);
         tokenBtn.MouseRightButtonUp += (s, e) =>
         {
-            ShowTokenAndEnvMenu(tokenBtn, targetBox, availableVariables);
+            ShowTokenAndEnvMenu(tokenBtn, targetBox, stepContext, availableVariables);
             e.Handled = true;
         };
         wrap.Children.Add(tokenBtn);
 
         // One-click quick pills for available workflow variables (if any)
-        if (availableVariables != null && availableVariables.Count > 0)
+        var displayVars = availableVariables != null && availableVariables.Count > 0
+            ? availableVariables
+            : GetCurrentWorkflowVariables(stepContext);
+
+        if (displayVars != null && displayVars.Count > 0)
         {
-            foreach (var varName in availableVariables.Take(5))
+            foreach (var varName in displayVars.Take(5))
             {
                 var pill = new Button
                 {
@@ -2502,7 +2560,7 @@ public partial class SettingsWindow
         container.Children.Add(wrap);
     }
 
-    private void ShowTokenAndEnvMenu(FrameworkElement target, TextBox targetBox, List<string>? availableVariables = null)
+    private void ShowTokenAndEnvMenu(FrameworkElement target, TextBox targetBox, WorkflowStep? stepContext = null, List<string>? fallbackVars = null)
     {
         var contextMenu = new ContextMenu();
 
@@ -2511,7 +2569,7 @@ public partial class SettingsWindow
             Header = "🔍 Search & Filter Variables / Tokens...",
             FontWeight = FontWeights.SemiBold
         };
-        searchItem.Click += (s, e) => ShowVariablePickerDialog(targetBox, availableVariables);
+        searchItem.Click += (s, e) => ShowVariablePickerDialog(targetBox, stepContext, fallbackVars);
         contextMenu.Items.Add(searchItem);
         contextMenu.Items.Add(new Separator());
 
@@ -2642,14 +2700,21 @@ public partial class SettingsWindow
         }
         contextMenu.Items.Add(sysMenu);
 
-        if (availableVariables != null && availableVariables.Count > 0)
+        var liveWfVars = GetCurrentWorkflowVariables(stepContext);
+        if (liveWfVars.Count == 0 && fallbackVars != null)
+        {
+            liveWfVars = fallbackVars;
+        }
+
+        if (liveWfVars.Count > 0)
         {
             contextMenu.Items.Add(new Separator());
             var varMenu = new MenuItem { Header = "Workflow Variables" };
-            foreach (var v in availableVariables)
+            foreach (var v in liveWfVars)
             {
-                var mItem = new MenuItem { Header = $"{{{v}}}" };
-                mItem.Click += (s, e) => InsertTokenIntoBox(targetBox, $"{{{v}}}");
+                var tok = $"{{{v}}}";
+                var mItem = new MenuItem { Header = tok };
+                mItem.Click += (s, e) => InsertTokenIntoBox(targetBox, tok);
                 varMenu.Items.Add(mItem);
             }
             contextMenu.Items.Add(varMenu);
@@ -3452,6 +3517,7 @@ public partial class SettingsWindow
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(4) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // DelBtn
 
+            string originalName = (v.Name ?? string.Empty).Trim();
             var nameBox = new TextBox
             {
                 Text = v.Name ?? string.Empty,
@@ -3461,10 +3527,31 @@ public partial class SettingsWindow
                 Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style,
                 Tag = "Variable name"
             };
+            nameBox.GotFocus += (s, e) =>
+            {
+                originalName = (nameBox.Text ?? string.Empty).Trim();
+            };
             nameBox.TextChanged += (s, e) =>
             {
                 v.Name = nameBox.Text.Trim();
                 OnFormEdited();
+            };
+            nameBox.LostFocus += (s, e) =>
+            {
+                var newName = (nameBox.Text ?? string.Empty).Trim();
+                if (!string.Equals(originalName, newName, StringComparison.Ordinal))
+                {
+                    PromptAndExecuteVariableRename(originalName, newName, () => v.Name = newName);
+                    originalName = newName;
+                }
+            };
+            nameBox.KeyDown += (s, e) =>
+            {
+                if (e.Key == Key.Enter)
+                {
+                    Keyboard.ClearFocus();
+                    e.Handled = true;
+                }
             };
             Grid.SetColumn(nameBox, 0);
             row.Children.Add(nameBox);
@@ -3601,6 +3688,131 @@ public partial class SettingsWindow
         }
     }
 
+    private void PromptAndExecuteVariableRename(string oldName, string newName, Action applyRename, WorkflowStep? definingStep = null)
+    {
+        oldName = (oldName ?? string.Empty).Trim();
+        newName = (newName ?? string.Empty).Trim();
+
+        if (string.IsNullOrWhiteSpace(oldName) || string.IsNullOrWhiteSpace(newName) ||
+            string.Equals(oldName, newName, StringComparison.Ordinal))
+        {
+            applyRename();
+            return;
+        }
+
+        var steps = _selectedItem?.Payload?.WorkflowSteps;
+        int occurrences = WorkflowVariableCascadeHelper.CountVariableReferences(steps, oldName, definingStep);
+
+        if (occurrences > 0)
+        {
+            _logger.Information("Variable '{OldVar}' renamed to '{NewVar}'. Found {Count} references in workflow steps.", oldName, newName, occurrences);
+            var confirm = ModernMessageDialog.ShowConfirm(
+                this,
+                "Update Variable References",
+                $"Variable '{oldName}' is referenced in {occurrences} place(s) in this workflow.\n\nWould you like to automatically update all references to '{newName}'?",
+                primaryText: "Update All",
+                secondaryText: "Keep As Is");
+
+            if (confirm)
+            {
+                int replaced = WorkflowVariableCascadeHelper.ReplaceVariableReferences(steps, oldName, newName, definingStep);
+                _logger.Information("Updated {Count} references of variable '{OldVar}' to '{NewVar}' in workflow steps.", replaced, oldName, newName);
+                if (StatusText != null)
+                {
+                    StatusText.Text = $"Updated {replaced} reference(s) from '{oldName}' to '{newName}'.";
+                }
+            }
+        }
+        else
+        {
+            _logger.Information("Variable '{OldVar}' renamed to '{NewVar}'. No step references found.", oldName, newName);
+        }
+
+        applyRename();
+        OnFormEdited();
+        RebuildWorkflowStepCards();
+    }
+
+    private List<string> GetCurrentWorkflowVariables(WorkflowStep? upToStep = null)
+    {
+        var vars = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // 1. Workflow-level variables (WorkflowVariables)
+        if (_selectedItem?.Payload?.WorkflowVariables != null)
+        {
+            foreach (var v in _selectedItem.Payload.WorkflowVariables)
+            {
+                if (!string.IsNullOrWhiteSpace(v.Name))
+                {
+                    vars.Add(v.Name.Trim());
+                }
+            }
+        }
+
+        // 2. Step-defined variables
+        if (_selectedItem?.Payload?.WorkflowSteps != null)
+        {
+            foreach (var s in _selectedItem.Payload.WorkflowSteps)
+            {
+                if (upToStep != null && s.Id == upToStep.Id)
+                {
+                    break;
+                }
+
+                CollectStepDefinedVariables(s, vars);
+            }
+        }
+
+        return vars.ToList();
+    }
+
+    private static void CollectStepDefinedVariables(WorkflowStep step, HashSet<string> vars)
+    {
+        if (step.StepType == WorkflowStepType.Prompt)
+        {
+            if (step.PromptFields != null && step.PromptFields.Count > 0)
+            {
+                foreach (var f in step.PromptFields)
+                {
+                    if (!string.IsNullOrWhiteSpace(f.VariableName))
+                        vars.Add(f.VariableName.Trim());
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(step.VariableName))
+            {
+                vars.Add(step.VariableName.Trim());
+            }
+        }
+        else if (step.StepType == WorkflowStepType.SetVariable)
+        {
+            if (!string.IsNullOrWhiteSpace(step.SetVariableName))
+                vars.Add(step.SetVariableName.Trim());
+        }
+        else if (step.StepType == WorkflowStepType.EnsureDirectory)
+        {
+            var folderVar = string.IsNullOrWhiteSpace(step.VariableName) ? "folder" : step.VariableName.Trim();
+            vars.Add(folderVar);
+        }
+        else if (step.StepType == WorkflowStepType.Dialog)
+        {
+            var dlgVar = string.IsNullOrWhiteSpace(step.VariableName) ? "dialogResult" : step.VariableName.Trim();
+            vars.Add(dlgVar);
+        }
+        else if (step.StepType == WorkflowStepType.IfCondition)
+        {
+            if (step.ThenSteps != null)
+            {
+                foreach (var sub in step.ThenSteps)
+                    CollectStepDefinedVariables(sub, vars);
+            }
+            if (step.ElseSteps != null)
+            {
+                foreach (var sub in step.ElseSteps)
+                    CollectStepDefinedVariables(sub, vars);
+            }
+        }
+    }
+
     private void AddWorkflowVariableBtn_Click(object sender, RoutedEventArgs e)
     {
         if (_selectedItem?.Payload == null) return;
@@ -3703,7 +3915,7 @@ public partial class SettingsWindow
             Tag = "e.g. {status}, %TEMP%\\app.lock, or myVar"
         };
         leftStack.Children.Add(leftBox);
-        RenderVariableChips(leftStack, leftBox, availableVariables);
+        RenderVariableChips(leftStack, leftBox, availableVariables, step);
         Grid.SetColumn(leftStack, 0);
         exprGrid.Children.Add(leftStack);
 
@@ -3773,7 +3985,7 @@ public partial class SettingsWindow
             Tag = "e.g. completed, 100, or {target}"
         };
         rightStack.Children.Add(rightBox);
-        RenderVariableChips(rightStack, rightBox, availableVariables);
+        RenderVariableChips(rightStack, rightBox, availableVariables, step);
         Grid.SetColumn(rightStack, 4);
         exprGrid.Children.Add(rightStack);
 

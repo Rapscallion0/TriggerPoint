@@ -1428,6 +1428,11 @@ public partial class SettingsWindow : Window
             UpdateCommandValidationStatus(item.Payload.Command);
 
             // Snippet payload
+            if (SnippetInlineWarningBanner != null)
+            {
+                _snippetWarningTimer?.Stop();
+                SnippetInlineWarningBanner.Visibility = Visibility.Collapsed;
+            }
             _currentSnippetContentType = item.Payload.SnippetContentType;
             SnippetTemplateBox.Text = item.Payload.SnippetTemplate;
             SnippetTemplateBox.ScrollToHome();
@@ -1849,9 +1854,134 @@ public partial class SettingsWindow : Window
         }
     }
 
+    private void TokenDropdownArrow_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement elem)
+        {
+            DependencyObject current = elem;
+            while (current != null)
+            {
+                if (current is FrameworkElement fe && fe.ContextMenu != null)
+                {
+                    fe.ContextMenu.PlacementTarget = fe;
+                    fe.ContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+                    fe.ContextMenu.IsOpen = true;
+                    e.Handled = true;
+                    return;
+                }
+                current = VisualTreeHelper.GetParent(current);
+            }
+        }
+    }
+
+    private DispatcherTimer? _snippetWarningTimer;
+
+    private void DismissSnippetWarningBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _snippetWarningTimer?.Stop();
+        if (SnippetInlineWarningBanner != null)
+        {
+            SnippetInlineWarningBanner.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private void ShowSnippetWarning(string message)
+    {
+        if (SnippetInlineWarningText == null || SnippetInlineWarningBanner == null) return;
+        SnippetInlineWarningText.Text = message;
+        SnippetInlineWarningBanner.Visibility = Visibility.Visible;
+        _snippetWarningTimer?.Stop();
+        _snippetWarningTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(5)
+        };
+        _snippetWarningTimer.Tick += (s, e) =>
+        {
+            _snippetWarningTimer?.Stop();
+            SnippetInlineWarningBanner.Visibility = Visibility.Collapsed;
+        };
+        _snippetWarningTimer.Start();
+    }
+
+    private void HighlightExistingCursorToken()
+    {
+        if (_currentSnippetContentType == SnippetContentType.RichText && SnippetRichTextBox != null)
+        {
+            var range = FindTextInRange(SnippetRichTextBox.Document.ContentStart, SnippetRichTextBox.Document.ContentEnd, "{cursor}")
+                     ?? FindTextInRange(SnippetRichTextBox.Document.ContentStart, SnippetRichTextBox.Document.ContentEnd, "{{cursor}}");
+            if (range != null)
+            {
+                SnippetRichTextBox.Focus();
+                SnippetRichTextBox.Selection.Select(range.Start, range.End);
+            }
+        }
+        else if (SnippetTemplateBox != null)
+        {
+            string text = SnippetTemplateBox.Text ?? string.Empty;
+            int idx = text.IndexOf("{cursor}", StringComparison.OrdinalIgnoreCase);
+            int len = 8;
+            if (idx < 0)
+            {
+                idx = text.IndexOf("{{cursor}}", StringComparison.OrdinalIgnoreCase);
+                len = 10;
+            }
+
+            if (idx >= 0)
+            {
+                SnippetTemplateBox.Focus();
+                SnippetTemplateBox.Select(idx, len);
+                _lastSnippetCaretIndex = idx;
+                _lastSnippetSelectionLength = len;
+            }
+        }
+    }
+
+    private static TextRange? FindTextInRange(TextPointer start, TextPointer end, string text)
+    {
+        while (start != null && start.CompareTo(end) < 0)
+        {
+            if (start.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text)
+            {
+                string textRun = start.GetTextInRun(LogicalDirection.Forward);
+                int matchIndex = textRun.IndexOf(text, StringComparison.OrdinalIgnoreCase);
+                if (matchIndex >= 0)
+                {
+                    TextPointer matchStart = start.GetPositionAtOffset(matchIndex);
+                    TextPointer matchEnd = matchStart.GetPositionAtOffset(text.Length);
+                    return new TextRange(matchStart, matchEnd);
+                }
+            }
+            start = start.GetNextContextPosition(LogicalDirection.Forward);
+        }
+        return null;
+    }
+
     private void InsertTokenIntoSnippetBox(string token)
     {
         if (string.IsNullOrEmpty(token)) return;
+
+        // 1. If token is {cursor}, ensure only one {cursor} exists in the snippet
+        if (token.Equals("{cursor}", StringComparison.OrdinalIgnoreCase))
+        {
+            string existing = _currentSnippetContentType == SnippetContentType.RichText && SnippetRichTextBox != null
+                ? RichTextService.ExtractPlainText(SnippetRichTextBox.Document)
+                : (SnippetTemplateBox?.Text ?? string.Empty);
+
+            if (existing.Contains("{cursor}", StringComparison.OrdinalIgnoreCase) || existing.Contains("{{cursor}}", StringComparison.OrdinalIgnoreCase))
+            {
+                ShowSnippetWarning("Only one {cursor} token is allowed per snippet. Existing {cursor} has been highlighted.");
+                HighlightExistingCursorToken();
+                StatusText.Text = "Snippet already contains a {cursor} token. Only one is allowed.";
+                return;
+            }
+        }
+
+        // 2. Disambiguate prompt token labels if multiple prompts are added
+        string currentContent = _currentSnippetContentType == SnippetContentType.RichText && SnippetRichTextBox != null
+            ? RichTextService.ExtractPlainText(SnippetRichTextBox.Document)
+            : (SnippetTemplateBox?.Text ?? string.Empty);
+
+        token = PlaceholderParser.GetDisambiguatedPromptToken(token, currentContent);
 
         if (_currentSnippetContentType == SnippetContentType.RichText && SnippetRichTextBox != null)
         {
@@ -2026,18 +2156,18 @@ public partial class SettingsWindow : Window
         {
             if (SnippetRichTextBox == null || SnippetLivePreviewRichBox == null) return;
 
-            var rtf = RichTextService.SaveToRtf(SnippetRichTextBox.Document);
-            var plain = RichTextService.ExtractPlainText(SnippetRichTextBox.Document);
-
-            if (string.IsNullOrWhiteSpace(plain))
-            {
-                SnippetLivePreviewRichBox.Document.Blocks.Clear();
-                SnippetPreviewStatsText.Text = "0 chars • 0 tokens";
-                return;
-            }
-
             try
             {
+                var rtf = RichTextService.SaveToRtf(SnippetRichTextBox.Document);
+                var plain = RichTextService.ExtractPlainText(SnippetRichTextBox.Document);
+
+                if (string.IsNullOrWhiteSpace(plain))
+                {
+                    SnippetLivePreviewRichBox.Document.Blocks.Clear();
+                    SnippetPreviewStatsText.Text = "0 chars • 0 tokens";
+                    return;
+                }
+
                 string previewClip = string.Empty;
                 try
                 {
@@ -2047,7 +2177,10 @@ public partial class SettingsWindow : Window
                         if (previewClip.Length > 40) previewClip = previewClip[..37] + "...";
                     }
                 }
-                catch { }
+                catch (Exception clipEx)
+                {
+                    _logger.Debug(clipEx, "Clipboard text preview could not be read.");
+                }
 
                 if (string.IsNullOrEmpty(previewClip)) previewClip = "[Clipboard text]";
 
@@ -2064,6 +2197,7 @@ public partial class SettingsWindow : Window
 
                 var tokenMatches = System.Text.RegularExpressions.Regex.Matches(plain, @"\{[^{}]+\}");
                 SnippetPreviewStatsText.Text = $"{evalPlain.Length} chars • {tokenMatches.Count} tokens";
+                _logger.Debug("Rich snippet live preview updated. Chars: {Chars}, Tokens: {Tokens}", evalPlain.Length, tokenMatches.Count);
             }
             catch (Exception ex)
             {
@@ -2118,39 +2252,53 @@ public partial class SettingsWindow : Window
         }
     }
 
-    private void SnippetFormatPlainBtn_Click(object sender, RoutedEventArgs e)
+    private void SnippetFormatPlainSegment_Click(object sender, RoutedEventArgs e)
     {
         if (_currentSnippetContentType == SnippetContentType.PlainText) return;
 
-        // Convert rich text plain text to template box
-        var plainText = RichTextService.ExtractPlainText(SnippetRichTextBox.Document);
-        SnippetTemplateBox.Text = plainText;
-        _currentSnippetContentType = SnippetContentType.PlainText;
-        UpdateSnippetFormatUI(SnippetContentType.PlainText);
-        OnFormEdited();
-        QueueSnippetLivePreviewUpdate();
+        try
+        {
+            _logger.Information("User switched snippet format: RichText -> PlainText.");
+            var plainText = RichTextService.ExtractPlainText(SnippetRichTextBox.Document);
+            SnippetTemplateBox.Text = plainText;
+            _currentSnippetContentType = SnippetContentType.PlainText;
+            UpdateSnippetFormatUI(SnippetContentType.PlainText);
+            OnFormEdited();
+            QueueSnippetLivePreviewUpdate();
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Unexpected error switching to Plain Text snippet format.");
+        }
     }
 
-    private void SnippetFormatRichBtn_Click(object sender, RoutedEventArgs e)
+    private void SnippetFormatRichSegment_Click(object sender, RoutedEventArgs e)
     {
         if (_currentSnippetContentType == SnippetContentType.RichText) return;
 
-        // Convert plain text to rich text document
-        var plainText = SnippetTemplateBox.Text;
-        _isUpdatingRichText = true;
         try
         {
-            RichTextService.LoadFromPlainText(SnippetRichTextBox.Document, plainText);
-        }
-        finally
-        {
-            _isUpdatingRichText = false;
-        }
+            _logger.Information("User switched snippet format: PlainText -> RichText.");
+            var plainText = SnippetTemplateBox.Text;
+            _isUpdatingRichText = true;
+            try
+            {
+                RichTextService.LoadFromPlainText(SnippetRichTextBox.Document, plainText);
+            }
+            finally
+            {
+                _isUpdatingRichText = false;
+            }
 
-        _currentSnippetContentType = SnippetContentType.RichText;
-        UpdateSnippetFormatUI(SnippetContentType.RichText);
-        OnFormEdited();
-        QueueSnippetLivePreviewUpdate();
+            _currentSnippetContentType = SnippetContentType.RichText;
+            UpdateSnippetFormatUI(SnippetContentType.RichText);
+            OnFormEdited();
+            QueueSnippetLivePreviewUpdate();
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Unexpected error switching to Rich Text snippet format.");
+        }
     }
 
     private void UpdateSnippetFormatUI(SnippetContentType format)
@@ -2158,13 +2306,26 @@ public partial class SettingsWindow : Window
         var accentBrush = Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.DodgerBlue;
         var textSecBrush = Application.Current.TryFindResource("TextSecondaryBrush") as Brush ?? Brushes.Gray;
 
+        if (SnippetFormatPlainSegment != null && SnippetFormatRichSegment != null)
+        {
+            if (format == SnippetContentType.RichText)
+            {
+                SnippetFormatRichSegment.Background = accentBrush;
+                SnippetFormatRichSegment.Foreground = Brushes.White;
+                SnippetFormatPlainSegment.Background = Brushes.Transparent;
+                SnippetFormatPlainSegment.Foreground = textSecBrush;
+            }
+            else
+            {
+                SnippetFormatPlainSegment.Background = accentBrush;
+                SnippetFormatPlainSegment.Foreground = Brushes.White;
+                SnippetFormatRichSegment.Background = Brushes.Transparent;
+                SnippetFormatRichSegment.Foreground = textSecBrush;
+            }
+        }
+
         if (format == SnippetContentType.RichText)
         {
-            SnippetFormatRichBtn.Background = accentBrush;
-            SnippetFormatRichBtn.Foreground = Brushes.White;
-            SnippetFormatPlainBtn.Background = Brushes.Transparent;
-            SnippetFormatPlainBtn.Foreground = textSecBrush;
-
             SnippetPlainTextContainer.Visibility = Visibility.Collapsed;
             SnippetRichTextContainer.Visibility = Visibility.Visible;
             SnippetLivePreviewText.Visibility = Visibility.Collapsed;
@@ -2176,11 +2337,6 @@ public partial class SettingsWindow : Window
         }
         else
         {
-            SnippetFormatPlainBtn.Background = accentBrush;
-            SnippetFormatPlainBtn.Foreground = Brushes.White;
-            SnippetFormatRichBtn.Background = Brushes.Transparent;
-            SnippetFormatRichBtn.Foreground = textSecBrush;
-
             SnippetPlainTextContainer.Visibility = Visibility.Visible;
             SnippetRichTextContainer.Visibility = Visibility.Collapsed;
             SnippetLivePreviewText.Visibility = Visibility.Visible;
@@ -2475,61 +2631,69 @@ public partial class SettingsWindow : Window
 
     private void ApplySnippetCanvasMode()
     {
-        if (SnippetRichTextEditorBorder == null || SnippetRichTextBox == null) return;
-
-        if (_isPaperCanvasActive)
+        try
         {
-            SnippetRichTextEditorBorder.Background = Brushes.White;
-            SnippetRichTextEditorBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(203, 213, 225)); // #CBD5E1
-            SnippetRichTextBox.Foreground = new SolidColorBrush(Color.FromRgb(30, 41, 59)); // #1E293B
-            SnippetRichTextBox.CaretBrush = new SolidColorBrush(Color.FromRgb(37, 99, 235)); // #2563EB
+            if (SnippetRichTextEditorBorder == null || SnippetRichTextBox == null) return;
+            _logger.Debug("Applying snippet canvas mode. IsPaperCanvasActive: {IsPaper}", _isPaperCanvasActive);
 
-            if (SnippetLivePreviewContainerBorder != null)
+            if (_isPaperCanvasActive)
             {
-                SnippetLivePreviewContainerBorder.Background = Brushes.White;
-                SnippetLivePreviewContainerBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(203, 213, 225));
+                SnippetRichTextEditorBorder.Background = Brushes.White;
+                SnippetRichTextEditorBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(203, 213, 225)); // #CBD5E1
+                SnippetRichTextBox.Foreground = new SolidColorBrush(Color.FromRgb(30, 41, 59)); // #1E293B
+                SnippetRichTextBox.CaretBrush = new SolidColorBrush(Color.FromRgb(37, 99, 235)); // #2563EB
+
+                if (SnippetLivePreviewContainerBorder != null)
+                {
+                    SnippetLivePreviewContainerBorder.Background = Brushes.White;
+                    SnippetLivePreviewContainerBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(203, 213, 225));
+                }
+                if (SnippetLivePreviewRichBox != null)
+                {
+                    SnippetLivePreviewRichBox.Foreground = new SolidColorBrush(Color.FromRgb(30, 41, 59));
+                }
+                if (SnippetLivePreviewText != null)
+                {
+                    SnippetLivePreviewText.Foreground = new SolidColorBrush(Color.FromRgb(30, 41, 59));
+                }
+
+                if (SnippetCanvasIconText != null) SnippetCanvasIconText.Text = "🌙";
+                if (SnippetCanvasModeText != null) SnippetCanvasModeText.Text = "Theme";
+                if (SnippetCanvasToggleBtn != null) SnippetCanvasToggleBtn.ToolTip = "Switch to theme editor canvas";
             }
-            if (SnippetLivePreviewRichBox != null)
+            else
             {
-                SnippetLivePreviewRichBox.Foreground = new SolidColorBrush(Color.FromRgb(30, 41, 59));
-            }
-            if (SnippetLivePreviewText != null)
-            {
-                SnippetLivePreviewText.Foreground = new SolidColorBrush(Color.FromRgb(30, 41, 59));
+                SnippetRichTextEditorBorder.Background = Application.Current.TryFindResource("BgInputBrush") as Brush ?? Brushes.Transparent;
+                SnippetRichTextEditorBorder.BorderBrush = Application.Current.TryFindResource("BorderBrush") as Brush ?? Brushes.Gray;
+                SnippetRichTextBox.Foreground = Application.Current.TryFindResource("TextPrimaryBrush") as Brush ?? Brushes.White;
+                SnippetRichTextBox.CaretBrush = Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.DodgerBlue;
+
+                if (SnippetLivePreviewContainerBorder != null)
+                {
+                    SnippetLivePreviewContainerBorder.Background = Application.Current.TryFindResource("BgInputBrush") as Brush ?? Brushes.Transparent;
+                    SnippetLivePreviewContainerBorder.BorderBrush = Application.Current.TryFindResource("BorderBrush") as Brush ?? Brushes.Gray;
+                }
+                if (SnippetLivePreviewRichBox != null)
+                {
+                    SnippetLivePreviewRichBox.Foreground = Application.Current.TryFindResource("TextPrimaryBrush") as Brush ?? Brushes.White;
+                }
+                if (SnippetLivePreviewText != null)
+                {
+                    SnippetLivePreviewText.Foreground = Application.Current.TryFindResource("TextSecondaryBrush") as Brush ?? Brushes.Gray;
+                }
+
+                if (SnippetCanvasIconText != null) SnippetCanvasIconText.Text = "📄";
+                if (SnippetCanvasModeText != null) SnippetCanvasModeText.Text = "Paper";
+                if (SnippetCanvasToggleBtn != null) SnippetCanvasToggleBtn.ToolTip = "Switch to paper canvas (standard paper background)";
             }
 
-            if (SnippetCanvasIconText != null) SnippetCanvasIconText.Text = "🌙";
-            if (SnippetCanvasModeText != null) SnippetCanvasModeText.Text = "Theme";
-            if (SnippetCanvasToggleBtn != null) SnippetCanvasToggleBtn.ToolTip = "Switch to theme editor canvas";
+            // Refresh live preview rendering asynchronously under new canvas colors without altering snippet dirty state
+            _ = UpdateSnippetLivePreviewAsync();
         }
-        else
+        catch (Exception ex)
         {
-            SnippetRichTextEditorBorder.Background = Application.Current.TryFindResource("BgInputBrush") as Brush ?? Brushes.Transparent;
-            SnippetRichTextEditorBorder.BorderBrush = Application.Current.TryFindResource("BorderBrush") as Brush ?? Brushes.Gray;
-            SnippetRichTextBox.Foreground = Application.Current.TryFindResource("TextPrimaryBrush") as Brush ?? Brushes.White;
-            SnippetRichTextBox.CaretBrush = Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.DodgerBlue;
-
-            if (SnippetLivePreviewContainerBorder != null)
-            {
-                SnippetLivePreviewContainerBorder.Background = Application.Current.TryFindResource("BgInputBrush") as Brush ?? Brushes.Transparent;
-                SnippetLivePreviewContainerBorder.BorderBrush = Application.Current.TryFindResource("BorderBrush") as Brush ?? Brushes.Gray;
-            }
-            if (SnippetLivePreviewRichBox != null)
-            {
-                SnippetLivePreviewRichBox.Foreground = Application.Current.TryFindResource("TextPrimaryBrush") as Brush ?? Brushes.White;
-            }
-            if (SnippetLivePreviewText != null)
-            {
-                SnippetLivePreviewText.Foreground = Application.Current.TryFindResource("TextSecondaryBrush") as Brush ?? Brushes.Gray;
-            }
-
-            if (SnippetCanvasIconText != null) SnippetCanvasIconText.Text = "📄";
-            if (SnippetCanvasModeText != null) SnippetCanvasModeText.Text = "Paper";
-            if (SnippetCanvasToggleBtn != null) SnippetCanvasToggleBtn.ToolTip = "Switch to paper canvas (standard paper background)";
+            _logger.Warning(ex, "Failed to apply snippet canvas mode.");
         }
-
-        // Refresh live preview rendering asynchronously under new canvas colors without altering snippet dirty state
-        _ = UpdateSnippetLivePreviewAsync();
     }
 
     private void SnippetRichTextBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -2989,6 +3153,112 @@ public partial class SettingsWindow : Window
         return combo;
     }
 
+    private bool ValidateSelectedSnippetTokens()
+    {
+        if (_selectedItem?.ActionType != ActionType.Snippet) return true;
+
+        string template = _selectedItem.Payload.SnippetContentType == SnippetContentType.RichText
+            ? (SnippetRichTextBox != null ? RichTextService.ExtractPlainText(SnippetRichTextBox.Document) : _selectedItem.Payload.SnippetTemplate)
+            : (SnippetTemplateBox?.Text ?? _selectedItem.Payload.SnippetTemplate);
+
+        if (string.IsNullOrEmpty(template)) return true;
+
+        // 1. Enforce single {cursor} token
+        int cursorCount = PlaceholderParser.CountCursorTokens(template);
+        if (cursorCount > 1)
+        {
+            ModernMessageDialog.ShowAlert(
+                this,
+                "Validation Error",
+                $"A snippet can only contain a single {{cursor}} token, but {cursorCount} occurrences were found.\n\nPlease remove the extra {{cursor}} tokens before saving.",
+                ModernDialogType.Warning);
+
+            if (_selectedItem.Payload.SnippetContentType == SnippetContentType.RichText)
+            {
+                SnippetRichTextBox?.Focus();
+            }
+            else
+            {
+                SnippetTemplateBox?.Focus();
+            }
+            return false;
+        }
+
+        // 2. Validate Prompt Tokens
+        var allPrompts = PlaceholderParser.ExtractAllPromptTokenOccurrences(template);
+        if (allPrompts.Count > 1)
+        {
+            var groups = allPrompts.GroupBy(p => p.Label, StringComparer.OrdinalIgnoreCase).ToList();
+
+            // Check for conflicting definitions sharing the same label
+            foreach (var group in groups)
+            {
+                if (group.Count() > 1)
+                {
+                    var first = group.First();
+                    bool hasConflict = group.Any(p => p.Type != first.Type || p.DateFormat != first.DateFormat || p.Choices.Count != first.Choices.Count);
+                    if (hasConflict)
+                    {
+                        ModernMessageDialog.ShowAlert(
+                            this,
+                            "Validation Error",
+                            $"The prompt label '{group.Key}' is used multiple times with conflicting types or options.\n\nEach distinct prompt field must have a unique label.",
+                            ModernDialogType.Warning);
+
+                        if (_selectedItem.Payload.SnippetContentType == SnippetContentType.RichText)
+                            SnippetRichTextBox?.Focus();
+                        else
+                            SnippetTemplateBox?.Focus();
+                        return false;
+                    }
+                }
+            }
+
+            // Check for duplicate prompt tokens of the same type
+            var duplicateGroups = groups.Where(g => g.Count() > 1).ToList();
+            if (duplicateGroups.Count > 0)
+            {
+                string labelsText = string.Join(", ", duplicateGroups.Select(g => $"'{g.Key}'"));
+                var dialog = new ConfirmationDialog(
+                    $"The prompt label {(duplicateGroups.Count == 1 ? duplicateGroups[0].Key : labelsText)} appears multiple times in this snippet.\n\n" +
+                    "Because they have identical labels, TriggerPoint will only show a single prompt dialog at runtime and insert that same value into all occurrences.\n\n" +
+                    "Would you like to auto-rename them to unique labels (e.g. 'Label 2') so each renders a separate input field, or keep them shared?",
+                    "Duplicate Prompt Labels",
+                    "Auto-Rename Unique",
+                    "Keep Shared")
+                {
+                    Owner = this
+                };
+
+                if (dialog.ShowDialog() == true)
+                {
+                    if (dialog.Confirmed)
+                    {
+                        string disambiguated = PlaceholderParser.DisambiguateDuplicatePromptTokens(template);
+                        if (_selectedItem.Payload.SnippetContentType == SnippetContentType.RichText)
+                        {
+                            _selectedItem.Payload.SnippetTemplate = disambiguated;
+                        }
+                        else if (SnippetTemplateBox != null)
+                        {
+                            SnippetTemplateBox.Text = disambiguated;
+                            _selectedItem.Payload.SnippetTemplate = disambiguated;
+                        }
+                        CommitCurrentFormChanges();
+                    }
+                    // If user chose "Keep Shared", proceed with save!
+                }
+                else
+                {
+                    // User cancelled dialog
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
     private async Task<bool> SaveConfigurationCoreAsync()
     {
         var currentVm = FindViewModel(_selectedItem);
@@ -3003,6 +3273,11 @@ public partial class SettingsWindow : Window
         AllowedUrlsTagInput?.CommitPendingInput();
         ExcludedUrlsTagInput?.CommitPendingInput();
         CommitCurrentFormChanges();
+
+        if (!ValidateSelectedSnippetTokens())
+        {
+            return false;
+        }
 
         try
         {
@@ -3242,6 +3517,7 @@ public partial class SettingsWindow : Window
 
         _newUnsavedItemId = newItem.Id;
         _items.Add(newItem);
+        _logger.Information("Created new {Type} '{Name}' ({Id}, ParentId: {ParentId}).", actionType, newItem.Name, newItem.Id, parentId);
         RebuildTree();
         SelectTreeItem(newItem);
         _ = RestoreTreeFocus(newItem);
@@ -3249,7 +3525,7 @@ public partial class SettingsWindow : Window
         SetDirty(true);
     }
 
-    public void CreateAndEditNewItem(string initialName, ActionType actionType = ActionType.Shell)
+    public void CreateAndEditNewItem(string initialName, ActionType actionType = ActionType.Shell, Guid? parentFolderId = null)
     {
         if (!PromptSaveIfDirty()) return;
         CommitCurrentFormChanges();
@@ -3259,7 +3535,7 @@ public partial class SettingsWindow : Window
         var newItem = new TriggerItem
         {
             Id = Guid.NewGuid(),
-            ParentId = null,
+            ParentId = parentFolderId,
             Name = name,
             ActionType = actionType,
             PresentationMode = PresentationMode.Direct,
@@ -3275,6 +3551,59 @@ public partial class SettingsWindow : Window
         {
             newItem.Payload.Macro = new MacroPayload();
         }
+
+        _newUnsavedItemId = newItem.Id;
+        _items.Add(newItem);
+        RebuildTree();
+        SelectTreeItem(newItem);
+        _ = RestoreTreeFocus(newItem);
+        ResetEditorScroll();
+        SetDirty(true);
+
+        ItemNameBox.Focus();
+        ItemNameBox.SelectAll();
+    }
+
+    public void CreateAndEditShellActionForPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+        if (!PromptSaveIfDirty()) return;
+        CommitCurrentFormChanges();
+
+        string name;
+        string command = path.Trim();
+        string workingDir = string.Empty;
+
+        if (Directory.Exists(command))
+        {
+            name = new DirectoryInfo(command).Name;
+            workingDir = command;
+        }
+        else if (File.Exists(command))
+        {
+            var fileName = Path.GetFileNameWithoutExtension(command);
+            name = !string.IsNullOrWhiteSpace(fileName) ? fileName : Path.GetFileName(command);
+            workingDir = Path.GetDirectoryName(command) ?? string.Empty;
+        }
+        else
+        {
+            name = Path.GetFileName(command);
+        }
+
+        var newItem = new TriggerItem
+        {
+            Id = Guid.NewGuid(),
+            ParentId = null,
+            Name = name,
+            ActionType = ActionType.Shell,
+            PresentationMode = PresentationMode.Direct,
+            OrderIndex = _items.Count,
+            Payload = new ActionPayload
+            {
+                Command = command,
+                WorkingDirectory = workingDir
+            }
+        };
 
         _newUnsavedItemId = newItem.Id;
         _items.Add(newItem);
@@ -3340,6 +3669,7 @@ public partial class SettingsWindow : Window
         if (clonedItems.Count == 0) return;
 
         var primaryDuplicate = clonedItems[0];
+        _logger.Information("Duplicated {Type} '{OriginalName}' as '{NewName}' ({Count} items cloned).", itemToDuplicate.ActionType, itemToDuplicate.Name, primaryDuplicate.Name, clonedItems.Count);
 
         await _repository.SaveAsync(_items);
         RegisterShortcuts();

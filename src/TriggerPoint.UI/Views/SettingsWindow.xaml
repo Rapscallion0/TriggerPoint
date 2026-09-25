@@ -1116,25 +1116,26 @@
                                     <TextBlock Text="Supports dynamic tokens, interactive prompts, and rich formatting." FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"/>
                                 </StackPanel>
 
-                                <!-- Format Switcher (Plain vs Rich Text) -->
+                                <!-- Format Switcher: Option C Compact Segmented Capsule Pill -->
                                 <Border Grid.Column="1"
-                                        Background="{DynamicResource BgSecondaryBrush}" 
-                                        BorderBrush="{DynamicResource BorderSubtleBrush}" 
-                                        BorderThickness="1" 
-                                        CornerRadius="6" 
+                                        x:Name="SnippetFormatCapsuleBorder"
+                                        Background="{DynamicResource BgSecondaryBrush}"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="14"
                                         Padding="2"
                                         VerticalAlignment="Center">
                                     <StackPanel Orientation="Horizontal">
-                                        <Button x:Name="SnippetFormatPlainBtn" 
-                                                Content="📝 Plain Text" 
-                                                Style="{StaticResource SegmentedToggleButtonStyle}"
-                                                Margin="0"
-                                                Click="SnippetFormatPlainBtn_Click"/>
-                                        <Button x:Name="SnippetFormatRichBtn" 
-                                                Content="✨ Rich Text" 
-                                                Style="{StaticResource SegmentedToggleButtonStyle}"
-                                                Margin="2,0,0,0"
-                                                Click="SnippetFormatRichBtn_Click"/>
+                                        <Button x:Name="SnippetFormatPlainSegment"
+                                                Content="📝 Plain"
+                                                Style="{StaticResource CapsuleSegmentButtonStyle}"
+                                                Click="SnippetFormatPlainSegment_Click"
+                                                ToolTip="Plain Text mode (Raw text with dynamic token substitution)"/>
+                                        <Button x:Name="SnippetFormatRichSegment"
+                                                Content="✨ Rich"
+                                                Style="{StaticResource CapsuleSegmentButtonStyle}"
+                                                Click="SnippetFormatRichSegment_Click"
+                                                ToolTip="Rich Text mode (Formatted RTF with fonts, colors, and styling)"/>
                                     </StackPanel>
                                 </Border>
                             </Grid>
@@ -1143,8 +1144,9 @@
 
                             <!-- Quick Insert Token Chips -->
                             <WrapPanel Margin="0,0,0,8">
-                                <Button Content="+ {date} ▾" Style="{StaticResource TokenChipDateStyle}" Margin="0,0,5,5" ToolTip="Left-click to insert {date}. Right-click for presets." Click="InsertTokenChip_Click" Tag="{}{date}">
-                                    <Button.ContextMenu>
+                                <!-- Split Token Chip: {date} -->
+                                <Border Style="{StaticResource TokenChipSplitCapsuleDateStyle}" ToolTip="Click to insert {date}. Click ▾ or right-click for presets.">
+                                    <Border.ContextMenu>
                                         <ContextMenu>
                                             <MenuItem Header="Standard: {date} (2026-09-09)" Click="InsertTokenPreset_Click" Tag="{}{date}"/>
                                             <MenuItem Header="US Format: {date:MM/dd/yyyy}" Click="InsertTokenPreset_Click" Tag="{}{date:MM/dd/yyyy}"/>
@@ -1156,11 +1158,17 @@
                                             <MenuItem Header="Next Week: {date:+7d}" Click="InsertTokenPreset_Click" Tag="{}{date:+7d}"/>
                                             <MenuItem Header="Next Month: {date:+1m}" Click="InsertTokenPreset_Click" Tag="{}{date:+1m}"/>
                                         </ContextMenu>
-                                    </Button.ContextMenu>
-                                </Button>
+                                    </Border.ContextMenu>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Content="+ {date}" Style="{StaticResource TokenChipSplitDateMainBtnStyle}" Click="InsertTokenChip_Click" Tag="{}{date}"/>
+                                        <Border Width="1" Background="{DynamicResource TokenDateBrush}" Opacity="0.35" Margin="0,3"/>
+                                        <Button Content="▾" Style="{StaticResource TokenChipSplitDateArrowBtnStyle}" Click="TokenDropdownArrow_Click" ToolTip="Preset formats"/>
+                                    </StackPanel>
+                                </Border>
 
-                                <Button Content="+ {time} ▾" Style="{StaticResource TokenChipDateStyle}" Margin="0,0,5,5" ToolTip="Left-click to insert {time}. Right-click for presets." Click="InsertTokenChip_Click" Tag="{}{time}">
-                                    <Button.ContextMenu>
+                                <!-- Split Token Chip: {time} -->
+                                <Border Style="{StaticResource TokenChipSplitCapsuleDateStyle}" ToolTip="Click to insert {time}. Click ▾ or right-click for presets.">
+                                    <Border.ContextMenu>
                                         <ContextMenu>
                                             <MenuItem Header="24-Hour with seconds: {time} (14:30:15)" Click="InsertTokenPreset_Click" Tag="{}{time}"/>
                                             <MenuItem Header="12-Hour AM/PM: {time:hh:mm tt} (02:30 PM)" Click="InsertTokenPreset_Click" Tag="{}{time:hh:mm tt}"/>
@@ -1168,21 +1176,32 @@
                                             <Separator/>
                                             <MenuItem Header="One hour later: {time:+1h:HH:mm}" Click="InsertTokenPreset_Click" Tag="{}{time:+1h:HH:mm}"/>
                                         </ContextMenu>
-                                    </Button.ContextMenu>
-                                </Button>
+                                    </Border.ContextMenu>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Content="+ {time}" Style="{StaticResource TokenChipSplitDateMainBtnStyle}" Click="InsertTokenChip_Click" Tag="{}{time}"/>
+                                        <Border Width="1" Background="{DynamicResource TokenDateBrush}" Opacity="0.35" Margin="0,3"/>
+                                        <Button Content="▾" Style="{StaticResource TokenChipSplitDateArrowBtnStyle}" Click="TokenDropdownArrow_Click" ToolTip="Preset formats"/>
+                                    </StackPanel>
+                                </Border>
 
                                 <Button Content="+ {datetime}" Style="{StaticResource TokenChipDateStyle}" Margin="0,0,5,5" ToolTip="Inserts current date and time (yyyy-MM-dd HH:mm:ss). Custom formats: {datetime:yyyy-MM-ddTHH:mm:ss}" Click="InsertTokenChip_Click" Tag="{}{datetime}"/>
                                 
-                                <Button Content="+ {guid} ▾" Style="{StaticResource TokenChipClipStyle}" Margin="0,0,5,5" ToolTip="Left-click to insert {guid}. Right-click for presets." Click="InsertTokenChip_Click" Tag="{}{guid}">
-                                    <Button.ContextMenu>
+                                <!-- Split Token Chip: {guid} -->
+                                <Border Style="{StaticResource TokenChipSplitCapsuleClipStyle}" ToolTip="Click to insert {guid}. Click ▾ or right-click for presets.">
+                                    <Border.ContextMenu>
                                         <ContextMenu>
                                             <MenuItem Header="Standard Hyphenated: {guid}" Click="InsertTokenPreset_Click" Tag="{}{guid}"/>
                                             <MenuItem Header="Uppercase: {guid:upper}" Click="InsertTokenPreset_Click" Tag="{}{guid:upper}"/>
                                             <MenuItem Header="Compact 32-Hex: {guid:N}" Click="InsertTokenPreset_Click" Tag="{}{guid:N}"/>
                                             <MenuItem Header="Braced: {guid:B}" Click="InsertTokenPreset_Click" Tag="{}{guid:B}"/>
                                         </ContextMenu>
-                                    </Button.ContextMenu>
-                                </Button>
+                                    </Border.ContextMenu>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Content="+ {guid}" Style="{StaticResource TokenChipSplitClipMainBtnStyle}" Click="InsertTokenChip_Click" Tag="{}{guid}"/>
+                                        <Border Width="1" Background="{DynamicResource TokenClipBrush}" Opacity="0.35" Margin="0,3"/>
+                                        <Button Content="▾" Style="{StaticResource TokenChipSplitClipArrowBtnStyle}" Click="TokenDropdownArrow_Click" ToolTip="Preset formats"/>
+                                    </StackPanel>
+                                </Border>
 
                                 <Button Content="+ {clipboard}" Style="{StaticResource TokenChipClipStyle}" Margin="0,0,5,5" ToolTip="Inserts current clipboard text. Modifiers: {clipboard:trim}, {clipboard:upper}, {clipboard:urlencode}" Click="InsertTokenChip_Click" Tag="{}{clipboard}"/>
                                 <Button Content="+ {username}" Style="{StaticResource TokenChipClipStyle}" Margin="0,0,5,5" ToolTip="Inserts current Windows username. Also supports {machine} and {env:VARIABLE}" Click="InsertTokenChip_Click" Tag="{}{username}"/>
@@ -1190,8 +1209,10 @@
                                 <Button Content="+ {cursor}" Style="{StaticResource TokenChipClipStyle}" Margin="0,0,5,5" ToolTip="Positions the cursor caret here post-paste" Click="InsertTokenChip_Click" Tag="{}{cursor}"/>
                                 <Button Content="+ {text:Label}" Style="{StaticResource TokenChipPromptStyle}" Margin="0,0,5,5" ToolTip="Prompts for a single-line text input. Supports defaults: {text:Label|Default}" Click="InsertTokenChip_Click" Tag="{}{text:Label}"/>
                                 <Button Content="+ {choice:Label|Opt1=Val1,Opt2}" Style="{StaticResource TokenChipPromptStyle}" Margin="0,0,5,5" ToolTip="Prompts for a single selection. Supports default: {choice:Label|Opt1=Val1*,Opt2}" Click="InsertTokenChip_Click" Tag="{}{choice:Label|Opt1=Val1,Opt2}"/>
-                                <Button Content="+ {number:Label} ▾" Style="{StaticResource TokenChipPromptStyle}" Margin="0,0,5,5" ToolTip="Prompts for a numeric value. Supports optional min,max and default: {number:Label|min,max|default}" Click="InsertTokenChip_Click" Tag="{}{number:Quantity}">
-                                    <Button.ContextMenu>
+
+                                <!-- Split Token Chip: {number:Label} -->
+                                <Border Style="{StaticResource TokenChipSplitCapsulePromptStyle}" ToolTip="Prompts for a numeric value. Click ▾ or right-click for presets.">
+                                    <Border.ContextMenu>
                                         <ContextMenu>
                                             <MenuItem Header="Standard: {number:Quantity}" Tag="{}{number:Quantity}" Click="InsertTokenPreset_Click"/>
                                             <MenuItem Header="1 to 100: {number:Count|1,100|10}" Tag="{}{number:Count|1,100|10}" Click="InsertTokenPreset_Click"/>
@@ -1199,11 +1220,19 @@
                                             <MenuItem Header="0 to 120: {number:Age|0,120|25}" Tag="{}{number:Age|0,120|25}" Click="InsertTokenPreset_Click"/>
                                             <MenuItem Header="Range: {number:Retries|1,5}" Tag="{}{number:Retries|1,5}" Click="InsertTokenPreset_Click"/>
                                         </ContextMenu>
-                                    </Button.ContextMenu>
-                                </Button>
+                                    </Border.ContextMenu>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Content="+ {number:Label}" Style="{StaticResource TokenChipSplitPromptMainBtnStyle}" Click="InsertTokenChip_Click" Tag="{}{number:Quantity}"/>
+                                        <Border Width="1" Background="{DynamicResource TokenPromptBrush}" Opacity="0.35" Margin="0,3"/>
+                                        <Button Content="▾" Style="{StaticResource TokenChipSplitPromptArrowBtnStyle}" Click="TokenDropdownArrow_Click" ToolTip="Preset formats"/>
+                                    </StackPanel>
+                                </Border>
+
                                 <Button Content="+ {multiline:Label}" Style="{StaticResource TokenChipPromptStyle}" Margin="0,0,5,5" ToolTip="Prompts for multi-line text input. Supports defaults: {multiline:Label|Default}" Click="InsertTokenChip_Click" Tag="{}{multiline:Label}"/>
-                                <Button Content="+ {date_picker:Label} ▾" Style="{StaticResource TokenChipPromptStyle}" Margin="0,0,5,5" ToolTip="Prompts with an interactive date picker. Supports custom formats: {date_picker:Label|Format}" Click="InsertTokenChip_Click" Tag="{}{date_picker:DueDate}">
-                                    <Button.ContextMenu>
+
+                                <!-- Split Token Chip: {date_picker:Label} -->
+                                <Border Style="{StaticResource TokenChipSplitCapsulePromptStyle}" ToolTip="Prompts with an interactive date picker. Click ▾ or right-click for presets.">
+                                    <Border.ContextMenu>
                                         <ContextMenu>
                                             <MenuItem Header="Standard: {date_picker:DueDate|yyyy-MM-dd}" Tag="{}{date_picker:DueDate|yyyy-MM-dd}" Click="InsertTokenPreset_Click"/>
                                             <MenuItem Header="US Format: {date_picker:DueDate|MM/dd/yyyy}" Tag="{}{date_picker:DueDate|MM/dd/yyyy}" Click="InsertTokenPreset_Click"/>
@@ -1212,9 +1241,78 @@
                                             <MenuItem Header="Full Date: {date_picker:DueDate|dddd, MMMM d, yyyy}" Tag="{}{date_picker:DueDate|dddd, MMMM d, yyyy}" Click="InsertTokenPreset_Click"/>
                                             <MenuItem Header="Next Week: {date_picker:DueDate|MM/dd/yyyy|+7d}" Tag="{}{date_picker:DueDate|MM/dd/yyyy|+7d}" Click="InsertTokenPreset_Click"/>
                                         </ContextMenu>
-                                    </Button.ContextMenu>
-                                </Button>
+                                    </Border.ContextMenu>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Content="+ {date_picker:Label}" Style="{StaticResource TokenChipSplitPromptMainBtnStyle}" Click="InsertTokenChip_Click" Tag="{}{date_picker:DueDate}"/>
+                                        <Border Width="1" Background="{DynamicResource TokenPromptBrush}" Opacity="0.35" Margin="0,3"/>
+                                        <Button Content="▾" Style="{StaticResource TokenChipSplitPromptArrowBtnStyle}" Click="TokenDropdownArrow_Click" ToolTip="Preset formats"/>
+                                    </StackPanel>
+                                </Border>
                             </WrapPanel>
+
+                            <!-- In-Context Snippet Notice / Warning Toast Banner -->
+                            <Border x:Name="SnippetInlineWarningBanner"
+                                    Background="{DynamicResource WarningSubtleBrush}"
+                                    BorderBrush="{DynamicResource WarningBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="10,6"
+                                    Margin="0,0,0,8"
+                                    Visibility="Collapsed">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Column="0" Text="⚠️" FontSize="13" Margin="0,0,8,0" VerticalAlignment="Center"/>
+
+                                    <TextBlock Grid.Column="1" 
+                                               x:Name="SnippetInlineWarningText"
+                                               Text="Only one {cursor} token is allowed per snippet. Existing {cursor} has been highlighted."
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextPrimaryBrush}"
+                                               VerticalAlignment="Center"
+                                               TextWrapping="Wrap"/>
+
+                                    <Button Grid.Column="2"
+                                            x:Name="DismissSnippetWarningBtn"
+                                            Content="✕"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Foreground="{DynamicResource TextSecondaryBrush}"
+                                            FontSize="11"
+                                            FontWeight="Bold"
+                                            Padding="6,2"
+                                            Cursor="Hand"
+                                            VerticalAlignment="Center"
+                                            ToolTip="Dismiss notice"
+                                            Click="DismissSnippetWarningBtn_Click">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Background" Value="Transparent"/>
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                            </Border>
+                                                            <ControlTemplate.Triggers>
+                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                    <Setter Property="Background" Value="{DynamicResource WarningBrush}"/>
+                                                                    <Setter Property="Foreground" Value="White"/>
+                                                                </Trigger>
+                                                            </ControlTemplate.Triggers>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                </Grid>
+                            </Border>
 
                             <!-- Plain Text Snippet Editor Container -->
                             <StackPanel x:Name="SnippetPlainTextContainer">

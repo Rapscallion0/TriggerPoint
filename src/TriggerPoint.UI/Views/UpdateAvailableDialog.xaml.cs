@@ -8,6 +8,7 @@ using System.Windows.Input;
 using Serilog;
 using TriggerPoint.Core.Contracts;
 using TriggerPoint.Core.Models;
+using TriggerPoint.UI.Services;
 
 namespace TriggerPoint.UI.Views;
 
@@ -17,13 +18,15 @@ public partial class UpdateAvailableDialog : Window
     private readonly UpdateInfo _updateInfo;
     private readonly IUpdateService _updateService;
     private readonly IConfigRepository _configRepository;
+    private readonly bool _isViewOnly;
     private CancellationTokenSource? _downloadCts;
     private bool _isDownloading = false;
 
     public UpdateAvailableDialog(
         UpdateCheckResult updateResult,
         IUpdateService updateService,
-        IConfigRepository configRepository)
+        IConfigRepository configRepository,
+        bool isViewOnly = false)
     {
         InitializeComponent();
 
@@ -31,6 +34,7 @@ public partial class UpdateAvailableDialog : Window
         _updateInfo = updateResult.LatestUpdate ?? throw new ArgumentNullException(nameof(updateResult.LatestUpdate));
         _updateService = updateService;
         _configRepository = configRepository;
+        _isViewOnly = isViewOnly;
 
         PopulateDialogData();
     }
@@ -53,26 +57,46 @@ public partial class UpdateAvailableDialog : Window
 
         if (!string.IsNullOrWhiteSpace(_updateInfo.Title) && !_updateInfo.Title.Equals(_updateInfo.TagName, StringComparison.OrdinalIgnoreCase))
         {
-            UpdateSummaryText.Text = $"{_updateInfo.Title}\nA new release of TriggerPoint is available with improvements and fixes.";
+            UpdateSummaryText.Text = $"{_updateInfo.Title}\nTriggerPoint release notes and improvement summary.";
         }
 
         // Populate Changelog content
+        string changelogMarkdown;
         if (!string.IsNullOrWhiteSpace(_updateResult.CombinedChangelog))
         {
-            ChangelogContentText.Text = _updateResult.CombinedChangelog;
+            changelogMarkdown = _updateResult.CombinedChangelog;
         }
         else if (!string.IsNullOrWhiteSpace(_updateInfo.ReleaseNotes))
         {
-            ChangelogContentText.Text = _updateInfo.ReleaseNotes;
+            changelogMarkdown = _updateInfo.ReleaseNotes;
         }
         else
         {
-            ChangelogContentText.Text = "No release notes were provided with this update.";
+            changelogMarkdown = "No release notes were provided with this update.";
         }
 
-        if (string.IsNullOrWhiteSpace(_updateInfo.HtmlUrl))
+        ChangelogViewer.Document = MarkdownFlowDocumentRenderer.Render(changelogMarkdown);
+
+        if (_isViewOnly)
         {
-            ViewOnGitHubBtn.Visibility = Visibility.Collapsed;
+            DialogHeaderIcon.Text = "📋";
+            DialogTitleText.Text = "TriggerPoint Release Notes";
+            DialogSubtitleText.Text = $"Changelog and release notes for version v{_updateInfo.Version}";
+
+            if (string.Equals(_updateResult.CurrentVersion, _updateInfo.Version, StringComparison.OrdinalIgnoreCase))
+            {
+                TargetVersionText.Text = $"v{_updateInfo.Version} (Current)";
+            }
+
+            // Expand changelog automatically in view mode
+            ChangelogBorder.Visibility = Visibility.Visible;
+            ChangelogExpanderArrow.Text = "▼ ";
+            ChangelogExpanderLabel.Text = "Hide Changelog";
+
+            IgnoreVersionBtn.Visibility = Visibility.Collapsed;
+            UpdateLaterBtn.Visibility = Visibility.Collapsed;
+            UpdateNowBtn.Visibility = Visibility.Collapsed;
+            CloseViewOnlyBtn.Visibility = Visibility.Visible;
         }
     }
 
@@ -94,20 +118,21 @@ public partial class UpdateAvailableDialog : Window
 
     private void ViewOnGitHubBtn_Click(object sender, RoutedEventArgs e)
     {
-        if (!string.IsNullOrWhiteSpace(_updateInfo.HtmlUrl))
+        string targetUrl = !string.IsNullOrWhiteSpace(_updateInfo.HtmlUrl)
+            ? _updateInfo.HtmlUrl
+            : "https://github.com/Rapscallion0/TriggerPoint/releases";
+
+        try
         {
-            try
+            Process.Start(new ProcessStartInfo
             {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = _updateInfo.HtmlUrl,
-                    UseShellExecute = true
-                });
-            }
-            catch (Exception ex)
-            {
-                Log.Warning(ex, "Failed to launch GitHub release URL.");
-            }
+                FileName = targetUrl,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Failed to launch GitHub release URL.");
         }
     }
 

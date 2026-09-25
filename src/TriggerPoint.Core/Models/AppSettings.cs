@@ -58,6 +58,7 @@ public class AppSettings
     public bool ShowSuccessToasts { get; set; } = true;
     public ToastMonitorPlacement ToastPlacement { get; set; } = ToastMonitorPlacement.PrimaryMonitor;
     public bool ValidateShortcutsOnStartup { get; set; } = true;
+    public bool EnableExplorerContextMenu { get; set; } = false;
     public int LogSplitThresholdMb { get; set; } = 100;
     public bool IsRecycleBinExpanded { get; set; } = false;
     public bool ShowShortcutsInTree { get; set; } = true;

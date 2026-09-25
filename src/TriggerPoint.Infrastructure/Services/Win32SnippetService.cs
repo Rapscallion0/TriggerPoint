@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Automation;
+using System.Windows.Automation.Text;
 using Serilog;
 using TriggerPoint.Core.Contracts;
 using TriggerPoint.Core.Models;
@@ -43,6 +45,7 @@ public class Win32SnippetService : ISnippetService
 
         if (promptTokens.Count > 0)
         {
+            NativeMethods.AllowSetForegroundWindow(NativeMethods.ASFW_ANY);
             promptResponses = await _promptDialogService.ShowPromptDialogAsync(promptTokens).ConfigureAwait(true);
             if (promptResponses == null)
             {
@@ -80,25 +83,9 @@ public class Win32SnippetService : ISnippetService
         // Ensure no lingering modifier keys interfere with injection
         ReleaseLingeringModifiers();
 
-        // 5. Hybrid text injection
-        // Text up to 250 characters can be typed directly and instantly without touching clipboard
-        if (cleanText.Length <= 250)
-        {
-            _logger.Information("Injecting snippet ({Length} chars) via SendInput Unicode.", cleanText.Length);
-            SendUnicodeString(cleanText);
-        }
-        else
-        {
-            _logger.Information("Injecting large snippet ({Length} chars) via stashed clipboard sequencing.", cleanText.Length);
-            await InjectViaClipboardSequencingAsync(cleanText).ConfigureAwait(false);
-        }
-
-        // 6. Reposition caret if {cursor} was present
-        if (caretOffset > 0)
-        {
-            await Task.Delay(40).ConfigureAwait(false);
-            SendLeftArrowKeys(caretOffset);
-        }
+        // 5. Instant atomic text injection via clipboard paste
+        _logger.Information("Injecting snippet ({Length} chars) via instant clipboard paste.", cleanText.Length);
+        await InjectViaClipboardSequencingAsync(cleanText, caretOffset, targetHwnd).ConfigureAwait(false);
     }
 
     private async Task InjectRichSnippetAsync(string plainFallback, string rtf, IntPtr targetHwnd)
@@ -109,6 +96,7 @@ public class Win32SnippetService : ISnippetService
 
         if (promptTokens.Count > 0)
         {
+            NativeMethods.AllowSetForegroundWindow(NativeMethods.ASFW_ANY);
             promptResponses = await _promptDialogService.ShowPromptDialogAsync(promptTokens).ConfigureAwait(true);
             if (promptResponses == null)
             {
@@ -147,14 +135,7 @@ public class Win32SnippetService : ISnippetService
 
         // 5. Inject via multi-format clipboard sequencing
         _logger.Information("Injecting rich text snippet ({PlainLen} chars) via multi-format clipboard sequencing.", evalPlain.Length);
-        await InjectViaClipboardRichSequencingAsync(evalRtf, evalHtml, evalPlain).ConfigureAwait(false);
-
-        // 6. Reposition caret if {cursor} was present
-        if (caretOffset > 0)
-        {
-            await Task.Delay(40).ConfigureAwait(false);
-            SendLeftArrowKeys(caretOffset);
-        }
+        await InjectViaClipboardRichSequencingAsync(evalRtf, evalHtml, evalPlain, caretOffset, targetHwnd).ConfigureAwait(false);
     }
 
     private static async Task RestoreFocusToWindowAsync(IntPtr hWnd)
@@ -188,7 +169,7 @@ public class Win32SnippetService : ISnippetService
         }
 
         // Brief delay to let the target application stabilize focus
-        await Task.Delay(50).ConfigureAwait(false);
+        await Task.Delay(25).ConfigureAwait(false);
     }
 
     private void ReleaseLingeringModifiers()
@@ -280,140 +261,275 @@ public class Win32SnippetService : ISnippetService
         }
     }
 
-    private async Task InjectViaClipboardSequencingAsync(string text)
+    private async Task InjectViaClipboardSequencingAsync(string text, int caretOffset, IntPtr targetHwnd)
     {
         string? previousText = null;
 
-        // Backup existing clipboard text with retry
-        await Application.Current.Dispatcher.InvokeAsync(async () =>
+        // Synchronously backup and set snippet on clipboard via UI thread
+        if (Application.Current != null)
         {
-            for (int attempt = 0; attempt < 3; attempt++)
+            Application.Current.Dispatcher.Invoke(() =>
             {
-                try
-                {
-                    if (Clipboard.ContainsText())
-                    {
-                        previousText = Clipboard.GetText();
-                    }
-                    Clipboard.SetText(text);
-                    return;
-                }
-                catch (Exception ex)
-                {
-                    if (attempt == 2)
-                    {
-                        _logger.Warning(ex, "Failed to write snippet text to clipboard after 3 attempts.");
-                    }
-                    await Task.Delay(25);
-                }
-            }
-        });
-
-        // Simulate Ctrl + V
-        SendPasteCommand();
-
-        // Allow target application sufficient time to process paste
-        await Task.Delay(500).ConfigureAwait(false);
-
-        // Restore original clipboard state if there was one (do not clear if user had empty clipboard)
-        if (previousText != null)
-        {
-            await Application.Current.Dispatcher.InvokeAsync(async () =>
-            {
-                for (int attempt = 0; attempt < 3; attempt++)
+                for (int attempt = 0; attempt < 5; attempt++)
                 {
                     try
                     {
-                        Clipboard.SetText(previousText);
+                        if (Clipboard.ContainsText())
+                        {
+                            previousText = Clipboard.GetText();
+                        }
+                        Clipboard.SetDataObject(new DataObject(DataFormats.UnicodeText, text), true);
                         return;
                     }
                     catch (Exception ex)
                     {
-                        if (attempt == 2)
+                        if (attempt == 4)
                         {
-                            _logger.Warning(ex, "Failed to restore original clipboard contents after 3 attempts.");
+                            _logger.Warning(ex, "Failed to write snippet text to clipboard after 5 attempts.");
                         }
-                        await Task.Delay(25);
+                        System.Threading.Thread.Sleep(15);
                     }
+                }
+            });
+        }
+
+        // Give the OS and clipboard a momentary settle time before issuing paste
+        await Task.Delay(30).ConfigureAwait(false);
+
+        // Simulate Ctrl + V
+        SendPasteCommand();
+
+        // Give target application time to consume clipboard before repositioning or restoring
+        await Task.Delay(40).ConfigureAwait(false);
+
+        // Reposition caret if {cursor} was present
+        if (caretOffset > 0)
+        {
+            await RepositionCaretAsync(targetHwnd, caretOffset).ConfigureAwait(false);
+        }
+
+        // Restore original clipboard state asynchronously in background without blocking the user
+        if (previousText != null)
+        {
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(500).ConfigureAwait(false);
+                if (Application.Current != null)
+                {
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        for (int attempt = 0; attempt < 5; attempt++)
+                        {
+                            try
+                            {
+                                Clipboard.SetText(previousText);
+                                return;
+                            }
+                            catch (Exception ex)
+                            {
+                                if (attempt == 4)
+                                {
+                                    _logger.Debug(ex, "Failed to restore original clipboard contents after 5 attempts.");
+                                }
+                                System.Threading.Thread.Sleep(20);
+                            }
+                        }
+                    });
                 }
             });
         }
     }
 
-    private async Task InjectViaClipboardRichSequencingAsync(string rtf, string html, string plainText)
+    private async Task InjectViaClipboardRichSequencingAsync(string rtf, string html, string plainText, int caretOffset, IntPtr targetHwnd)
     {
         string? previousText = null;
 
-        // Backup existing clipboard text with retry and set rich data object
-        await Application.Current.Dispatcher.InvokeAsync(async () =>
+        // Backup existing clipboard text with retry and set rich data object synchronously
+        if (Application.Current != null)
         {
-            for (int attempt = 0; attempt < 3; attempt++)
+            Application.Current.Dispatcher.Invoke(() =>
             {
-                try
-                {
-                    if (Clipboard.ContainsText())
-                    {
-                        previousText = Clipboard.GetText();
-                    }
-
-                    var dataObject = new DataObject();
-                    if (!string.IsNullOrEmpty(rtf))
-                    {
-                        dataObject.SetData(DataFormats.Rtf, rtf);
-                    }
-                    if (!string.IsNullOrEmpty(html))
-                    {
-                        dataObject.SetData(DataFormats.Html, html);
-                    }
-                    if (!string.IsNullOrEmpty(plainText))
-                    {
-                        dataObject.SetData(DataFormats.UnicodeText, plainText);
-                        dataObject.SetData(DataFormats.Text, plainText);
-                    }
-
-                    Clipboard.SetDataObject(dataObject, true);
-                    return;
-                }
-                catch (Exception ex)
-                {
-                    if (attempt == 2)
-                    {
-                        _logger.Warning(ex, "Failed to write rich snippet data to clipboard after 3 attempts.");
-                    }
-                    await Task.Delay(25);
-                }
-            }
-        });
-
-        // Simulate Ctrl + V
-        SendPasteCommand();
-
-        // Allow target application sufficient time to process paste
-        await Task.Delay(500).ConfigureAwait(false);
-
-        // Restore original clipboard state if there was one
-        if (previousText != null)
-        {
-            await Application.Current.Dispatcher.InvokeAsync(async () =>
-            {
-                for (int attempt = 0; attempt < 3; attempt++)
+                for (int attempt = 0; attempt < 5; attempt++)
                 {
                     try
                     {
-                        Clipboard.SetText(previousText);
+                        if (Clipboard.ContainsText())
+                        {
+                            previousText = Clipboard.GetText();
+                        }
+
+                        var dataObject = new DataObject();
+                        if (!string.IsNullOrEmpty(rtf))
+                        {
+                            dataObject.SetData(DataFormats.Rtf, rtf);
+                        }
+                        if (!string.IsNullOrEmpty(html))
+                        {
+                            dataObject.SetData(DataFormats.Html, html);
+                        }
+                        if (!string.IsNullOrEmpty(plainText))
+                        {
+                            dataObject.SetData(DataFormats.UnicodeText, plainText);
+                            dataObject.SetData(DataFormats.Text, plainText);
+                        }
+
+                        Clipboard.SetDataObject(dataObject, true);
                         return;
                     }
                     catch (Exception ex)
                     {
-                        if (attempt == 2)
+                        if (attempt == 4)
                         {
-                            _logger.Warning(ex, "Failed to restore original clipboard contents after 3 attempts.");
+                            _logger.Warning(ex, "Failed to write rich snippet data to clipboard after 5 attempts.");
                         }
-                        await Task.Delay(25);
+                        System.Threading.Thread.Sleep(15);
                     }
                 }
             });
         }
+
+        await Task.Delay(30).ConfigureAwait(false);
+
+        // Simulate Ctrl + V
+        SendPasteCommand();
+
+        await Task.Delay(40).ConfigureAwait(false);
+
+        // Reposition caret if {cursor} was present
+        if (caretOffset > 0)
+        {
+            await RepositionCaretAsync(targetHwnd, caretOffset).ConfigureAwait(false);
+        }
+
+        // Restore original clipboard state asynchronously in background without blocking the user
+        if (previousText != null)
+        {
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(500).ConfigureAwait(false);
+                if (Application.Current != null)
+                {
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        for (int attempt = 0; attempt < 5; attempt++)
+                        {
+                            try
+                            {
+                                Clipboard.SetText(previousText);
+                                return;
+                            }
+                            catch (Exception ex)
+                            {
+                                if (attempt == 4)
+                                {
+                                    _logger.Debug(ex, "Failed to restore original clipboard contents after 5 attempts.");
+                                }
+                                System.Threading.Thread.Sleep(20);
+                            }
+                        }
+                    });
+                }
+            });
+        }
+    }
+
+    private async Task RepositionCaretAsync(IntPtr targetHwnd, int caretOffset)
+    {
+        if (caretOffset <= 0) return;
+
+        // Strategy 1: Attempt Win32 Edit control direct message (EM_SETSEL) - instantaneous (0ms)
+        if (targetHwnd != IntPtr.Zero && TryRepositionCaretViaWin32Edit(targetHwnd, caretOffset))
+        {
+            return;
+        }
+
+        // Strategy 2: Attempt Windows UI Automation TextPattern - instantaneous (0ms)
+        if (TryRepositionCaretViaUia(caretOffset))
+        {
+            return;
+        }
+
+        // Strategy 3: Graceful fallback to simulated Left Arrow keys
+        SendLeftArrowKeys(caretOffset);
+    }
+
+    private bool TryRepositionCaretViaWin32Edit(IntPtr targetHwnd, int caretOffset)
+    {
+        try
+        {
+            if (targetHwnd == IntPtr.Zero) return false;
+
+            uint targetThreadId = NativeMethods.GetWindowThreadProcessId(targetHwnd, out _);
+            NativeMethods.GUITHREADINFO guiInfo = new();
+            guiInfo.cbSize = Marshal.SizeOf(guiInfo);
+            IntPtr focusedHwnd = targetHwnd;
+
+            if (NativeMethods.GetGUIThreadInfo(targetThreadId, ref guiInfo) && guiInfo.hwndFocus != IntPtr.Zero)
+            {
+                focusedHwnd = guiInfo.hwndFocus;
+            }
+
+            string className = NativeMethods.GetWindowClassName(focusedHwnd);
+            if (className.Contains("Edit", StringComparison.OrdinalIgnoreCase))
+            {
+                NativeMethods.SendMessage(focusedHwnd, NativeMethods.EM_GETSEL, out int startPos, out int endPos);
+                if (endPos > 0)
+                {
+                    int newPos = Math.Max(0, endPos - caretOffset);
+                    NativeMethods.SendMessage(focusedHwnd, NativeMethods.EM_SETSEL, (IntPtr)newPos, (IntPtr)newPos);
+                    NativeMethods.SendMessage(focusedHwnd, NativeMethods.EM_SCROLLCARET, IntPtr.Zero, IntPtr.Zero);
+                    _logger.Information("Instant caret placement via Win32 EM_SETSEL (pos {NewPos}, class {Class}).", newPos, className);
+                    return true;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Debug(ex, "Win32 Edit caret positioning encountered an exception.");
+        }
+        return false;
+    }
+
+    private bool TryRepositionCaretViaUia(int caretOffset)
+    {
+        try
+        {
+            var uiaTask = Task.Run(() =>
+            {
+                var focused = AutomationElement.FocusedElement;
+                if (focused == null) return false;
+
+                if (focused.TryGetCurrentPattern(TextPattern.Pattern, out var patternObj) &&
+                    patternObj is TextPattern textPattern)
+                {
+                    var selection = textPattern.GetSelection();
+                    if (selection != null && selection.Length > 0)
+                    {
+                        var range = selection[0];
+                        range.MoveEndpointByRange(TextPatternRangeEndpoint.Start, range, TextPatternRangeEndpoint.End);
+                        int moved = range.Move(TextUnit.Character, -caretOffset);
+                        range.Select();
+                        _logger.Information("Instant caret placement via UI Automation TextPattern (moved {Moved} units).", moved);
+                        return true;
+                    }
+                }
+                return false;
+            });
+
+            if (uiaTask.Wait(45))
+            {
+                return uiaTask.Result;
+            }
+            else
+            {
+                _logger.Debug("UI Automation TextPattern caret positioning timed out (>45ms).");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Debug(ex, "UI Automation TextPattern caret positioning encountered an exception.");
+        }
+        return false;
     }
 
     private void SendPasteCommand()

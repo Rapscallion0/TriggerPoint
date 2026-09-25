@@ -198,6 +198,7 @@ public class WorkflowExecutor : IWorkflowExecutor
         IntPtr effectiveHwnd,
         CancellationToken cancellationToken)
     {
+        _logger.Debug("Executing step '{Name}' ({Type})", step.Name, step.StepType);
         switch (step.StepType)
         {
             case WorkflowStepType.Prompt:

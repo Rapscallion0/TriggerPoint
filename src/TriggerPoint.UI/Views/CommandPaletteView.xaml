@@ -5,6 +5,7 @@
         Title="TriggerPoint Command Palette"
         Width="680"
         Height="520"
+        MinHeight="360"
         WindowStartupLocation="CenterScreen"
         WindowStyle="None"
         AllowsTransparency="True"
@@ -17,6 +18,131 @@
 
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <!-- Command Palette Header Icon Button Style -->
+        <Style x:Key="HeaderIconButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Margin" Value="2,0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ItemHoverBrush}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ItemSelectedBrush}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Command Palette Header Sort Dropdown Button Style -->
+        <Style x:Key="HeaderSortButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="Margin" Value="2,0"/>
+            <Setter Property="Padding" Value="7,2"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ItemHoverBrush}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ItemSelectedBrush}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Command Palette Scope Dismiss Button Style -->
+        <Style x:Key="ScopeDismissButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Width" Value="18"/>
+            <Setter Property="Height" Value="18"/>
+            <Setter Property="Margin" Value="4,0,0,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="9"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentSubtleBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource AccentHoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.7"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
         <!-- Filter Pill Button Style -->
         <Style x:Key="FilterPillStyle" TargetType="Button">
@@ -50,6 +176,210 @@
                                 <Setter TargetName="pillBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
                                 <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
                                 <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Calculator Guide Tab Button Style -->
+        <Style x:Key="CalcGuideTabButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+            <Setter Property="Padding" Value="10,4"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="tabBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="tabBorder" Property="Background" Value="{DynamicResource ItemHoverBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Calculator Keypad Operator Button Style -->
+        <Style x:Key="CalcKeypadButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource BgTertiaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="FontFamily" Value="{StaticResource CodeFont}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="0,0,5,5"/>
+            <Setter Property="Padding" Value="7,2"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="keyBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="keyBorder" Property="Background" Value="{DynamicResource AccentSubtleBrush}"/>
+                                <Setter TargetName="keyBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="keyBorder" Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Calculator Alternative Unit Micro-Pill Style -->
+        <Style x:Key="CalcUnitPillButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource AccentSubtleBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="0,0,5,0"/>
+            <Setter Property="Padding" Value="6,2"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="pillBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="pillBorder" Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- More Units Trigger Button Style -->
+        <Style x:Key="CalcMoreUnitsButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="6,2"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="moreBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="moreBorder" Property="Background" Value="{DynamicResource ItemHoverBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Calculator Action Button Style -->
+        <Style x:Key="CalcUnitActionButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource BgTertiaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="actBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="actBorder" Property="Background" Value="{DynamicResource AccentSubtleBrush}"/>
+                                <Setter TargetName="actBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Category Filter Chip Style -->
+        <Style x:Key="CalcCategoryChipStyle" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource BgTertiaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="9,3"/>
+            <Setter Property="Margin" Value="0,0,5,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="chipBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="11"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="chipBorder" Property="Background" Value="{DynamicResource ItemHoverBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -97,14 +427,11 @@
                     <!-- Back Button when Scoped into Folder -->
                     <Button Grid.Column="0" 
                             x:Name="BackButton"
+                            Style="{StaticResource HeaderIconButtonStyle}"
                             ToolTip="Go back to parent folder (Backspace)"
                             Click="BackButton_Click"
-                            Cursor="Hand"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            Padding="2,0,8,0"
-                            Visibility="Collapsed"
-                            VerticalAlignment="Center">
+                            Margin="0,0,4,0"
+                            Visibility="Collapsed">
                         <TextBlock Text="←" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}"/>
                     </Button>
 
@@ -129,7 +456,7 @@
 
                         <!-- Search Watermark Placeholder -->
                         <TextBlock x:Name="SearchWatermark"
-                                   Text="Search actions, type @ for filters, or ? for shortcuts..."
+                                   Text="Search actions, type @ for filters, = for math, or ? for help..."
                                    FontSize="13.5"
                                    Foreground="{DynamicResource TextMutedBrush}"
                                    IsHitTestVisible="False"
@@ -156,13 +483,9 @@
                                        Foreground="{DynamicResource AccentBrush}"
                                        VerticalAlignment="Center"/>
                             <Button x:Name="ScopeDismissBtn"
+                                    Style="{StaticResource ScopeDismissButtonStyle}"
                                     Click="ScopeDismissBtn_Click"
-                                    ToolTip="Clear folder filter (Esc)"
-                                    Background="Transparent"
-                                    BorderThickness="0"
-                                    Padding="4,0,0,0"
-                                    Cursor="Hand"
-                                    VerticalAlignment="Center">
+                                    ToolTip="Clear folder filter (Esc)">
                                 <TextBlock Text="✕" FontSize="9.5" Foreground="{DynamicResource AccentBrush}"/>
                             </Button>
                         </StackPanel>
@@ -172,19 +495,9 @@
                     <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
                         <!-- Sort Mode Switcher Dropdown -->
                         <Button x:Name="SortModeBtn"
+                                Style="{StaticResource HeaderSortButtonStyle}"
                                 Click="SortModeBtn_Click"
-                                ToolTip="Select sort mode (Ctrl+S)"
-                                Background="Transparent"
-                                BorderThickness="1"
-                                BorderBrush="{DynamicResource BorderSubtleBrush}"
-                                Cursor="Hand"
-                                Margin="2,0"
-                                Padding="6,2">
-                            <Button.Resources>
-                                <Style TargetType="Border">
-                                    <Setter Property="CornerRadius" Value="4"/>
-                                </Style>
-                            </Button.Resources>
+                                ToolTip="Select sort mode (Ctrl+S)">
                             <Button.ContextMenu>
                                 <ContextMenu x:Name="SortContextMenu">
                                     <MenuItem x:Name="SortItemSmart" Header="Smart (Fuzzy Score &amp; Recents)" Click="SortMenuItem_Click" Tag="Smart"/>
@@ -196,39 +509,29 @@
                             </Button.ContextMenu>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <TextBlock Text="↕ " FontSize="10" Foreground="{DynamicResource TextMutedBrush}"/>
-                                <TextBlock x:Name="SortModeText" Text="Smart" FontSize="11" FontWeight="Medium" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                <TextBlock x:Name="SortModeText" Text="Smart" FontSize="11" FontWeight="Medium" Foreground="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
                                 <TextBlock Text=" ▾" FontSize="9" Foreground="{DynamicResource TextMutedBrush}" Margin="2,0,0,0"/>
                             </StackPanel>
                         </Button>
 
                         <!-- Action Manager Button (TriggerPoint Logo) -->
                         <Button x:Name="ActionManagerBtn"
+                                Style="{StaticResource HeaderIconButtonStyle}"
                                 Click="ActionManagerBtn_Click"
-                                ToolTip="Action Manager (Ctrl+M)"
-                                Background="Transparent"
-                                BorderThickness="0"
-                                Cursor="Hand"
-                                Padding="4"
-                                Margin="2,0"
-                                VerticalAlignment="Center">
+                                ToolTip="Action Manager (Ctrl+M)">
                             <Image Source="{DynamicResource AppIconSource}" 
                                    Width="16" Height="16" RenderOptions.BitmapScalingMode="HighQuality"/>
                         </Button>
 
                         <!-- Application Settings Button -->
                         <Button x:Name="AppSettingsBtn"
+                                Style="{StaticResource HeaderIconButtonStyle}"
                                 Click="AppSettingsBtn_Click"
-                                ToolTip="Application Settings (Ctrl+,)"
-                                Background="Transparent"
-                                BorderThickness="0"
-                                Cursor="Hand"
-                                Padding="4"
-                                Margin="2,0"
-                                VerticalAlignment="Center">
-                            <Grid>
+                                ToolTip="Application Settings (Ctrl+,)">
+                            <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Path Width="14" Height="14" 
                                       Stretch="Uniform" 
-                                      Fill="{DynamicResource TextPrimaryBrush}"
+                                      Fill="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                       Data="{DynamicResource SettingsGearGeometry}"
                                       HorizontalAlignment="Center"
                                       VerticalAlignment="Center"/>
@@ -246,16 +549,15 @@
 
                         <!-- Shortcut & Help Cheat-Sheet Button -->
                         <Button x:Name="HelpOverlayBtn"
+                                Style="{StaticResource HeaderIconButtonStyle}"
                                 Click="HelpOverlayBtn_Click"
-                                ToolTip="Keyboard Shortcuts &amp; Search Hints (F1 or ?)"
-                                Background="Transparent"
-                                BorderThickness="0"
-                                Cursor="Hand"
-                                Padding="5,2"
-                                Margin="2,0,0,0"
-                                VerticalAlignment="Center">
-                            <Border Width="16" Height="16" CornerRadius="8" BorderThickness="1" BorderBrush="{DynamicResource TextMutedBrush}">
-                                <TextBlock Text="i" FontSize="11" FontWeight="Bold" FontFamily="Segoe UI" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource TextMutedBrush}" Margin="0,-1,0,0"/>
+                                ToolTip="Keyboard Shortcuts &amp; Search Hints (F1 or ?)">
+                            <Border Width="16" Height="16" CornerRadius="8" BorderThickness="1" 
+                                    BorderBrush="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
+                                <TextBlock Text="i" FontSize="11" FontWeight="Bold" FontFamily="Segoe UI" 
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" 
+                                           Foreground="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}" 
+                                           Margin="0,-1,0,0"/>
                             </Border>
                         </Button>
                     </StackPanel>
@@ -350,7 +652,7 @@
             </Popup>
 
             <!-- Row 1: Filter Pills Bar -->
-            <Border Grid.Row="1" Margin="0,0,0,6">
+            <Border Grid.Row="1" x:Name="FilterPillsBar" Margin="0,0,0,6">
                 <StackPanel Orientation="Horizontal">
                     <!-- Filter Pill: All -->
                     <Button x:Name="FilterPillAll" 
@@ -410,6 +712,7 @@
             <Grid Grid.Row="2">
                 <!-- Results List -->
                 <ListBox x:Name="ResultsListBox"
+                         MinHeight="100"
                          Background="Transparent"
                          BorderThickness="0"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -488,13 +791,47 @@
                                                     Foreground="{DynamicResource TextPrimaryBrush}"
                                                     TextTrimming="CharacterEllipsis"/>
 
-                                         <!-- Secondary Detail / Description -->
+                                         <!-- Secondary Detail / Description (Clickable in calc mode to explore units) -->
                                          <TextBlock Text="{Binding SecondaryDetail}"
                                                     FontSize="11"
                                                     Foreground="{DynamicResource TextSecondaryBrush}"
                                                     TextTrimming="CharacterEllipsis"
                                                     Visibility="{Binding HasSecondaryDetail}"
-                                                    Margin="0,1,0,0"/>
+                                                    Margin="0,1,0,0"
+                                                    Cursor="{Binding SubtitleCursor}"
+                                                    ToolTip="{Binding SubtitleTooltip}"
+                                                    PreviewMouseLeftButtonUp="SecondaryDetail_PreviewMouseLeftButtonUp"/>
+
+                                         <!-- Alternative Units Micro-Pills (Calculator Mode) -->
+                                         <StackPanel Orientation="Horizontal" 
+                                                     Visibility="{Binding AlternativesVisibility}" 
+                                                     Margin="0,4,0,0"
+                                                     VerticalAlignment="Center">
+                                             <ItemsControl ItemsSource="{Binding CommonAlternatives}">
+                                                 <ItemsControl.ItemsPanel>
+                                                     <ItemsPanelTemplate>
+                                                         <StackPanel Orientation="Horizontal"/>
+                                                     </ItemsPanelTemplate>
+                                                 </ItemsControl.ItemsPanel>
+                                                 <ItemsControl.ItemTemplate>
+                                                     <DataTemplate>
+                                                         <Button Style="{StaticResource CalcUnitPillButtonStyle}"
+                                                                 Click="CalcUnitPill_Click"
+                                                                 ToolTip="{Binding Description, StringFormat='Click to copy ({0})'}"
+                                                                 Margin="0,0,5,0">
+                                                             <TextBlock Text="{Binding FormattedValue}"/>
+                                                         </Button>
+                                                     </DataTemplate>
+                                                 </ItemsControl.ItemTemplate>
+                                             </ItemsControl>
+
+                                             <!-- More Units Flyout Trigger Button -->
+                                             <Button Style="{StaticResource CalcMoreUnitsButtonStyle}"
+                                                     Click="CalcMoreUnitsBtn_Click"
+                                                     ToolTip="Explore all alternative units (physics, comical, astronomical)">
+                                                 <TextBlock Text="More Units... ▾"/>
+                                             </Button>
+                                         </StackPanel>
                                      </StackPanel>
 
                                      <!-- Right Column: Breadcrumbs, Recency, Type Badge, Hotkey -->
@@ -572,7 +909,7 @@
                     </ListBox.ItemTemplate>
                 </ListBox>
 
-                <!-- Empty State Card (0 Matches) -->
+                <!-- Empty State Card (0 Matches or Empty Scoped Folder) -->
                 <Border x:Name="EmptyStateCard"
                         Background="{DynamicResource BgInputBrush}"
                         BorderBrush="{DynamicResource BorderSubtleBrush}"
@@ -584,8 +921,8 @@
                         VerticalAlignment="Center"
                         Visibility="Collapsed">
                     <StackPanel HorizontalAlignment="Center">
-                        <TextBlock Text="🔍" FontSize="24" HorizontalAlignment="Center" Margin="0,0,0,8"/>
-                        <TextBlock Text="No matching actions found." 
+                        <TextBlock x:Name="EmptyStateIconText" Text="🔍" FontSize="24" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                        <TextBlock x:Name="EmptyStateTitleText" Text="No matching actions found." 
                                    FontSize="13.5" 
                                    FontWeight="SemiBold" 
                                    Foreground="{DynamicResource TextPrimaryBrush}" 
@@ -609,10 +946,600 @@
                                 </Style>
                             </Button.Resources>
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="➕ Create Action" FontSize="12" FontWeight="SemiBold" Foreground="White"/>
+                                <TextBlock x:Name="CreateActionEmptyBtnText" Text="➕ Create Action" FontSize="12" FontWeight="SemiBold" Foreground="White"/>
                             </StackPanel>
                         </Button>
                     </StackPanel>
+                </Border>
+
+                <!-- Calculator & Arithmetic Reference Guide (Shown when query starts with '=' or '@calc' with 0 results) -->
+                <Border x:Name="CalculatorGuideCard"
+                        Background="{DynamicResource BgInputBrush}"
+                        BorderBrush="{DynamicResource BorderSubtleBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="16,12"
+                        Margin="12,4"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Stretch"
+                        Visibility="Collapsed">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Live Result or Draft Formula Banner -->
+                        <Grid Grid.Row="0" Margin="0,0,0,8">
+                            <!-- State A: Valid Calculation Result Banner -->
+                            <Border x:Name="CalcResultBanner"
+                                    Background="{DynamicResource BgTertiaryBrush}"
+                                    BorderBrush="{DynamicResource AccentSubtleBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="12,7"
+                                    Visibility="Collapsed">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Left: Result & Description -->
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
+                                        <TextBlock x:Name="CalcResultValueText" 
+                                                   Text="136" 
+                                                   FontSize="17" 
+                                                   FontWeight="Bold" 
+                                                   Foreground="{DynamicResource TextPrimaryBrush}" 
+                                                   VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock x:Name="CalcResultDescText" 
+                                                   Text="Calculation result" 
+                                                   FontSize="11" 
+                                                   Foreground="{DynamicResource TextSecondaryBrush}" 
+                                                   Margin="0,2,0,0" 
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+
+                                    <!-- Right: Quick Action Buttons -->
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                                        <Button x:Name="CalcResultPasteBtn" 
+                                                Style="{StaticResource CalcUnitActionButtonStyle}" 
+                                                Click="CalcResultPasteBtn_Click" 
+                                                ToolTip="Paste answer into active window (Enter)" 
+                                                Width="28" Height="26" Padding="0" Margin="0,0,4,0">
+                                            <TextBlock Text="↵" FontSize="13" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Button>
+                                        <Button x:Name="CalcResultCopyValueBtn" 
+                                                Style="{StaticResource CalcUnitActionButtonStyle}" 
+                                                Click="CalcResultCopyValueBtn_Click" 
+                                                ToolTip="Copy answer to clipboard (Ctrl+C)" 
+                                                Width="28" Height="26" Padding="0" Margin="0,0,4,0">
+                                            <TextBlock Text="📋" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Button>
+                                        <Button x:Name="CalcResultCopyFullBtn" 
+                                                Style="{StaticResource CalcUnitActionButtonStyle}" 
+                                                Click="CalcResultCopyFullBtn_Click" 
+                                                ToolTip="Copy equation and answer to clipboard (Ctrl+Shift+C)" 
+                                                Width="28" Height="26" Padding="0" Margin="0,0,4,0">
+                                            <TextBlock Text="💬" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Button>
+                                        <Button x:Name="CalcResultChainBtn" 
+                                                Style="{StaticResource CalcUnitActionButtonStyle}" 
+                                                Click="CalcResultChainBtn_Click" 
+                                                ToolTip="Chain answer back into calculator (Tab)" 
+                                                Width="28" Height="26" Padding="0" Margin="0,0,4,0">
+                                            <TextBlock Text="⇥" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Button>
+                                        <Button x:Name="CalcResultMoreUnitsBtn" 
+                                                Style="{StaticResource CalcMoreUnitsButtonStyle}" 
+                                                Click="CalcResultMoreUnitsBtn_Click" 
+                                                ToolTip="Explore all alternative units &amp; formats" 
+                                                Visibility="Collapsed" 
+                                                Height="26" Padding="7,2">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock Text="Units" FontSize="11" FontWeight="SemiBold"/>
+                                                <TextBlock Text=" ▾" FontSize="9" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+
+                            <!-- State B: Draft Formula / Incomplete Input Banner -->
+                            <Border x:Name="CalcDraftBanner"
+                                    Background="{DynamicResource BgTertiaryBrush}"
+                                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="12,7"
+                                    Visibility="Visible">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock x:Name="CalcDraftTitleText" 
+                                                       Text="🧮 Calculator Mode" 
+                                                       FontSize="13.5" 
+                                                       FontWeight="Bold" 
+                                                       Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            <Border Margin="8,0,0,0" Padding="6,1" CornerRadius="4" Background="{DynamicResource AccentSubtleBrush}" VerticalAlignment="Center">
+                                                <TextBlock Text="Active Mode" FontSize="9.5" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <TextBlock x:Name="CalcDraftSubtitleText" 
+                                                   Text="Enter math expressions, dates (next friday, now + 3d), or unit conversions" 
+                                                   FontSize="11" 
+                                                   Foreground="{DynamicResource TextSecondaryBrush}" 
+                                                   Margin="0,2,0,0"/>
+                                    </StackPanel>
+
+                                    <TextBlock Grid.Column="1" 
+                                               Text="Click keypad below to insert" 
+                                               FontSize="10.5" 
+                                               Foreground="{DynamicResource TextMutedBrush}" 
+                                               VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                        </Grid>
+
+                        <!-- Category Tabs Strip -->
+                        <WrapPanel Grid.Row="1" x:Name="CalcGuideTabsPanel" Margin="0,0,0,6">
+                            <Button x:Name="CalcTabPopular" Content="🌟 Popular" Style="{StaticResource CalcGuideTabButtonStyle}" Click="CalcGuideTab_Click" Tag="Popular"/>
+                            <Button x:Name="CalcTabDate" Content="📅 Date &amp; Time" Style="{StaticResource CalcGuideTabButtonStyle}" Click="CalcGuideTab_Click" Tag="Date"/>
+                            <Button x:Name="CalcTabScientific" Content="📐 Scientific" Style="{StaticResource CalcGuideTabButtonStyle}" Click="CalcGuideTab_Click" Tag="Scientific"/>
+                            <Button x:Name="CalcTabProgrammer" Content="💻 Programmer" Style="{StaticResource CalcGuideTabButtonStyle}" Click="CalcGuideTab_Click" Tag="Programmer"/>
+                            <Button x:Name="CalcTabUnits" Content="📏 Units" Style="{StaticResource CalcGuideTabButtonStyle}" Click="CalcGuideTab_Click" Tag="Units"/>
+                        </WrapPanel>
+
+                        <!-- Delineation Line between Tabs and Content -->
+                        <Border Grid.Row="2" Height="1" Background="{DynamicResource BorderSubtleBrush}" Margin="0,0,0,10"/>
+
+                        <!-- Panels Scroll Container -->
+                        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <!-- 1. POPULAR PANEL -->
+                                <StackPanel x:Name="CalcPanelPopular" Visibility="Visible">
+                                    <!-- Tier 1: Quick Operators Bar -->
+                                    <TextBlock Text="QUICK OPERATORS &amp; FUNCTIONS" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,5"/>
+                                    <WrapPanel Margin="0,0,0,10">
+                                        <Button Content="+" Style="{StaticResource CalcKeypadButtonStyle}" Tag="+" Click="CalcOperatorButton_Click" ToolTip="Add"/>
+                                        <Button Content="-" Style="{StaticResource CalcKeypadButtonStyle}" Tag="-" Click="CalcOperatorButton_Click" ToolTip="Subtract"/>
+                                        <Button Content="*" Style="{StaticResource CalcKeypadButtonStyle}" Tag="*" Click="CalcOperatorButton_Click" ToolTip="Multiply"/>
+                                        <Button Content="/" Style="{StaticResource CalcKeypadButtonStyle}" Tag="/" Click="CalcOperatorButton_Click" ToolTip="Divide"/>
+                                        <Button Content="%" Style="{StaticResource CalcKeypadButtonStyle}" Tag="%" Click="CalcOperatorButton_Click" ToolTip="Percentage"/>
+                                        <Button Content="now" Style="{StaticResource CalcKeypadButtonStyle}" Tag="now" Click="CalcOperatorButton_Click" ToolTip="Current timestamp"/>
+                                        <Button Content="today" Style="{StaticResource CalcKeypadButtonStyle}" Tag="today" Click="CalcOperatorButton_Click" ToolTip="Today's date"/>
+                                        <Button Content="sqrt()" Style="{StaticResource CalcKeypadButtonStyle}" Tag="sqrt()" Click="CalcOperatorButton_Click" ToolTip="Square root"/>
+                                        <Button Content="to hex" Style="{StaticResource CalcKeypadButtonStyle}" Tag="to hex" Click="CalcOperatorButton_Click" ToolTip="Convert to hexadecimal"/>
+                                        <Button Content="px to rem" Style="{StaticResource CalcKeypadButtonStyle}" Tag="px to rem" Click="CalcOperatorButton_Click" ToolTip="Convert CSS px to rem"/>
+                                    </WrapPanel>
+
+                                    <!-- Tier 2: Structured Examples with Descriptions -->
+                                    <TextBlock Text="COMMON EXAMPLES &amp; DESCRIPTIONS" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,6"/>
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="now + 2 days, 3 hours" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= now + 2 days, 3 hours" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Natural multi-unit date and time offset" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="120 + 20%" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= 120 + 20%" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Markup, tax, or percentage addition" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="50 * 15%" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= 50 * 15%" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Calculate 15 percent of an amount" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="today + 14 days" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= today + 14 days" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Add two weeks to today's date" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="16px to rem" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= 16px to rem" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Convert CSS pixels to rem (16px base)" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="255 to hex" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= 255 to hex" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Decimal integer to hexadecimal (0xFF)" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="sqrt(144)" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= sqrt(144)" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Square root mathematical function" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="32 c to f" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= 32 c to f" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Celsius to Fahrenheit temperature conversion" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <!-- 2. DATE & TIME PANEL -->
+                                <StackPanel x:Name="CalcPanelDate" Visibility="Collapsed">
+                                    <!-- Tier 1: Quick Operators Bar -->
+                                    <TextBlock Text="QUICK KEYPAD OPERATORS &amp; UNITS" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,5"/>
+                                    <WrapPanel Margin="0,0,0,10">
+                                        <Button Content="now" Style="{StaticResource CalcKeypadButtonStyle}" Tag="now" Click="CalcOperatorButton_Click" ToolTip="Current date and time"/>
+                                        <Button Content="today" Style="{StaticResource CalcKeypadButtonStyle}" Tag="today" Click="CalcOperatorButton_Click" ToolTip="Current date"/>
+                                        <Button Content="tomorrow" Style="{StaticResource CalcKeypadButtonStyle}" Tag="tomorrow" Click="CalcOperatorButton_Click" ToolTip="Tomorrow"/>
+                                        <Button Content="yesterday" Style="{StaticResource CalcKeypadButtonStyle}" Tag="yesterday" Click="CalcOperatorButton_Click" ToolTip="Yesterday"/>
+                                        <Button Content="+" Style="{StaticResource CalcKeypadButtonStyle}" Tag="+" Click="CalcOperatorButton_Click" ToolTip="Add offset"/>
+                                        <Button Content="-" Style="{StaticResource CalcKeypadButtonStyle}" Tag="-" Click="CalcOperatorButton_Click" ToolTip="Subtract offset"/>
+                                        <Button Content="days" Style="{StaticResource CalcKeypadButtonStyle}" Tag="days" Click="CalcOperatorButton_Click" ToolTip="Days"/>
+                                        <Button Content="hours" Style="{StaticResource CalcKeypadButtonStyle}" Tag="hours" Click="CalcOperatorButton_Click" ToolTip="Hours"/>
+                                        <Button Content="mins" Style="{StaticResource CalcKeypadButtonStyle}" Tag="mins" Click="CalcOperatorButton_Click" ToolTip="Minutes"/>
+                                        <Button Content="weeks" Style="{StaticResource CalcKeypadButtonStyle}" Tag="weeks" Click="CalcOperatorButton_Click" ToolTip="Weeks"/>
+                                        <Button Content="months" Style="{StaticResource CalcKeypadButtonStyle}" Tag="months" Click="CalcOperatorButton_Click" ToolTip="Months"/>
+                                        <Button Content="days until" Style="{StaticResource CalcKeypadButtonStyle}" Tag="days until" Click="CalcOperatorButton_Click" ToolTip="Days until target date"/>
+                                    </WrapPanel>
+
+                                    <!-- Tier 2: Structured Examples with Descriptions -->
+                                    <TextBlock Text="DATE &amp; TIME EXAMPLES" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,6"/>
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="now" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= now" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Current timestamp with local and UTC indicators" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="now + 2 days, 3 hours and 26 mins" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= now + 2 days, 3 hours and 26 minutes" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Chained multi-unit future timestamp" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="today + 14 days" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= today + 14 days" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Calendar date two weeks from today" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="now - 4 hours 30 mins" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= now - 4 hours 30 mins" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Subtract hours and minutes from current time" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="tomorrow + 2 weeks" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= tomorrow + 2 weeks" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Offset calculated starting from tomorrow" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="days until Dec 25" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= days until Dec 25" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Countdown days between today and target date" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="unix 1700000000" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= unix 1700000000" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Parse Unix epoch timestamp to local date/time" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <!-- 3. SCIENTIFIC PANEL -->
+                                <StackPanel x:Name="CalcPanelScientific" Visibility="Collapsed">
+                                    <!-- Tier 1: Quick Operators Bar -->
+                                    <TextBlock Text="QUICK FUNCTIONS &amp; CONSTANTS" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,5"/>
+                                    <WrapPanel Margin="0,0,0,10">
+                                        <Button Content="sin()" Style="{StaticResource CalcKeypadButtonStyle}" Tag="sin()" Click="CalcOperatorButton_Click" ToolTip="Sine function"/>
+                                        <Button Content="cos()" Style="{StaticResource CalcKeypadButtonStyle}" Tag="cos()" Click="CalcOperatorButton_Click" ToolTip="Cosine function"/>
+                                        <Button Content="tan()" Style="{StaticResource CalcKeypadButtonStyle}" Tag="tan()" Click="CalcOperatorButton_Click" ToolTip="Tangent function"/>
+                                        <Button Content="sqrt()" Style="{StaticResource CalcKeypadButtonStyle}" Tag="sqrt()" Click="CalcOperatorButton_Click" ToolTip="Square root"/>
+                                        <Button Content="cbrt()" Style="{StaticResource CalcKeypadButtonStyle}" Tag="cbrt()" Click="CalcOperatorButton_Click" ToolTip="Cube root"/>
+                                        <Button Content="log()" Style="{StaticResource CalcKeypadButtonStyle}" Tag="log()" Click="CalcOperatorButton_Click" ToolTip="Common log (base 10)"/>
+                                        <Button Content="ln()" Style="{StaticResource CalcKeypadButtonStyle}" Tag="ln()" Click="CalcOperatorButton_Click" ToolTip="Natural log"/>
+                                        <Button Content="abs()" Style="{StaticResource CalcKeypadButtonStyle}" Tag="abs()" Click="CalcOperatorButton_Click" ToolTip="Absolute value"/>
+                                        <Button Content="^" Style="{StaticResource CalcKeypadButtonStyle}" Tag="^" Click="CalcOperatorButton_Click" ToolTip="Power / Exponent"/>
+                                        <Button Content="pi" Style="{StaticResource CalcKeypadButtonStyle}" Tag="pi" Click="CalcOperatorButton_Click" ToolTip="Pi constant (3.14159...)"/>
+                                        <Button Content="e" Style="{StaticResource CalcKeypadButtonStyle}" Tag="e" Click="CalcOperatorButton_Click" ToolTip="Euler's constant (2.71828...)"/>
+                                        <Button Content="(" Style="{StaticResource CalcKeypadButtonStyle}" Tag="(" Click="CalcOperatorButton_Click" ToolTip="Open parenthesis"/>
+                                        <Button Content=")" Style="{StaticResource CalcKeypadButtonStyle}" Tag=")" Click="CalcOperatorButton_Click" ToolTip="Close parenthesis"/>
+                                    </WrapPanel>
+
+                                    <!-- Tier 2: Structured Examples with Descriptions -->
+                                    <TextBlock Text="SCIENTIFIC &amp; MATH EXAMPLES" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,6"/>
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="sin(pi / 2)" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= sin(pi / 2)" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Trigonometric sine (supports degrees or radians with pi)" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="cos(0)" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= cos(0)" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Cosine trigonometric function" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="sqrt(144)" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= sqrt(144)" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Square root computation (result: 12)" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="cbrt(27)" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= cbrt(27)" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Cube root computation (result: 3)" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="log(100)" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= log(100)" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Common logarithm base 10 (result: 2)" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="ln(e)" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= ln(e)" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Natural logarithm of Euler's constant (result: 1)" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="2^10" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= 2^10" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Power and exponentiation (result: 1024)" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="abs(-42)" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= abs(-42)" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Absolute value magnitude (result: 42)" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <!-- 4. PROGRAMMER PANEL -->
+                                <StackPanel x:Name="CalcPanelProgrammer" Visibility="Collapsed">
+                                    <!-- Tier 1: Quick Operators Bar -->
+                                    <TextBlock Text="QUICK RADIX &amp; BITWISE OPERATORS" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,5"/>
+                                    <WrapPanel Margin="0,0,0,10">
+                                        <Button Content="to hex" Style="{StaticResource CalcKeypadButtonStyle}" Tag="to hex" Click="CalcOperatorButton_Click" ToolTip="Convert to hex"/>
+                                        <Button Content="to bin" Style="{StaticResource CalcKeypadButtonStyle}" Tag="to bin" Click="CalcOperatorButton_Click" ToolTip="Convert to binary"/>
+                                        <Button Content="to dec" Style="{StaticResource CalcKeypadButtonStyle}" Tag="to dec" Click="CalcOperatorButton_Click" ToolTip="Convert to decimal"/>
+                                        <Button Content="to oct" Style="{StaticResource CalcKeypadButtonStyle}" Tag="to oct" Click="CalcOperatorButton_Click" ToolTip="Convert to octal"/>
+                                        <Button Content="0x" Style="{StaticResource CalcKeypadButtonStyle}" Tag="0x" Click="CalcOperatorButton_Click" ToolTip="Hex prefix"/>
+                                        <Button Content="0b" Style="{StaticResource CalcKeypadButtonStyle}" Tag="0b" Click="CalcOperatorButton_Click" ToolTip="Binary prefix"/>
+                                        <Button Content="~" Style="{StaticResource CalcKeypadButtonStyle}" Tag="~" Click="CalcOperatorButton_Click" ToolTip="Bitwise NOT"/>
+                                        <Button Content="&lt;&lt;" Style="{StaticResource CalcKeypadButtonStyle}" Tag="&lt;&lt;" Click="CalcOperatorButton_Click" ToolTip="Bitwise left shift"/>
+                                        <Button Content="&gt;&gt;" Style="{StaticResource CalcKeypadButtonStyle}" Tag="&gt;&gt;" Click="CalcOperatorButton_Click" ToolTip="Bitwise right shift"/>
+                                        <Button Content="&amp;" Style="{StaticResource CalcKeypadButtonStyle}" Tag="&amp;" Click="CalcOperatorButton_Click" ToolTip="Bitwise AND"/>
+                                        <Button Content="|" Style="{StaticResource CalcKeypadButtonStyle}" Tag="|" Click="CalcOperatorButton_Click" ToolTip="Bitwise OR"/>
+                                        <Button Content="^" Style="{StaticResource CalcKeypadButtonStyle}" Tag="^" Click="CalcOperatorButton_Click" ToolTip="Bitwise XOR"/>
+                                    </WrapPanel>
+
+                                    <!-- Tier 2: Structured Examples with Descriptions -->
+                                    <TextBlock Text="PROGRAMMER MATH EXAMPLES" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,6"/>
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="255 to hex" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= 255 to hex" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Convert integer to hex (0xFF)" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="0xFF to dec" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= 0xFF to dec" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Convert hex literal to decimal (255)" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="42 to bin" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= 42 to bin" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Convert integer to 8-bit padded binary" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="0b1010 to dec" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= 0b1010 to dec" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Convert binary literal to decimal (10)" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="0xFF + 16" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= 0xFF + 16" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Mixed hex and decimal arithmetic (271 / 0x10F)" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="16 &lt;&lt; 2" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= 16 &lt;&lt; 2" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Bitwise left shift operation (64 / 0x40)" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="0xAA &amp; 0x0F" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= 0xAA &amp; 0x0F" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Bitwise AND masking (10 / 0x0A)" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="~0x0F" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= ~0x0F" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Bitwise NOT inversion" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <!-- 5. UNITS PANEL -->
+                                <StackPanel x:Name="CalcPanelUnits" Visibility="Collapsed">
+                                    <!-- Tier 1: Quick Operators Bar -->
+                                    <TextBlock Text="QUICK CONVERSION TOKENS" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,5"/>
+                                    <WrapPanel Margin="0,0,0,10">
+                                        <Button Content="to" Style="{StaticResource CalcKeypadButtonStyle}" Tag="to" Click="CalcOperatorButton_Click" ToolTip="Conversion keyword"/>
+                                        <Button Content="in" Style="{StaticResource CalcKeypadButtonStyle}" Tag="in" Click="CalcOperatorButton_Click" ToolTip="Conversion keyword"/>
+                                        <Button Content="px → rem" Style="{StaticResource CalcKeypadButtonStyle}" Tag="px to rem" Click="CalcOperatorButton_Click" ToolTip="Pixels to REM"/>
+                                        <Button Content="rem → px" Style="{StaticResource CalcKeypadButtonStyle}" Tag="rem to px" Click="CalcOperatorButton_Click" ToolTip="REM to pixels"/>
+                                        <Button Content="°C → °F" Style="{StaticResource CalcKeypadButtonStyle}" Tag="c to f" Click="CalcOperatorButton_Click" ToolTip="Celsius to Fahrenheit"/>
+                                        <Button Content="°F → °C" Style="{StaticResource CalcKeypadButtonStyle}" Tag="f to c" Click="CalcOperatorButton_Click" ToolTip="Fahrenheit to Celsius"/>
+                                        <Button Content="kg → lbs" Style="{StaticResource CalcKeypadButtonStyle}" Tag="kg to lbs" Click="CalcOperatorButton_Click" ToolTip="Kilograms to pounds"/>
+                                        <Button Content="km → mi" Style="{StaticResource CalcKeypadButtonStyle}" Tag="km to mi" Click="CalcOperatorButton_Click" ToolTip="Kilometers to miles"/>
+                                        <Button Content="mb → gb" Style="{StaticResource CalcKeypadButtonStyle}" Tag="mb to gb" Click="CalcOperatorButton_Click" ToolTip="Megabytes to gigabytes"/>
+                                    </WrapPanel>
+
+                                    <!-- Tier 2: Structured Examples with Descriptions -->
+                                    <TextBlock Text="UNIT &amp; COLOR CONVERSIONS" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,6"/>
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="16px to rem" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= 16px to rem" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="CSS pixels to root EM based on 16px root" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="1.5rem to px" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= 1.5rem to px" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Root EM units to screen pixels" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="32 c to f" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= 32 c to f" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Celsius to Fahrenheit temperature" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="75 kg in lb" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= 75 kg in lb" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Mass conversion from kilograms to pounds" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="150 km in mi" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= 150 km in mi" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Distance conversion from kilometers to miles" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="500 mb in gb" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= 500 mb in gb" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Data storage conversion from MB to GB" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="100 mph in kmh" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= 100 mph in kmh" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Speed and velocity from MPH to KM/H" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="#10b981 to rgb" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= #10b981 to rgb" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Hexadecimal color code to RGB color string" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </StackPanel>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
                 </Border>
             </Grid>
 
@@ -924,8 +1851,473 @@
                                         </Grid>
                                     </StackPanel>
                                 </Border>
+
+                                <!-- Group 4: Calculator & Unit Converters -->
+                                <Border Background="{DynamicResource BgInputBrush}" CornerRadius="6" Padding="14,10" Margin="0,8,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="CALCULATOR &amp; CONVERTERS (= or @calc)" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,0,0,8"/>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="= 120 * 1.15" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Math &amp; percentages (e.g. 50 + 15%, 20% of 850)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="32px to rem" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="CSS units (px to rem, rem to px, pt to px)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="100c to f" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Temperature, length (mi to km), weight (lbs to kg), bytes (mb to gb)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="= now + 3d" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Date calculations (now + 3d, now - 2h, unix 1727184000)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
                         </ScrollViewer>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- Overlay: Alternative Date/Time Measurements Flyout -->
+            <Grid Grid.Row="0" Grid.RowSpan="5" 
+                  x:Name="CalculatorUnitsOverlay" 
+                  Background="{DynamicResource BgSecondaryBrush}"
+                  Visibility="Collapsed">
+                <Border BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Background="{DynamicResource BgSecondaryBrush}"
+                        Padding="16,14">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/> <!-- Title & Close -->
+                            <RowDefinition Height="Auto"/> <!-- Hero Natural Time Breakdown Card -->
+                            <RowDefinition Height="Auto"/> <!-- Search & Category Chips -->
+                            <RowDefinition Height="*"/>    <!-- Scrollable Units List -->
+                        </Grid.RowDefinitions>
+
+                        <!-- Header -->
+                        <Grid Grid.Row="0" Margin="0,0,0,8">
+                            <StackPanel>
+                                <TextBlock Text="🧮 Alternative Measurements &amp; Conversions" 
+                                           FontSize="13.5" 
+                                           FontWeight="Bold" 
+                                           Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                <TextBlock Text="Click 'Paste' to use as result, or 'Copy' to copy value or full sentence" 
+                                           FontSize="10.5" 
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           Margin="0,1,0,0"/>
+                            </StackPanel>
+                            <Button x:Name="CloseUnitsOverlayBtn" 
+                                    Click="CloseUnitsOverlayBtn_Click" 
+                                    HorizontalAlignment="Right" 
+                                    VerticalAlignment="Top"
+                                    Background="Transparent" 
+                                    BorderThickness="0" 
+                                    Cursor="Hand" 
+                                    Padding="6,2">
+                                <TextBlock Text="✕" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/>
+                            </Button>
+                        </Grid>
+
+                        <!-- Hero Card: Natural Time Breakdown (Format A & B - Compact 2-Row Banner) -->
+                        <Border Grid.Row="1"
+                                x:Name="HeroBreakdownCard"
+                                Background="{DynamicResource BgTertiaryBrush}"
+                                BorderBrush="{DynamicResource AccentSubtleBrush}"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="10,5"
+                                Margin="0,0,0,7"
+                                Visibility="Collapsed">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <!-- Row 0: Hierarchical Format -->
+                                <Grid Grid.Row="0" Margin="0,0,0,3">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="⏳ Weeks &amp; Days:" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <TextBlock Grid.Column="1" x:Name="HeroHierarchicalValueText" Text="13 weeks, 1 day, 4 hours, 19m" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                                        <Button Style="{StaticResource CalcUnitActionButtonStyle}" Click="HeroHierarchicalPaste_Click" ToolTip="Paste into active window" Margin="0,0,4,0" Padding="5,1">
+                                            <TextBlock Text="Paste ↵" FontSize="10"/>
+                                        </Button>
+                                        <Button Style="{StaticResource CalcUnitActionButtonStyle}" Click="HeroHierarchicalCopyValue_Click" ToolTip="Copy value" Margin="0,0,4,0" Padding="5,1">
+                                            <TextBlock Text="Copy 📋" FontSize="10"/>
+                                        </Button>
+                                        <Button Style="{StaticResource CalcUnitActionButtonStyle}" Click="HeroHierarchicalCopySentence_Click" ToolTip="Copy sentence" Padding="5,1">
+                                            <TextBlock Text="Copy 💬" FontSize="10"/>
+                                        </Button>
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- Row 1: Cumulative Days Format -->
+                                <Grid Grid.Row="1">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="📅 Total Days:" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <TextBlock Grid.Column="1" x:Name="HeroCumulativeValueText" Text="92 days, 4 hours, 19m" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                                        <Button Style="{StaticResource CalcUnitActionButtonStyle}" Click="HeroCumulativePaste_Click" ToolTip="Paste into active window" Margin="0,0,4,0" Padding="5,1">
+                                            <TextBlock Text="Paste ↵" FontSize="10"/>
+                                        </Button>
+                                        <Button Style="{StaticResource CalcUnitActionButtonStyle}" Click="HeroCumulativeCopyValue_Click" ToolTip="Copy value" Margin="0,0,4,0" Padding="5,1">
+                                            <TextBlock Text="Copy 📋" FontSize="10"/>
+                                        </Button>
+                                        <Button Style="{StaticResource CalcUnitActionButtonStyle}" Click="HeroCumulativeCopySentence_Click" ToolTip="Copy sentence" Padding="5,1">
+                                            <TextBlock Text="Copy 💬" FontSize="10"/>
+                                        </Button>
+                                    </StackPanel>
+                                </Grid>
+                            </Grid>
+                        </Border>
+
+                        <!-- Search Bar & Category Chips (Single Sleek Row) -->
+                        <Grid Grid.Row="2" Margin="0,0,0,7">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="170"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Search Bar -->
+                            <Border Grid.Column="0"
+                                    Background="{DynamicResource BgInputBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="5"
+                                    Padding="6,3"
+                                    Margin="0,0,8,0">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="🔍" FontSize="11" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                    <TextBox Grid.Column="1"
+                                             x:Name="UnitsSearchTextBox"
+                                             Background="Transparent"
+                                             BorderThickness="0"
+                                             Foreground="{DynamicResource TextPrimaryBrush}"
+                                             CaretBrush="{DynamicResource TextPrimaryBrush}"
+                                             FontSize="11.5"
+                                             VerticalAlignment="Center"
+                                             TextChanged="UnitsSearchTextBox_TextChanged"/>
+                                </Grid>
+                            </Border>
+
+                            <!-- Category Chips Bar -->
+                            <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                                <StackPanel Orientation="Horizontal" x:Name="CategoryChipsContainer" VerticalAlignment="Center">
+                                    <Button x:Name="ChipAll" Tag="All" Style="{StaticResource CalcCategoryChipStyle}" Click="CategoryChip_Click">
+                                        <TextBlock Text="All"/>
+                                    </Button>
+                                    <Button x:Name="ChipDateFormats" Tag="Date Formats" Style="{StaticResource CalcCategoryChipStyle}" Click="CategoryChip_Click">
+                                        <TextBlock Text="Date Formats"/>
+                                    </Button>
+                                    <Button x:Name="ChipCommon" Tag="Common" Style="{StaticResource CalcCategoryChipStyle}" Click="CategoryChip_Click">
+                                        <TextBlock Text="Common"/>
+                                    </Button>
+                                    <Button x:Name="ChipPhysics" Tag="Physics" Style="{StaticResource CalcCategoryChipStyle}" Click="CategoryChip_Click">
+                                        <TextBlock Text="Physics"/>
+                                    </Button>
+                                    <Button x:Name="ChipSpace" Tag="Space" Style="{StaticResource CalcCategoryChipStyle}" Click="CategoryChip_Click">
+                                        <TextBlock Text="Space"/>
+                                    </Button>
+                                    <Button x:Name="ChipPopCulture" Tag="PopCulture" Style="{StaticResource CalcCategoryChipStyle}" Click="CategoryChip_Click">
+                                        <TextBlock Text="Pop Culture"/>
+                                    </Button>
+                                    <Button x:Name="ChipNature" Tag="Nature" Style="{StaticResource CalcCategoryChipStyle}" Click="CategoryChip_Click">
+                                        <TextBlock Text="Nature"/>
+                                    </Button>
+                                    <Button x:Name="ChipHistorical" Tag="Historical" Style="{StaticResource CalcCategoryChipStyle}" Click="CategoryChip_Click">
+                                        <TextBlock Text="Historical"/>
+                                    </Button>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Grid>
+
+                        <!-- Units List (High-Density Cards) -->
+                        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl x:Name="UnitsItemsControl">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="{DynamicResource BgInputBrush}"
+                                                BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="5"
+                                                Padding="8,5"
+                                                Margin="0,0,0,4">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <!-- Left Content -->
+                                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                    <!-- Row 1: Concept Title & Category Badge & Formatted Value -->
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding ConceptTitle}"
+                                                                   FontSize="11"
+                                                                   FontWeight="Bold"
+                                                                   Foreground="{DynamicResource AccentBrush}"/>
+                                                        <Border CornerRadius="3"
+                                                                Background="{DynamicResource AccentSubtleBrush}"
+                                                                Padding="4,1"
+                                                                Margin="6,0,0,0"
+                                                                VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding Category}"
+                                                                       FontSize="9"
+                                                                       FontWeight="SemiBold"
+                                                                       Foreground="{DynamicResource AccentBrush}"/>
+                                                        </Border>
+                                                        <TextBlock Text="•"
+                                                                   FontSize="11"
+                                                                   Foreground="{DynamicResource TextMutedBrush}"
+                                                                   Margin="6,0,6,0"
+                                                                   VerticalAlignment="Center"/>
+                                                        <TextBlock Text="{Binding FormattedValue}"
+                                                                   FontSize="11.5"
+                                                                   FontWeight="Bold"
+                                                                   Foreground="{DynamicResource TextPrimaryBrush}"
+                                                                   VerticalAlignment="Center"/>
+                                                    </StackPanel>
+
+                                                    <!-- Row 2: Conversational Sentence -->
+                                                    <TextBlock Text="{Binding ConversationalSentence}"
+                                                               FontSize="10.5"
+                                                               Foreground="{DynamicResource TextSecondaryBrush}"
+                                                               Margin="0,2,0,0"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               ToolTip="{Binding ConversationalSentence}"/>
+                                                </StackPanel>
+
+                                                <!-- Right: Actions -->
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                                                    <Button Style="{StaticResource CalcUnitActionButtonStyle}"
+                                                            Click="FlyoutUseUnitBtn_Click"
+                                                            ToolTip="Use this measurement as the answer and paste into active window"
+                                                            Margin="0,0,4,0"
+                                                            Padding="5,2">
+                                                        <TextBlock Text="Paste ↵" FontSize="10"/>
+                                                    </Button>
+                                                    <Button Style="{StaticResource CalcUnitActionButtonStyle}"
+                                                            Click="FlyoutCopyValueBtn_Click"
+                                                            ToolTip="Copy value to clipboard"
+                                                            Margin="0,0,4,0"
+                                                            Padding="5,2">
+                                                        <TextBlock Text="Copy Value 📋" FontSize="10"/>
+                                                    </Button>
+                                                    <Button Style="{StaticResource CalcUnitActionButtonStyle}"
+                                                            Click="FlyoutCopySentenceBtn_Click"
+                                                            ToolTip="Copy conversational sentence to clipboard"
+                                                            Padding="5,2">
+                                                        <TextBlock Text="Copy Sentence 💬" FontSize="10"/>
+                                                    </Button>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- Overlay: Folder Execution Confirmation Modal -->
+            <Grid Grid.Row="0" Grid.RowSpan="5"
+                  x:Name="FolderExecutionConfirmOverlay"
+                  Background="#99000000"
+                  Visibility="Collapsed">
+                <Border Width="500"
+                        MaxHeight="430"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Background="{DynamicResource BgSecondaryBrush}"
+                        BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="20,16">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/> <!-- Title & Subtitle -->
+                            <RowDefinition Height="*"/>    <!-- Action Preview List -->
+                            <RowDefinition Height="Auto"/> <!-- Subfolder Option & Buttons -->
+                        </Grid.RowDefinitions>
+
+                        <!-- Header -->
+                        <Grid Grid.Row="0" Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="📁 " FontSize="16" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="FolderConfirmTitleText"
+                                               Text="Execute All Actions in Folder?"
+                                               FontSize="15"
+                                               FontWeight="Bold"
+                                               Foreground="{DynamicResource TextPrimaryBrush}"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <TextBlock x:Name="FolderConfirmSubtitleText"
+                                           Text="The following actions will be executed sequentially:"
+                                           FontSize="12"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                           Margin="0,4,0,0"/>
+                            </StackPanel>
+                            <Button Grid.Column="1"
+                                    x:Name="CloseFolderConfirmBtn"
+                                    Click="CloseFolderConfirmBtn_Click"
+                                    VerticalAlignment="Top"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Cursor="Hand"
+                                    Padding="6,2">
+                                <TextBlock Text="✕" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/>
+                            </Button>
+                        </Grid>
+
+                        <!-- Action Preview List -->
+                        <Border Grid.Row="1"
+                                Background="{DynamicResource BgInputBrush}"
+                                BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="6"
+                                Margin="0,0,0,12"
+                                MaxHeight="220">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <ItemsControl x:Name="FolderConfirmActionsList">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Padding="8,5" Margin="0,1" CornerRadius="4" Background="{DynamicResource CardBgBrush}">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" Text="{Binding IconEmoji}" FontSize="13" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                        <TextBlock Text="{Binding PathBreadcrumb}" FontSize="10.5" Foreground="{DynamicResource TextMutedBrush}" Visibility="{Binding BreadcrumbVisibility}"/>
+                                                    </StackPanel>
+                                                    <Border Grid.Column="2" 
+                                                            Background="{Binding TypeBadgeBg}" 
+                                                            CornerRadius="3" 
+                                                            Padding="4,1" 
+                                                            VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding TypeBadgeText}" 
+                                                                   FontSize="9.5" 
+                                                                   FontWeight="SemiBold" 
+                                                                   Foreground="{Binding TypeBadgeFg}"/>
+                                                    </Border>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Border>
+
+                        <!-- Subfolder Toggle & Action Buttons -->
+                        <Grid Grid.Row="2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Include Subfolders Checkbox -->
+                            <CheckBox Grid.Column="0"
+                                      x:Name="FolderConfirmIncludeSubfoldersCheck"
+                                      Content="Include subfolders"
+                                      FontSize="11.5"
+                                      Foreground="{DynamicResource TextSecondaryBrush}"
+                                      VerticalAlignment="Center"
+                                      IsChecked="True"
+                                      Click="FolderConfirmIncludeSubfoldersCheck_Click"/>
+
+                            <!-- Buttons -->
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button x:Name="FolderConfirmCancelBtn"
+                                        Click="FolderConfirmCancelBtn_Click"
+                                        Content="Cancel (Esc)"
+                                        Cursor="Hand"
+                                        Background="Transparent"
+                                        Foreground="{DynamicResource TextSecondaryBrush}"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        BorderThickness="1"
+                                        Padding="10,6"
+                                        Margin="0,0,8,0">
+                                    <Button.Resources>
+                                        <Style TargetType="Border">
+                                            <Setter Property="CornerRadius" Value="5"/>
+                                        </Style>
+                                    </Button.Resources>
+                                </Button>
+                                <Button x:Name="FolderConfirmRunBtn"
+                                        Click="FolderConfirmRunBtn_Click"
+                                        Cursor="Hand"
+                                        Background="{DynamicResource AccentBrush}"
+                                        Foreground="White"
+                                        BorderThickness="0"
+                                        FontWeight="SemiBold"
+                                        Padding="14,6">
+                                    <Button.Resources>
+                                        <Style TargetType="Border">
+                                            <Setter Property="CornerRadius" Value="5"/>
+                                        </Style>
+                                    </Button.Resources>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="▶ " FontSize="11" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="FolderConfirmRunBtnText" Text="Run All Actions" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Grid>
                     </Grid>
                 </Border>
             </Grid>

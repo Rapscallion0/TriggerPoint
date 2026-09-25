@@ -80,6 +80,7 @@
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                      ScrollViewer.VerticalScrollBarVisibility="Auto"
                      SelectionMode="Single"
+                     SelectionChanged="ItemsListBox_SelectionChanged"
                      FocusVisualStyle="{x:Null}">
                 <ListBox.ItemContainerStyle>
                     <Style TargetType="ListBoxItem">
@@ -185,47 +186,18 @@
                     BorderThickness="0,1,0,0" 
                     Margin="4,6,4,2" 
                     Padding="4,5,4,2">
-                <StackPanel HorizontalAlignment="Center">
+                <StackPanel x:Name="FooterHintsPanel" HorizontalAlignment="Center">
                     <!-- Row 1: Primary Navigation -->
-                    <TextBlock FontSize="10.5"
+                    <TextBlock x:Name="PrimaryHintsText"
+                               FontSize="10.5"
                                Foreground="{DynamicResource TextMutedBrush}"
-                               HorizontalAlignment="Center">
-                        <InlineUIContainer BaselineAlignment="Center">
-                            <Path Data="{StaticResource EnterKeyGeometry}" 
-                                  Fill="{DynamicResource TextPrimaryBrush}" 
-                                  Width="10" Height="10" Stretch="Uniform" Margin="0,0,2,0"/>
-                        </InlineUIContainer>
-                        <Run Text="Run/Open   •   "/>
-                        <Run Text="◀" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/>
-                        <Run Text=" Back (Esc)"/>
-                    </TextBlock>
+                               HorizontalAlignment="Center"/>
                     <!-- Row 2: Modifier Overrides -->
-                    <TextBlock FontSize="10"
+                    <TextBlock x:Name="ModifierHintsText"
+                               FontSize="10"
                                Foreground="{DynamicResource TextMutedBrush}"
                                HorizontalAlignment="Center"
-                               Margin="0,3,0,0">
-                        <Run Text="Ctrl+" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                        <InlineUIContainer BaselineAlignment="Center">
-                            <Path Data="{StaticResource EnterKeyGeometry}" 
-                                  Fill="{DynamicResource TextPrimaryBrush}" 
-                                  Width="9.5" Height="9.5" Stretch="Uniform" Margin="0,0,2,0"/>
-                        </InlineUIContainer>
-                        <Run Text="Admin   •   "/>
-                        <Run Text="Shift+" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                        <InlineUIContainer BaselineAlignment="Center">
-                            <Path Data="{StaticResource EnterKeyGeometry}" 
-                                  Fill="{DynamicResource TextPrimaryBrush}" 
-                                  Width="9.5" Height="9.5" Stretch="Uniform" Margin="0,0,2,0"/>
-                        </InlineUIContainer>
-                        <Run Text="Reveal   •   "/>
-                        <Run Text="Alt+" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                        <InlineUIContainer BaselineAlignment="Center">
-                            <Path Data="{StaticResource EnterKeyGeometry}" 
-                                  Fill="{DynamicResource TextPrimaryBrush}" 
-                                  Width="9.5" Height="9.5" Stretch="Uniform" Margin="0,0,2,0"/>
-                        </InlineUIContainer>
-                        <Run Text="Settings"/>
-                    </TextBlock>
+                               Margin="0,3,0,0"/>
                 </StackPanel>
             </Border>
         </Grid>

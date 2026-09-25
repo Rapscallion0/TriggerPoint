@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using TriggerPoint.Core.Contracts;
 using TriggerPoint.Core.Models;
 using TriggerPoint.Infrastructure.Win32;
@@ -15,6 +16,10 @@ public partial class InteractivePromptDialog : Window, IPromptDialogService
     private readonly Dictionary<string, Func<string>> _valueExtractors = [];
     private readonly List<Func<string?>> _validators = [];
     public Dictionary<string, string>? Results { get; private set; }
+    private UIElement? _firstInputControl;
+    private bool _hasInitialFocusBeenSet;
+
+    public UIElement? FirstInputControl => _firstInputControl;
 
     public InteractivePromptDialog()
     {
@@ -38,6 +43,100 @@ public partial class InteractivePromptDialog : Window, IPromptDialogService
     {
         base.OnSourceInitialized(e);
         CenterOnActiveScreen();
+        ForceForeground();
+    }
+
+    protected override void OnContentRendered(EventArgs e)
+    {
+        base.OnContentRendered(e);
+        ForceForeground();
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, new Action(FocusFirstInput));
+    }
+
+    protected override void OnActivated(EventArgs e)
+    {
+        base.OnActivated(e);
+        if (!_hasInitialFocusBeenSet)
+        {
+            _hasInitialFocusBeenSet = true;
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, new Action(FocusFirstInput));
+        }
+    }
+
+    private void ForceForeground()
+    {
+        try
+        {
+            var handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            if (handle == IntPtr.Zero) return;
+
+            NativeMethods.AllowSetForegroundWindow(NativeMethods.ASFW_ANY);
+
+            uint currentThreadId = NativeMethods.GetCurrentThreadId();
+            IntPtr foregroundHwnd = NativeMethods.GetForegroundWindow();
+            uint foregroundThreadId = foregroundHwnd != IntPtr.Zero
+                ? NativeMethods.GetWindowThreadProcessId(foregroundHwnd, out _)
+                : 0;
+
+            bool attached = false;
+            if (currentThreadId != foregroundThreadId && foregroundThreadId != 0)
+            {
+                attached = NativeMethods.AttachThreadInput(currentThreadId, foregroundThreadId, true);
+            }
+
+            try
+            {
+                NativeMethods.BringWindowToTop(handle);
+                NativeMethods.SetForegroundWindow(handle);
+            }
+            finally
+            {
+                if (attached)
+                {
+                    NativeMethods.AttachThreadInput(currentThreadId, foregroundThreadId, false);
+                }
+            }
+
+            Activate();
+            Focus();
+        }
+        catch { }
+    }
+
+    private void FocusFirstInput()
+    {
+        if (_firstInputControl == null) return;
+
+        try
+        {
+            Activate();
+            Focus();
+
+            if (_firstInputControl is DatePicker dp)
+            {
+                dp.ApplyTemplate();
+                if (dp.Template?.FindName("PART_TextBox", dp) is UIElement dpTextBox)
+                {
+                    dpTextBox.Focus();
+                    Keyboard.Focus(dpTextBox);
+                    FocusManager.SetFocusedElement(this, dpTextBox);
+                    return;
+                }
+            }
+            else if (_firstInputControl is TextBox tb)
+            {
+                tb.Focus();
+                Keyboard.Focus(tb);
+                FocusManager.SetFocusedElement(this, tb);
+                tb.SelectAll();
+                return;
+            }
+
+            _firstInputControl.Focus();
+            Keyboard.Focus(_firstInputControl);
+            FocusManager.SetFocusedElement(this, _firstInputControl);
+        }
+        catch { }
     }
 
     private void CenterOnActiveScreen()
@@ -67,7 +166,8 @@ public partial class InteractivePromptDialog : Window, IPromptDialogService
         _valueExtractors.Clear();
         _validators.Clear();
 
-        UIElement? firstInputControl = null;
+        _firstInputControl = null;
+        _hasInitialFocusBeenSet = false;
 
         foreach (var token in tokens)
         {
@@ -79,9 +179,9 @@ public partial class InteractivePromptDialog : Window, IPromptDialogService
                 Text = token.Label,
                 FontWeight = FontWeights.SemiBold,
                 FontSize = 12,
-                Margin = new Thickness(0, 0, 0, 5),
-                Foreground = (System.Windows.Media.Brush)Application.Current.FindResource("TextPrimaryBrush")
+                Margin = new Thickness(0, 0, 0, 5)
             };
+            labelText.SetResourceReference(TextBlock.ForegroundProperty, "TextPrimaryBrush");
             fieldWrapper.Children.Add(labelText);
 
             switch (token.Type)
@@ -114,7 +214,7 @@ public partial class InteractivePromptDialog : Window, IPromptDialogService
                         return combo.Text;
                     };
                     fieldWrapper.Children.Add(combo);
-                    firstInputControl ??= combo;
+                    _firstInputControl ??= combo;
                     break;
 
                 case TokenType.PromptNumber:
@@ -182,7 +282,7 @@ public partial class InteractivePromptDialog : Window, IPromptDialogService
                     });
 
                     fieldWrapper.Children.Add(numBox);
-                    firstInputControl ??= numBox;
+                    _firstInputControl ??= numBox;
                     break;
 
                 case TokenType.PromptMultiline:
@@ -202,7 +302,7 @@ public partial class InteractivePromptDialog : Window, IPromptDialogService
                     }
                     _valueExtractors[token.RawTag] = () => multiBox.Text;
                     fieldWrapper.Children.Add(multiBox);
-                    firstInputControl ??= multiBox;
+                    _firstInputControl ??= multiBox;
                     break;
 
                 case TokenType.PromptDatePicker:
@@ -215,6 +315,7 @@ public partial class InteractivePromptDialog : Window, IPromptDialogService
 
                     var datePicker = new DatePicker
                     {
+                        Style = (Style)Application.Current.FindResource("ModernDatePickerStyle"),
                         SelectedDate = initialDate,
                         Height = 32,
                         FontSize = 13
@@ -232,7 +333,7 @@ public partial class InteractivePromptDialog : Window, IPromptDialogService
                         }
                     };
                     fieldWrapper.Children.Add(datePicker);
-                    firstInputControl ??= datePicker;
+                    _firstInputControl ??= datePicker;
                     break;
 
                 case TokenType.PromptText:
@@ -249,7 +350,7 @@ public partial class InteractivePromptDialog : Window, IPromptDialogService
                     }
                     _valueExtractors[token.RawTag] = () => textBox.Text.Trim();
                     fieldWrapper.Children.Add(textBox);
-                    firstInputControl ??= textBox;
+                    _firstInputControl ??= textBox;
                     break;
             }
 
@@ -259,12 +360,8 @@ public partial class InteractivePromptDialog : Window, IPromptDialogService
         Loaded += (s, e) =>
         {
             CenterOnActiveScreen();
-            if (firstInputControl != null)
-            {
-                firstInputControl.Focus();
-                Keyboard.Focus(firstInputControl);
-                FocusManager.SetFocusedElement(this, firstInputControl);
-            }
+            ForceForeground();
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, new Action(FocusFirstInput));
         };
     }
 
@@ -276,24 +373,27 @@ public partial class InteractivePromptDialog : Window, IPromptDialogService
     private void CancelButton_Click(object sender, RoutedEventArgs e)
     {
         Results = null;
-        DialogResult = false;
+        try { DialogResult = false; } catch (InvalidOperationException) { }
         Close();
     }
 
-    private void Window_KeyDown(object sender, KeyEventArgs e)
+    internal void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Escape)
         {
             Results = null;
-            DialogResult = false;
+            try { DialogResult = false; } catch (InvalidOperationException) { }
             Close();
             e.Handled = true;
+            return;
         }
-        else if (e.Key == Key.Enter)
+
+        if (e.Key == Key.Enter)
         {
             bool isCtrl = (Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Control) == System.Windows.Input.ModifierKeys.Control;
             if (isCtrl)
             {
+                CommitFocusedControl();
                 Submit();
                 e.Handled = true;
                 return;
@@ -306,15 +406,59 @@ public partial class InteractivePromptDialog : Window, IPromptDialogService
                 return;
             }
 
+            // If DatePicker calendar popup is open, let Enter select the date
+            if (Keyboard.FocusedElement is DependencyObject d)
+            {
+                var dp = FindVisualAncestor<DatePicker>(d);
+                if (dp != null && dp.IsDropDownOpen)
+                {
+                    return;
+                }
+            }
+
             // If focused on multiline textbox, let normal Enter insert a new line
             if (Keyboard.FocusedElement is TextBox tb && tb.AcceptsReturn)
             {
                 return;
             }
 
+            CommitFocusedControl();
             Submit();
             e.Handled = true;
         }
+    }
+
+    private void CommitFocusedControl()
+    {
+        if (Keyboard.FocusedElement is DependencyObject d)
+        {
+            var dp = FindVisualAncestor<DatePicker>(d);
+            if (dp != null)
+            {
+                dp.GetBindingExpression(DatePicker.SelectedDateProperty)?.UpdateSource();
+            }
+        }
+    }
+
+    private static T? FindVisualAncestor<T>(DependencyObject? current) where T : DependencyObject
+    {
+        while (current != null)
+        {
+            if (current is T typed) return typed;
+            if (current is Visual or System.Windows.Media.Media3D.Visual3D)
+            {
+                current = VisualTreeHelper.GetParent(current);
+            }
+            else if (current is FrameworkContentElement fce)
+            {
+                current = fce.Parent;
+            }
+            else
+            {
+                break;
+            }
+        }
+        return null;
     }
 
     private void Submit()
@@ -335,7 +479,7 @@ public partial class InteractivePromptDialog : Window, IPromptDialogService
             dict[tag] = extractor();
         }
         Results = dict;
-        DialogResult = true;
+        try { DialogResult = true; } catch (InvalidOperationException) { }
         Close();
     }
 
@@ -346,6 +490,7 @@ public partial class InteractivePromptDialog : Window, IPromptDialogService
     {
         return await Dispatcher.InvokeAsync(() =>
         {
+            NativeMethods.AllowSetForegroundWindow(NativeMethods.ASFW_ANY);
             var dlg = new InteractivePromptDialog(promptTokens, title, subtitle);
             var result = dlg.ShowDialog();
             return result == true ? dlg.Results : null;
