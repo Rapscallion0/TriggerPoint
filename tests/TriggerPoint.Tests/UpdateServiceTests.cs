@@ -331,6 +331,81 @@ public class UpdateServiceTests : IDisposable
         Assert.Equal("2.0.9", result.LatestUpdate.Version);
     }
 
+    [Fact]
+    public async Task CheckForUpdatesAsync_WhenPortableMode_PrefersPortableZipAsset()
+    {
+        string jsonResponse = @"[
+            {
+                ""tag_name"": ""v2.1.0"",
+                ""name"": ""v2.1.0 Release"",
+                ""draft"": false,
+                ""prerelease"": false,
+                ""assets"": [
+                    {
+                        ""name"": ""TriggerPointSetup.exe"",
+                        ""browser_download_url"": ""https://github.com/Rapscallion0/TriggerPoint/releases/download/v2.1.0/TriggerPointSetup.exe"",
+                        ""size"": 4194304
+                    },
+                    {
+                        ""name"": ""TriggerPoint-v2.1.0-Portable-win-x64.zip"",
+                        ""browser_download_url"": ""https://github.com/Rapscallion0/TriggerPoint/releases/download/v2.1.0/TriggerPoint-v2.1.0-Portable-win-x64.zip"",
+                        ""size"": 3145728
+                    }
+                ]
+            }
+        ]";
+
+        var pathsService = new TriggerPoint.Core.Services.AppPathsService(args: ["--portable"], baseAppDirectory: _testDir);
+        var handler = new MockHttpMessageHandler(jsonResponse, HttpStatusCode.OK);
+        var httpClient = new HttpClient(handler);
+        var service = new GitHubUpdateService(_repo, pathsService, httpClient);
+        service.SetCurrentVersionForTesting("2.0.8");
+
+        var result = await service.CheckForUpdatesAsync(isManualCheck: true);
+
+        Assert.True(result.IsUpdateAvailable);
+        Assert.NotNull(result.LatestUpdate);
+        Assert.Equal("TriggerPoint-v2.1.0-Portable-win-x64.zip", result.LatestUpdate.FileName);
+        Assert.Equal("https://github.com/Rapscallion0/TriggerPoint/releases/download/v2.1.0/TriggerPoint-v2.1.0-Portable-win-x64.zip", result.LatestUpdate.DownloadUrl);
+    }
+
+    [Fact]
+    public async Task CheckForUpdatesAsync_WhenInstalledMode_PrefersExeAsset()
+    {
+        string jsonResponse = @"[
+            {
+                ""tag_name"": ""v2.1.0"",
+                ""name"": ""v2.1.0 Release"",
+                ""draft"": false,
+                ""prerelease"": false,
+                ""assets"": [
+                    {
+                        ""name"": ""TriggerPointSetup.exe"",
+                        ""browser_download_url"": ""https://github.com/Rapscallion0/TriggerPoint/releases/download/v2.1.0/TriggerPointSetup.exe"",
+                        ""size"": 4194304
+                    },
+                    {
+                        ""name"": ""TriggerPoint-v2.1.0-Portable-win-x64.zip"",
+                        ""browser_download_url"": ""https://github.com/Rapscallion0/TriggerPoint/releases/download/v2.1.0/TriggerPoint-v2.1.0-Portable-win-x64.zip"",
+                        ""size"": 3145728
+                    }
+                ]
+            }
+        ]";
+
+        var pathsService = new TriggerPoint.Core.Services.AppPathsService(args: [], baseAppDirectory: _testDir, customAppDataPath: Path.Combine(_testDir, "AppData"));
+        var handler = new MockHttpMessageHandler(jsonResponse, HttpStatusCode.OK);
+        var httpClient = new HttpClient(handler);
+        var service = new GitHubUpdateService(_repo, pathsService, httpClient);
+        service.SetCurrentVersionForTesting("2.0.8");
+
+        var result = await service.CheckForUpdatesAsync(isManualCheck: true);
+
+        Assert.True(result.IsUpdateAvailable);
+        Assert.NotNull(result.LatestUpdate);
+        Assert.Equal("TriggerPointSetup.exe", result.LatestUpdate.FileName);
+    }
+
     private class MockHttpMessageHandler : HttpMessageHandler
     {
         private readonly string _responseContent;

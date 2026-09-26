@@ -92,6 +92,21 @@
                                FontWeight="Bold" 
                                Foreground="{DynamicResource TextPrimaryBrush}" 
                                VerticalAlignment="Center"/>
+                    <Border x:Name="PortableBadge" 
+                            Visibility="Collapsed"
+                            Margin="10,0,0,0"
+                            Padding="6,2"
+                            CornerRadius="4"
+                            Background="{DynamicResource AccentSubtleBrush}"
+                            BorderBrush="{DynamicResource AccentBrush}"
+                            BorderThickness="1"
+                            VerticalAlignment="Center"
+                            ToolTip="TriggerPoint is running in Portable Mode. All configurations and data are stored locally in the application folder.">
+                        <TextBlock Text="PORTABLE" 
+                                   FontSize="10" 
+                                   FontWeight="Bold" 
+                                   Foreground="{DynamicResource AccentBrush}"/>
+                    </Border>
                 </StackPanel>
                 <TextBlock Text="Configure daemon behavior, hotkeys, themes, updates, and maintenance" 
                            FontSize="11.5" 
@@ -423,8 +438,20 @@
                                     <CheckBox x:Name="RunAtStartupCheck" 
                                               Content="Start TriggerPoint when you log in to Windows" 
                                               FontSize="13" 
-                                              Margin="0,0,0,10"
+                                              Margin="0,0,0,6"
                                               ToolTip="Adds TriggerPoint to current user's Windows Startup registry run key"/>
+
+                                    <Border x:Name="PortableStartupAdvisoryBorder"
+                                            Visibility="Collapsed"
+                                            Background="{DynamicResource WarningSubtleBrush}"
+                                            BorderBrush="{DynamicResource WarningBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="6"
+                                            Padding="10,6"
+                                            Margin="24,0,0,10">
+                                        <TextBlock Text="⚠️ Portable Mode Advisory: Drive letters on removable drives may change between ports or PCs. Windows startup uses the current executable path."
+                                                   FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}" TextWrapping="Wrap"/>
+                                    </Border>
 
                                     <CheckBox x:Name="StartMinimizedCheck" 
                                               Content="Start minimized to System Tray" 
@@ -445,27 +472,37 @@
                                             CornerRadius="6"
                                             Padding="12,10"
                                             Margin="0,2,0,10">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="📁 Windows Explorer Context Menu" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource TextPrimaryBrush}"/>
-                                                    <Border x:Name="ExplorerMenuStatusBadge" Margin="8,0,0,0" Padding="6,1" CornerRadius="4" Background="{DynamicResource BgTertiaryBrush}" VerticalAlignment="Center">
-                                                        <TextBlock x:Name="ExplorerMenuStatusText" Text="Disabled" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                                                    </Border>
+                                        <StackPanel>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="📁 Windows Explorer Context Menu" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                        <Border x:Name="ExplorerMenuStatusBadge" Margin="8,0,0,0" Padding="6,1" CornerRadius="4" Background="{DynamicResource BgTertiaryBrush}" VerticalAlignment="Center">
+                                                            <TextBlock x:Name="ExplorerMenuStatusText" Text="Disabled" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                                        </Border>
+                                                    </StackPanel>
+                                                    <TextBlock Text="Show 'Add to TriggerPoint' in Windows Explorer right-click context menu for files and folders to instantly create launch actions"
+                                                               FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,12,0" TextWrapping="Wrap"/>
                                                 </StackPanel>
-                                                <TextBlock Text="Show 'Add to TriggerPoint' in Windows Explorer right-click context menu for files and folders to instantly create launch actions"
-                                                           FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,12,0" TextWrapping="Wrap"/>
-                                            </StackPanel>
-                                            <CheckBox x:Name="EnableExplorerMenuCheck"
-                                                      Grid.Column="1"
-                                                      VerticalAlignment="Center"
-                                                      Click="EnableExplorerMenuCheck_Click"
-                                                      ToolTip="Enables or disables right-click Windows Explorer integration for the current user"/>
-                                        </Grid>
+                                                <CheckBox x:Name="EnableExplorerMenuCheck"
+                                                          Grid.Column="1"
+                                                          VerticalAlignment="Center"
+                                                          Click="EnableExplorerMenuCheck_Click"
+                                                          ToolTip="Enables or disables right-click Windows Explorer integration for the current user"/>
+                                            </Grid>
+
+                                            <!-- Portable Mode Cleanup on Exit -->
+                                            <CheckBox x:Name="CleanupHostIntegrationOnExitCheck"
+                                                      Content="Clean up context menu and host integrations on exit"
+                                                      FontSize="11.5"
+                                                      Margin="0,8,0,0"
+                                                      Visibility="Collapsed"
+                                                      ToolTip="Automatically unregisters Windows Explorer context menu entries when TriggerPoint exits or drive is removed, leaving no orphaned host registry entries."/>
+                                        </StackPanel>
                                     </Border>
 
                                     <CheckBox x:Name="ShowSuccessToastsCheck" 
@@ -818,6 +855,37 @@
                                                FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
 
                                     <Border Height="1" Background="{DynamicResource BorderSubtleBrush}" Margin="0,8,0,12" SnapsToDevicePixels="True"/>
+
+                                    <!-- Storage Mode & Location Banner -->
+                                    <Border Background="{DynamicResource BgSecondaryBrush}" 
+                                            BorderBrush="{DynamicResource BorderBrush}" 
+                                            BorderThickness="1" 
+                                            CornerRadius="6" 
+                                            Padding="12,10" 
+                                            Margin="0,0,0,14">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock x:Name="StorageModeTitleText" Text="Storage Mode: Standard" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                    <Border x:Name="DataStorageModeBadge" Margin="8,0,0,0" Padding="6,1" CornerRadius="4" Background="{DynamicResource AccentSubtleBrush}" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1" VerticalAlignment="Center">
+                                                        <TextBlock x:Name="DataStorageModeBadgeText" Text="Installed" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}"/>
+                                                    </Border>
+                                                </StackPanel>
+                                                <TextBlock x:Name="DataDirectoryPathText" Text="Loading directory path..." FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
+                                            </StackPanel>
+                                            <Button Grid.Column="1"
+                                                    Content="📁 Open Folder"
+                                                    Style="{StaticResource SecondaryButtonStyle}"
+                                                    FontSize="11.5"
+                                                    Padding="8,4"
+                                                    VerticalAlignment="Center"
+                                                    Click="OpenDataFolderBtn_Click"/>
+                                        </Grid>
+                                    </Border>
 
                                     <!-- Recycle Bin Retention Settings -->
                                     <TextBlock Text="Recycle Bin &amp; Retention" FontWeight="SemiBold" FontSize="13" Margin="0,4,0,4" Foreground="{DynamicResource TextPrimaryBrush}"/>

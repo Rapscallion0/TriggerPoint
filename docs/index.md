@@ -44,7 +44,7 @@ Find immediate answers based on what you are trying to accomplish:
 - Consult the [Dynamic Snippet Tokens Reference](core-workflows.md#dynamic-tokens--placeholder-syntax) for date offsets, clipboard transforms, and interactive prompt tokens.
 
 ### 🔍 "I want to search all my shortcuts or compute a quick math calculation"
-- Learn about the [Spotlight Command Palette](core-workflows.md#3-spotlight-command-palette--quick-calculator) (`Alt+Space`).
+- Learn about the [Spotlight Command Palette](core-workflows.md#4-spotlight-command-palette--quick-calculator) (`Ctrl+Shift+Space`).
 - Read how to evaluate math formulas on the fly in [Instant Math Calculator](core-workflows.md#instant-math-calculator).
 
 ![Command Palette and Calculator](images/index-command-palette.png)

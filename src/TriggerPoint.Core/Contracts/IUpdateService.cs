@@ -10,6 +10,7 @@ public interface IUpdateService
     Task<UpdateCheckResult> CheckForUpdatesAsync(bool isManualCheck = false, CancellationToken ct = default);
     Task<string> DownloadUpdateAsync(UpdateInfo updateInfo, IProgress<UpdateDownloadProgress>? progress = null, CancellationToken ct = default);
     void LaunchInstallerAndExit(string installerPath, bool silent = true);
+    void ApplyPortableUpdateAndExit(string zipPath);
     bool ShouldPerformScheduledCheck(AppSettings settings);
     string GetCurrentVersion();
 }

@@ -42,12 +42,12 @@ TriggerPoint displays subtle, non-intrusive floating toasts in the corner of you
 Customize the core keyboard shortcuts that control TriggerPoint system-wide:
 
 ![Global Hotkey Configuration](images/config-hotkey-recorder-modal.png)
-<!-- SCREENSHOT REQUIRED: Application Settings Hotkeys section. Three interactive hotkey recorder controls are visible: (1) Open Settings Window set to "Ctrl + Alt + T", (2) Command Palette set to "Alt + Space", and (3) Shortcut Cheat Sheet set to "Ctrl + Shift + /". The Command Palette recorder is in active focus with modifier chips highlighted. -->
+<!-- SCREENSHOT REQUIRED: Application Settings Hotkeys section. Three interactive hotkey recorder controls are visible: (1) Open Settings Window set to "Ctrl + Alt + T", (2) Command Palette set to "Ctrl + Shift + Space", and (3) Shortcut Cheat Sheet set to "Ctrl + Shift + /". The Command Palette recorder is in active focus with modifier chips highlighted. -->
 
 | Setting | Default Shortcut | Purpose |
 | :--- | :--- | :--- |
 | **Open Settings Window** | <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>T</kbd> | Brings the main management window to the foreground. |
-| **Spotlight Command Palette** | <kbd>Alt</kbd> + <kbd>Space</kbd> | Summons the floating search and calculator HUD. |
+| **Spotlight Command Palette** | <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd> | Summons the floating search and calculator HUD. |
 | **Shortcut Cheat Sheet HUD** | <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>/</kbd> | Opens the floating full-shortcut reference HUD. |
 
 ### Changing a Shortcut

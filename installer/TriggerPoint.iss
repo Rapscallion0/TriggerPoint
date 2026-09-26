@@ -4,7 +4,7 @@
 ; =====================================================================
 
 #ifndef AppVersion
-#define AppVersion "2.0.11"
+#define AppVersion "2.1.0"
 #endif
 
 #ifndef PublishDir
@@ -93,6 +93,11 @@ var
   IsUpgradeMode: Boolean;
   IsSameVersionMode: Boolean;
   IsDowngradeMode: Boolean;
+  InitialPreferencesPage: TWizardPage;
+  ThemeRadioSystem: TRadioButton;
+  ThemeRadioDark: TRadioButton;
+  ThemeRadioLight: TRadioButton;
+  StarterPackCheckBox: TCheckBox;
 
 function GetNextVersionPart(var V: string): Integer;
 var
@@ -210,6 +215,7 @@ procedure InitializeWizard();
 var
   ModeDesc, ScopeName, RunVal, DesktopLnk: string;
   VerComp: Integer;
+  ThemeLabel, ContentLabel, StarterNote: TLabel;
 begin
   ExistingInstallMode := DetectExistingInstallation();
 
@@ -294,6 +300,64 @@ begin
       MaintenancePage.SelectedValueIndex := 0;
     end;
   end;
+
+  // Create Initial Preferences Page for fresh installs
+  InitialPreferencesPage := CreateCustomPage(
+    wpSelectTasks,
+    'Initial Preferences',
+    'Choose your visual theme and initial content.'
+  );
+
+  ThemeLabel := TLabel.Create(WizardForm);
+  ThemeLabel.Parent := InitialPreferencesPage.Surface;
+  ThemeLabel.Caption := 'Appearance Theme:';
+  ThemeLabel.Font.Style := [fsBold];
+  ThemeLabel.Left := ScaleX(0);
+  ThemeLabel.Top := ScaleY(10);
+
+  ThemeRadioSystem := TRadioButton.Create(WizardForm);
+  ThemeRadioSystem.Parent := InitialPreferencesPage.Surface;
+  ThemeRadioSystem.Caption := 'System Default (Recommended - follows Windows light/dark theme)';
+  ThemeRadioSystem.Left := ScaleX(16);
+  ThemeRadioSystem.Top := ScaleY(34);
+  ThemeRadioSystem.Width := InitialPreferencesPage.SurfaceWidth - ScaleX(16);
+  ThemeRadioSystem.Checked := True;
+
+  ThemeRadioDark := TRadioButton.Create(WizardForm);
+  ThemeRadioDark.Parent := InitialPreferencesPage.Surface;
+  ThemeRadioDark.Caption := 'Dark Theme (Sleek, high-contrast obsidian dark palette)';
+  ThemeRadioDark.Left := ScaleX(16);
+  ThemeRadioDark.Top := ScaleY(60);
+  ThemeRadioDark.Width := InitialPreferencesPage.SurfaceWidth - ScaleX(16);
+
+  ThemeRadioLight := TRadioButton.Create(WizardForm);
+  ThemeRadioLight.Parent := InitialPreferencesPage.Surface;
+  ThemeRadioLight.Caption := 'Light Theme (Clean, bright, high-readability daylight palette)';
+  ThemeRadioLight.Left := ScaleX(16);
+  ThemeRadioLight.Top := ScaleY(86);
+  ThemeRadioLight.Width := InitialPreferencesPage.SurfaceWidth - ScaleX(16);
+
+  ContentLabel := TLabel.Create(WizardForm);
+  ContentLabel.Parent := InitialPreferencesPage.Surface;
+  ContentLabel.Caption := 'Starter Content:';
+  ContentLabel.Font.Style := [fsBold];
+  ContentLabel.Left := ScaleX(0);
+  ContentLabel.Top := ScaleY(126);
+
+  StarterPackCheckBox := TCheckBox.Create(WizardForm);
+  StarterPackCheckBox.Parent := InitialPreferencesPage.Surface;
+  StarterPackCheckBox.Caption := 'Install Starter Pack && Examples (Recommended)';
+  StarterPackCheckBox.Left := ScaleX(16);
+  StarterPackCheckBox.Top := ScaleY(150);
+  StarterPackCheckBox.Width := InitialPreferencesPage.SurfaceWidth - ScaleX(16);
+  StarterPackCheckBox.Checked := True;
+
+  StarterNote := TLabel.Create(WizardForm);
+  StarterNote.Parent := InitialPreferencesPage.Surface;
+  StarterNote.Caption := 'Seeds sample actions demonstrating radial cursor menus, snippets, and workflows.';
+  StarterNote.Left := ScaleX(34);
+  StarterNote.Top := ScaleY(174);
+  StarterNote.Width := InitialPreferencesPage.SurfaceWidth - ScaleX(34);
 end;
 
 function ShouldSkipPage(PageID: Integer): Boolean;
@@ -312,6 +376,16 @@ begin
   begin
     Result := True;
     Exit;
+  end;
+
+  // Skip initial preferences page for upgrades or if existing settings already exist
+  if (InitialPreferencesPage <> nil) and (PageID = InitialPreferencesPage.ID) then
+  begin
+    if (ExistingInstallMode <> 0) or FileExists(ExpandConstant('{userappdata}\TriggerPoint\appsettings.json')) then
+    begin
+      Result := True;
+      Exit;
+    end;
   end;
 end;
 
@@ -353,6 +427,43 @@ begin
         Result := False;
         Exit;
       end;
+    end;
+  end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  AppDataDir, SettingsPath, TriggersPath, SettingsJson: string;
+  SelectedThemeVal: Integer;
+begin
+  if (CurStep = ssPostInstall) and (ExistingInstallMode = 0) and 
+     (not FileExists(ExpandConstant('{userappdata}\TriggerPoint\appsettings.json'))) then
+  begin
+    AppDataDir := ExpandConstant('{userappdata}\TriggerPoint');
+    if not DirExists(AppDataDir) then
+    begin
+      ForceDirectories(AppDataDir);
+    end;
+
+    // 0 = System, 1 = Dark, 2 = Light
+    SelectedThemeVal := 0;
+    if (ThemeRadioDark <> nil) and ThemeRadioDark.Checked then
+      SelectedThemeVal := 1
+    else if (ThemeRadioLight <> nil) and ThemeRadioLight.Checked then
+      SelectedThemeVal := 2;
+
+    SettingsPath := AppDataDir + '\appsettings.json';
+    SettingsJson := '{' + #13#10 +
+      '  "theme": ' + IntToStr(SelectedThemeVal) + ',' + #13#10 +
+      '  "hasCompletedInitialSetup": true' + #13#10 +
+      '}';
+    SaveStringToFile(SettingsPath, SettingsJson, False);
+
+    // If user unchecked starter pack, write empty list to triggerpoint.json
+    if (StarterPackCheckBox <> nil) and (not StarterPackCheckBox.Checked) then
+    begin
+      TriggersPath := AppDataDir + '\triggerpoint.json';
+      SaveStringToFile(TriggersPath, '[]', False);
     end;
   end;
 end;

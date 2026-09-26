@@ -24,6 +24,7 @@ public partial class App : Application
     public static readonly Guid CheatSheetActionId = Guid.Parse("00000000-0000-0000-0000-000000000003");
 
     private IServiceProvider? _serviceProvider;
+    public IServiceProvider? ServiceProvider => _serviceProvider;
     private SingleInstanceService? _singleInstanceService;
     private TrayIconService? _trayIconService;
     private SettingsWindow? _settingsWindow;
@@ -86,9 +87,11 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
-        var baseDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TriggerPoint");
-        var logDir = Path.Combine(baseDir, "logs");
-        Directory.CreateDirectory(logDir);
+        var pathsService = new AppPathsService(e.Args);
+        pathsService.EnsureDirectoriesCreated();
+
+        var baseDir = pathsService.BaseDataDirectory;
+        var logDir = pathsService.LogsDirectory;
 
         // Bootstrap logger to guarantee early diagnostics are never lost before settings load
         Log.Logger = new LoggerConfiguration()
@@ -126,7 +129,10 @@ public partial class App : Application
         };
 
         // 1. Setup Configuration Repository early to load AppSettings
-        var tempRepo = new JsonConfigRepository(baseDir);
+        var bootstrapVault = pathsService.IsPortable
+            ? (ISecretsVaultService)new PortableAesSecretsVaultService(pathsService.VaultKeyFilePath)
+            : new WindowsDpapiSecretsVaultService();
+        var tempRepo = new JsonConfigRepository(baseDir, bootstrapVault);
         AppSettings appSettings;
         try
         {
@@ -159,12 +165,13 @@ public partial class App : Application
             typeof(App).Assembly.GetName().Version, appSettings.LogLevel, appSettings.LogRetentionDays, appSettings.LogSplitThresholdMb, string.Join(" ", e.Args));
 
         // 3. Single-Instance Enforcement
-        _singleInstanceService = new SingleInstanceService();
+        string? scope = pathsService.IsPortable ? SingleInstanceService.ComputeScopeHash(pathsService.BaseDataDirectory) : null;
+        _singleInstanceService = new SingleInstanceService(scope);
         if (!_singleInstanceService.TryAcquire())
         {
-            Log.Information("Secondary instance detected. Signaling primary instance and shutting down.");
+            Log.Information("Secondary instance detected (Scope: {Scope}). Signaling primary instance and shutting down.", scope ?? "default");
             NativeMethods.AllowSetForegroundWindow(NativeMethods.ASFW_ANY);
-            await SingleInstanceService.SignalPrimaryInstanceAsync(string.Join(" ", e.Args));
+            await SingleInstanceService.SignalPrimaryInstanceAsync(string.Join(" ", e.Args), scope);
             Shutdown();
             return;
         }
@@ -174,8 +181,69 @@ public partial class App : Application
         // 4. Initialize Theme Manager with user's theme preference
         ThemeManager.Initialize(appSettings.Theme);
 
+        // 4.0 First-Run Setup (Portable edition or fresh unconfigured install)
+        bool isFirstRun = !appSettings.HasCompletedInitialSetup && 
+                          (!File.Exists(pathsService.AppSettingsFilePath) || !File.Exists(pathsService.ConfigFilePath));
+
+        if (isFirstRun && !e.Args.Contains("--minimized", StringComparer.OrdinalIgnoreCase))
+        {
+            var setupWindow = new FirstRunSetupWindow(appSettings.Theme, initialStarterPack: true);
+            if (setupWindow.ShowDialog() == true)
+            {
+                appSettings.Theme = setupWindow.SelectedTheme;
+                appSettings.HasCompletedInitialSetup = true;
+                ThemeManager.ApplyPreference(appSettings.Theme);
+                await tempRepo.InitializeSetupAsync(appSettings.Theme, setupWindow.InstallStarterPack);
+            }
+            else
+            {
+                appSettings.HasCompletedInitialSetup = true;
+                await tempRepo.SaveSettingsAsync(appSettings);
+            }
+        }
+
+        // 4.1 Reconcile any orphaned registry entries from previous portable sessions or missing drives
+        ExplorerContextMenuHelper.ReconcileOrphanedRegistrations();
+
+        // 4.2 Proactively listen for USB drive ejection/removal to scrub host registry
+        System.Windows.Interop.ComponentDispatcher.ThreadFilterMessage += (ref System.Windows.Interop.MSG msg, ref bool handled) =>
+        {
+            const int WM_DEVICECHANGE = 0x0219;
+            const int DBT_DEVICEREMOVECOMPLETE = 0x8004;
+            if (msg.message == WM_DEVICECHANGE && (int)msg.wParam == DBT_DEVICEREMOVECOMPLETE)
+            {
+                ExplorerContextMenuHelper.ReconcileOrphanedRegistrations();
+            }
+        };
+
+        // 4.3 Listen for process exit & session ending to scrub host integrations if enabled
+        AppDomain.CurrentDomain.ProcessExit += (s, ev) =>
+        {
+            try
+            {
+                if (appSettings.CleanupHostIntegrationOnExit || pathsService.IsPortable)
+                {
+                    ExplorerContextMenuHelper.UnregisterPortableIntegrations();
+                }
+            }
+            catch { }
+        };
+
+        Microsoft.Win32.SystemEvents.SessionEnding += (s, ev) =>
+        {
+            try
+            {
+                if (appSettings.CleanupHostIntegrationOnExit || pathsService.IsPortable)
+                {
+                    ExplorerContextMenuHelper.UnregisterPortableIntegrations();
+                }
+            }
+            catch { }
+        };
+
         // 5. Setup Dependency Injection
         var services = new ServiceCollection();
+        services.AddSingleton<IAppPathsService>(pathsService);
         _logManagerService = new LogManagerService(_levelSwitch, logDir);
         services.AddSingleton<ILogManagerService>(_logManagerService);
 
@@ -302,7 +370,7 @@ public partial class App : Application
             },
             exitAction: () => Dispatcher.Invoke(ExitApplication),
             openAppSettingsAction: () => Dispatcher.Invoke(async () => await ShowApplicationSettingsWindowAsync()),
-            commandPaletteHotkeyText: appSettings.CommandPaletteHotkey?.DisplayText ?? "Alt+Space",
+            commandPaletteHotkeyText: appSettings.CommandPaletteHotkey?.DisplayText ?? "Ctrl+Shift+Space",
             openSettingsHotkeyText: appSettings.OpenSettingsHotkey?.DisplayText ?? "Ctrl+Alt+T",
             checkForUpdatesAction: () => Dispatcher.Invoke(async () => await PerformManualUpdateCheckAsync()),
             openCheatSheetAction: () => Dispatcher.Invoke(() => OpenCheatSheetHud()),
@@ -412,8 +480,16 @@ public partial class App : Application
 
     private void ConfigureServices(IServiceCollection services)
     {
-        services.AddSingleton<ISecretsVaultService, WindowsDpapiSecretsVaultService>();
-        services.AddSingleton<IConfigRepository>(sp => new JsonConfigRepository(null, sp.GetRequiredService<ISecretsVaultService>()));
+        services.AddSingleton<ISecretsVaultService>(sp =>
+        {
+            var paths = sp.GetRequiredService<IAppPathsService>();
+            if (paths.IsPortable)
+            {
+                return new PortableAesSecretsVaultService(paths.VaultKeyFilePath);
+            }
+            return new WindowsDpapiSecretsVaultService();
+        });
+        services.AddSingleton<IConfigRepository>(sp => new JsonConfigRepository(sp.GetRequiredService<IAppPathsService>().BaseDataDirectory, sp.GetRequiredService<ISecretsVaultService>()));
         services.AddSingleton<IPromptDialogService, InteractivePromptDialog>();
         services.AddSingleton<IConfirmationDialogService, ConfirmationDialog>();
         services.AddSingleton<ISnippetService, Win32SnippetService>();
@@ -760,9 +836,10 @@ public partial class App : Application
         if (_repository == null || _logManagerService == null) return;
 
         var updateService = _serviceProvider?.GetService<IUpdateService>();
+        var pathsService = _serviceProvider?.GetService<IAppPathsService>();
         var appSettingsWin = initialCategory.HasValue
-            ? new ApplicationSettingsWindow(_repository, _logManagerService, updateService, initialCategory.Value)
-            : new ApplicationSettingsWindow(_repository, _logManagerService, updateService);
+            ? new ApplicationSettingsWindow(_repository, _logManagerService, updateService, initialCategory.Value, pathsService)
+            : new ApplicationSettingsWindow(_repository, _logManagerService, updateService, pathsService: pathsService);
         appSettingsWin.ShowDialog();
 
         await ReloadApplicationSettingsAndHotkeysAsync();
@@ -887,6 +964,16 @@ public partial class App : Application
             _settingsWindow.Close();
         }
 
+        try
+        {
+            var paths = _serviceProvider?.GetService<IAppPathsService>();
+            if (paths?.IsPortable == true)
+            {
+                ExplorerContextMenuHelper.UnregisterPortableIntegrations();
+            }
+        }
+        catch { }
+
         _trayIconService?.Dispose();
         _shortcutListener?.Dispose();
         _singleInstanceService?.Dispose();
@@ -898,6 +985,16 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         Log.Information("TriggerPoint exiting with code {ExitCode}.", e.ApplicationExitCode);
+        try
+        {
+            var paths = _serviceProvider?.GetService<IAppPathsService>();
+            if (paths?.IsPortable == true)
+            {
+                ExplorerContextMenuHelper.UnregisterPortableIntegrations();
+            }
+        }
+        catch { }
+
         _trayIconService?.Dispose();
         _shortcutListener?.Dispose();
         _singleInstanceService?.Dispose();

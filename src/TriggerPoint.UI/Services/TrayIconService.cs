@@ -42,7 +42,7 @@ public class TrayIconService : IDisposable
         Action reloadConfigAction,
         Action exitAction,
         Action? openAppSettingsAction = null,
-        string? commandPaletteHotkeyText = "Alt+Space",
+        string? commandPaletteHotkeyText = "Ctrl+Shift+Space",
         string? openSettingsHotkeyText = "Ctrl+Alt+T",
         Action? checkForUpdatesAction = null,
         Action? openCheatSheetAction = null,

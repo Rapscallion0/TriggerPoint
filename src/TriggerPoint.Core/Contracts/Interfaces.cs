@@ -19,6 +19,7 @@ public interface IConfigRepository
     Task SaveAsync(IEnumerable<TriggerItem> items);
     Task<AppSettings> LoadSettingsAsync();
     Task SaveSettingsAsync(AppSettings settings);
+    Task InitializeSetupAsync(ThemePreference theme, bool installStarterPack);
     Task ExportPackageAsync(string filePath, ConfigurationBackupPackage package);
     Task<ConfigurationBackupPackage> ReadPackageAsync(string filePath);
     Task<IReadOnlyList<RecycleBinItem>> LoadRecycleBinAsync();

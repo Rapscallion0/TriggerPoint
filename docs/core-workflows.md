@@ -164,7 +164,7 @@ Prompts pause snippet expansion to collect user input via a sleek modal dialog:
 
 ## 4. Spotlight Command Palette & Quick Calculator
 
-Summon the floating Spotlight Command Palette from any application by pressing <kbd>Alt</kbd> + <kbd>Space</kbd> (or your custom shortcut).
+Summon the floating Spotlight Command Palette from any application by pressing <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd> (or your custom shortcut).
 
 ![Spotlight Command Palette and Calculator](images/workflow-command-palette-calculator.png)
 <!-- SCREENSHOT REQUIRED: Spotlight Command Palette floating in the center of the screen. The search bar has "=250 * 1.0825" typed into it. Directly below, an emerald-themed math calculation result card shows "Result: 270.625" with a small clipboard icon and hint "Press Enter to copy to clipboard". Below the card, recent search matches are listed. -->

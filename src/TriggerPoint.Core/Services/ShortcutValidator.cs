@@ -61,6 +61,17 @@ public static class ShortcutValidator
                 if (Directory.Exists(expanded))
                     return new ShortcutValidationResult(ShortcutValidationStatus.Valid, $"Target folder exists: {Path.GetFileName(expanded)}", expanded);
 
+                // Relative to application directory check
+                if (!Path.IsPathRooted(expanded))
+                {
+                    var baseAppRelative = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, expanded));
+                    if (File.Exists(baseAppRelative))
+                        return new ShortcutValidationResult(ShortcutValidationStatus.Valid, $"Target file exists: {Path.GetFileName(baseAppRelative)}", baseAppRelative);
+
+                    if (Directory.Exists(baseAppRelative))
+                        return new ShortcutValidationResult(ShortcutValidationStatus.Valid, $"Target folder exists: {Path.GetFileName(baseAppRelative)}", baseAppRelative);
+                }
+
                 return new ShortcutValidationResult(ShortcutValidationStatus.FileNotFound, $"Target file not found: {expanded}", expanded);
             }
             catch (Exception ex)

@@ -5,9 +5,9 @@
 
 [![.NET](https://img.shields.io/badge/.NET-9.0--windows-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011%20x64-0078D6?logo=windows)](https://microsoft.com/windows)
-[![Version](https://img.shields.io/badge/Version-v2.0.10-blue.svg)](https://github.com/Rapscallion0/TriggerPoint/releases/tag/v2.0.10)
+[![Version](https://img.shields.io/badge/Version-v2.1.0-blue.svg)](https://github.com/Rapscallion0/TriggerPoint/releases/tag/v2.1.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-391%20Passed%20(100%25)-brightgreen)]()
+[![Tests](https://img.shields.io/badge/Tests-526%20Passed%20(100%25)-brightgreen)]()
 
 ---
 
@@ -19,49 +19,26 @@ Designed to stay out of your way, TriggerPoint runs quietly in your system tray 
 
 ---
 
-## What's New in v2.0.10 🚀
+## What's New in v2.1.0 🚀
 
-- **Theme & Contrast Polish (Dark & Light Mode)**:
-  - Fixed dark mode text and icon contrast regressions: window-level foreground tokens and global system color mappings guarantee crisp, high-contrast text and icons across all dialogs, cards, navigation items, and headers.
-  - Hardened text and emoji icons (such as the `🌐` globe icon next to "Browser Tab & URL Rules") so they dynamically render in bright light-gray/white in Dark Mode (`#F2F3F5`) and dark slate in Light Mode (`#0F172A`).
-  - Added multi-size high-DPI scaling for taskbar and window icons in Light Theme.
-- **Recycle Bin Safety & UX Enhancements**:
-  - The **Save** button is now completely hidden (`Visibility.Collapsed`) rather than disabled when viewing recycled items or the Recycle Bin root overview, eliminating confusion and preventing accidental save attempts on discarded items.
-  - Disabled the Enabled/Disabled toggle on recycled items and suppressed the Test button to prevent executing or modifying actions residing in the bin.
-- **Tag Input & Context Rules Visual Synchronization**:
-  - Pill icons inside allowed and excluded process/URL tags now dynamically inherit the pill theme color (emerald for allowed, red for excluded).
-- **Expanded Test Suite**:
-  - Test suite expanded to 391 unit and UI tests (100% passing) with automated regression coverage for theme token resolution and button child typography.
-
----
-
-## What's New in v2.0.9 🚀
-
-- **Rich Text Snippets & Visual Formatting Ribbon**:
-  - Full support for Rich Text snippets with dual Plain Text and Rich Text editor switching.
-  - Visual formatting ribbon featuring font size presets (`9pt` to `18pt`), Bold (`Ctrl+B`), Italic (`Ctrl+I`), Underline (`Ctrl+U`), Strikethrough, Text Color with custom color picker flyout, Text Highlight, Bulleted Lists, Numbered Lists, Left/Center/Right alignments, and Clear Formatting (`Ctrl+\`).
-  - **Theme-Agnostic Export**: Unstyled text automatically exports as neutral `\cf0` in RTF and clean color-neutral HTML. Snippets pasted into destination apps (Word, Outlook, Google Docs, Slack, browsers) seamlessly match the receiving application's typography and dark/light themes without baking in TriggerPoint's dark mode colors.
-  - **Paper Canvas View**: Rich text editor defaults to a crisp `#FFFFFF` document paper canvas with `#1E293B` text and synchronized live expansion preview, with a single-click ribbon toggle to switch to theme background if desired.
-  - **Comprehensive Clear Formatting**: Cleanly removes all styles, flattens bulleted and numbered lists into regular paragraphs, and resets alignment to left across selected text or the entire document.
-- **Spotlight Quick Calculator in Command Palette**:
-  - Type math expressions directly into the Command Palette (e.g., `=2+2`, `50*1.12`, `(120+45)*0.8`, `sqrt(144)`, `15% of 240`) for instant evaluation.
-  - Press Enter to copy the calculated result directly to your clipboard or inject it into your active application.
-- **Shortcut Cheat Sheet HUD (`Ctrl+Shift+/`)**:
-  - Floating high-contrast shortcut HUD displays all registered shortcuts, leaders, and actions grouped by folder or context.
-  - Instant real-time filtering, keyboard navigation, and direct trigger execution.
-- **Chorded Hotkey Indicator HUD**:
-  - Clean floating indicator HUD when typing multi-key shortcut chords (e.g., `Ctrl+K, ...`), displaying pending chords and available secondary key options.
-- **Windows DPAPI Encrypted Secrets Vault**:
-  - Securely store sensitive tokens, passwords, and API keys within workflow variables with hardware-tied Windows Data Protection API (DPAPI) encryption at rest (`vault:dpapi:...`).
-- **In-App Update Checker & Seamless Auto-Updater**:
-  - Automatically queries the GitHub Releases API to detect new versions as soon as they are published.
-  - Configurable check frequency (`Startup`, `Daily`, `Weekly`, or `Manual`) in Application Settings.
-  - Update Available notification badge and interactive dialog featuring markdown release notes, version comparisons, release dates, and file sizes.
-  - One-click in-app download with real-time progress, SHA-256 installer checksum verification, and seamless background installation and relaunch.
-  - On-demand "Check for Updates..." directly from the System Tray context menu and Application Settings.
-  - User options to "Remind Me Later" or "Skip This Version" for flexible upgrade management.
-- **Floating HUD Transparency Polish**:
-  - Eliminated legacy DWM non-client frame artifacts (grey box borders) on transparent layered HUD windows, delivering pixel-perfect rounded corners and soft floating drop shadows across Windows 10 and Windows 11.
+- **Standalone Portable Edition**:
+  - Run TriggerPoint anywhere with zero installation, zero host registry pollution, and zero leftover files.
+  - Automatically activates Portable Mode when a local `data/` directory or `portable.dat` sentinel is detected (or via `--portable` / `--data-dir <path>` switches).
+  - **Hardware-Independent Secrets Vault**: Replaces machine-tied DPAPI with a self-contained AES-256-GCM encrypted vault (`vault.key`) stored in `data/`, allowing secrets and API keys to move securely across different PCs.
+  - **Host Integration Reconciliation**: Proactively monitors for USB drive removal and session logoff, automatically scrubbing temporary Explorer context menu registrations. Includes a standalone `cleanup-host-integration.bat` emergency utility for clean ejection.
+- **Interactive First-Run Onboarding & Live Theme Selection**:
+  - **Inno Setup Installer**: Added an **"Initial Preferences"** wizard page allowing users to select their preferred appearance theme (*System Default*, *Dark*, *Light*) and choose whether to install starter content before copying files. Upgrades automatically preserve existing user preferences.
+  - **Portable Edition**: Introduces a borderless **`FirstRunSetupWindow`** on clean launch featuring real-time live theme preview switching and starter content selection before launching background listeners.
+- **Starter Pack & Default Shortcuts Reorganization**:
+  - All sample items are now unified under a single top-level **`Starter Pack & Examples`** folder, allowing new users to explore capabilities or completely wipe all sample content with a single click.
+  - Includes showcase folders:
+    - **`Quick Launcher (Cursor Menu)`** (<kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>Space</kbd>): Windows Calculator (`1`), Notepad Scratchpad (`2`), and Google Web Search (`3`).
+    - **`Text Snippets & Templates`**: Dynamic Timestamp (<kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>D</kbd>), Git Conventional Commit with interactive prompt modal, Meeting Notes template, and Markdown Code Block clipboard wrapper.
+    - **`Automated Workflows`**: Morning Workspace Setup (sequential URL launch, delay, Notepad scratchpad, and toast alert) and Open Temp Directory.
+    - **`Keystroke Automation (Macro)`**: Duplicate Line Down (<kbd>Shift</kbd> + <kbd>Alt</kbd> + <kbd>Down</kbd>).
+  - **Ergonomic Default Hotkey**: Command Palette default global shortcut changed from `Alt+Space` to **`Ctrl+Shift+Space`**, eliminating collision with the standard Windows window menu.
+- **Test Suite Expansion**:
+  - Test suite expanded to **526 unit and UI integration tests** (100% passing) covering portable path routing, AES encryption roundtrips, initial setup persistence, and startup reconciliation.
 
 ---
 
@@ -88,7 +65,7 @@ Designed to stay out of your way, TriggerPoint runs quietly in your system tray 
 - Interactive hotkey recorder with live visual modifier combination builder.
 
 ### 🔍 Spotlight-Style Command Palette & Quick Calculator
-- Summon a fast, floating search palette anywhere with a single global shortcut (`Ctrl+Space` or custom hotkey).
+- Summon a fast, floating search palette anywhere with a single global shortcut (`Ctrl+Shift+Space` or custom hotkey).
 - Fuzzy search across all actions and folders with autocomplete suggestions, sort modes (Alphabetical, Frequency, or Custom Tree Order), and folder breadcrumb paths (`📁 Tools › Development › Edit Hosts`).
 - **Instant Math Calculator**: Type arithmetic, percentages, parentheses, powers, and scientific functions directly into the search bar (`=45*1.2`, `15% of $800`, `sqrt(256)`) for real-time calculation and instant clipboard copying.
 
@@ -124,8 +101,15 @@ Designed to stay out of your way, TriggerPoint runs quietly in your system tray 
 - **Interactive Prompts with Defaults**:
   - `{text:Label|Default}`, `{multiline:Label|Default}`, `{choice:Label|Opt1=v1*,Opt2=v2}`, `{number:Label|min,max|default}`, `{date_picker:Label|Format}` (e.g. `{date_picker:Due Date|MM/dd/yyyy}`)
 
-### 🔒 Hardware-Backed Secrets Vault (DPAPI)
-- Secure sensitive tokens, API keys, and passwords within workflow variables using Windows DPAPI encryption at rest.
+### 🔒 Dual Secrets Vault Architecture (Windows DPAPI & Portable AES-256)
+- Secure sensitive tokens, API keys, and passwords within workflow variables at rest.
+- **Installed Mode**: Leverages hardware-backed Windows Data Protection API (`vault:dpapi:...`).
+- **Portable Mode**: Uses a standalone, machine-independent AES-256-GCM encrypted vault (`vault.key`) stored in `data/`, allowing encrypted credentials to travel across PCs.
+
+### 💼 Standalone Portable Edition (Zero Host Pollution)
+- Run directly from thumb drives, network shares, or temporary folders without installation.
+- Self-contained storage for all configurations, actions, backups, and logs in the local `data/` directory.
+- Proactively cleans up Explorer context menu registrations upon USB ejection or session exit, and includes an emergency `cleanup-host-integration.bat` utility.
 
 ### 🎯 Window & Browser Target Crosshair Tool
 - Drag an interactive crosshair target onto any open application window to automatically extract its executable path and process name.
@@ -150,13 +134,19 @@ Designed to stay out of your way, TriggerPoint runs quietly in your system tray 
 ### 📦 Dual-Scope Single-File Installer
 - Packaged with Inno Setup into a clean `TriggerPointSetup.exe`.
 - Supports standard **Per-User** install (installs to `%LOCALAPPDATA%\Programs\TriggerPoint` without UAC prompts) or **All-Users** machine-wide installation.
+- Features an **Initial Preferences** setup page to select theme and starter content during installation.
 
 ---
 
 ## Quick Start
 
-### Installation
-Download the latest `TriggerPointSetup.exe` from the [Releases](https://github.com/Rapscallion0/TriggerPoint/releases) page and run the installer.
+### Installation & Deployment
+
+#### Option A: Inno Setup Installer (Recommended)
+Download `TriggerPointSetup.exe` from the [Releases](https://github.com/Rapscallion0/TriggerPoint/releases) page and run the installer. Choose between per-user (no admin rights needed) or machine-wide installation.
+
+#### Option B: Standalone Portable Edition (Zero Installation)
+Download `TriggerPoint-v{version}-Portable-win-x64.zip` from [Releases](https://github.com/Rapscallion0/TriggerPoint/releases), extract to any directory or USB drive, and launch `TriggerPoint.exe`.
 
 ### Building from Source
 
@@ -180,12 +170,14 @@ dotnet test TriggerPoint.slnx
 dotnet run --project src/TriggerPoint.UI
 ```
 
-#### Package Installer (`TriggerPointSetup.exe`)
-To package the app into a standalone installer:
+#### Package Installer & Portable Archive
+To package the app into both the Inno Setup installer and the standalone portable zip:
 ```powershell
-powershell -ExecutionPolicy Bypass -File build/package.ps1 -AppVersion "2.0.10"
+powershell -ExecutionPolicy Bypass -File build/package.ps1 -AppVersion "2.1.0"
 ```
-The output installer will be produced at `artifacts/TriggerPointSetup.exe`.
+The output artifacts will be produced in the `artifacts/` directory:
+- `artifacts/TriggerPointSetup.exe`
+- `artifacts/TriggerPoint-v2.1.0-Portable-win-x64.zip`
 
 ---
 
@@ -200,14 +192,15 @@ TriggerPoint/
 │   ├── TriggerPoint.Infrastructure/  # Win32 hooks, atomic JSON persistence, and Serilog logging
 │   └── TriggerPoint.UI/              # Modern WPF UI, Tray daemon, Hotkey recorder, and Themes
 ├── tests/
-│   └── TriggerPoint.Tests/           # Unit test suite (186 tests: xUnit, FluentAssertions)
+│   └── TriggerPoint.Tests/           # Unit & UI test suite (526 tests: xUnit, FluentAssertions)
 ├── installer/
 │   └── TriggerPoint.iss              # Inno Setup dual-scope installer specification
 ├── build/
 │   ├── package.ps1                   # Packaging & Inno Setup automation script
 │   └── set-version.ps1               # Centralized version synchronization script
 ├── artifacts/
-│   └── TriggerPointSetup.exe         # Compiled release installer
+│   ├── TriggerPointSetup.exe         # Compiled release installer
+│   └── TriggerPoint-*-Portable-*.zip # Standalone portable package
 └── assets/
     ├── TriggerPoint.ico              # Multi-resolution dark theme application icon
     └── TriggerPoint.Light.ico        # Multi-resolution light theme application icon

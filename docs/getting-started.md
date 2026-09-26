@@ -36,7 +36,13 @@ TriggerPoint is distributed as a single-file Inno Setup installer: `TriggerPoint
 4. On the **Additional Tasks** screen:
    - **Create a desktop shortcut**: Places a desktop launcher for quick access.
    - **Start TriggerPoint when Windows starts**: Registers a registry Run key in `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` so TriggerPoint is armed immediately upon login.
-5. Click **Install**, then click **Finish** to launch TriggerPoint immediately.
+   - **Windows Explorer Integration**: Adds right-click context menu options to launch files or folders directly with TriggerPoint.
+
+5. On the **Initial Preferences** screen:
+   - **Appearance Theme**: Select **System Default** (recommended), **Dark Theme**, or **Light Theme**.
+   - **Starter Content**: Check or uncheck **Install Starter Pack & Examples** depending on whether you want sample shortcuts, snippets, and workflows or a completely blank canvas.
+
+6. Click **Install**, then click **Finish** to launch TriggerPoint immediately.
 
 ### 2. Silent & Automated Enterprise Deployment
 For unattended setup or script deployment via Microsoft Intune, SCCM, or PowerShell, `TriggerPointSetup.exe` supports standard Inno Setup command-line switches:
@@ -48,6 +54,21 @@ TriggerPointSetup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER
 # Unattended machine-wide install for all users (elevated prompt)
 TriggerPointSetup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ALLUSERS
 ```
+
+### 3. Portable Mode Deployment (Zero-Pollution & USB Drives)
+For users who prefer running TriggerPoint without installation, or directly from USB flash drives, network shares, and cloud-synced folders:
+1. Download `TriggerPoint-v{version}-Portable-win-x64.zip` from [GitHub Releases](https://github.com/Rapscallion0/TriggerPoint/releases).
+2. Extract the archive into any folder or external drive (e.g., `E:\TriggerPoint\`).
+3. Launch `TriggerPoint.exe`.
+4. **First-Run Welcome & Setup**:
+   - On first launch, TriggerPoint presents a streamlined Welcome dialog asking you to choose your **Appearance Theme** (System, Dark, or Light with real-time live preview) and whether to **Install Starter Pack & Examples**.
+   - Clicking **Get Started** writes your preferences directly into the local `data/` folder.
+5. TriggerPoint detects the local `data\` folder (or `portable.dat` sentinel) and immediately activates **Portable Mode**:
+   - **Self-Contained Storage**: All settings (`appsettings.json`), actions (`triggerpoint.json`), backups, logs, and cryptographic vault keys are stored entirely within the local `data\` directory.
+   - **Zero Host Pollution**: Nothing is written to `%APPDATA%` or host system folders.
+   - **Machine-Independent Security**: A portable AES-256-GCM encrypted vault (`vault.key`) protects stored credentials across different PCs without relying on machine-tied DPAPI keys.
+   - **Automated Host Cleanup**: Temporary Windows Explorer context menu registrations are automatically scrubbed on exit or drive removal. A standalone `cleanup-host-integration.bat` utility is also included for emergency manual cleanup.
+   - **Seamless In-Place Updates**: The built-in updater downloads portable packages, stages files, and performs an atomic background binary swap without ever touching your `data\` directory.
 
 ---
 
@@ -71,7 +92,7 @@ The reticle icon changes color to provide immediate ambient feedback:
 Right-click the tray icon at any time to access quick controls:
 - **Open Settings**: Opens the primary configuration and workflow editor window.
 - **Check for Updates...**: Queries GitHub Releases for new updates and opens the update dialog.
-- **Command Palette (`Alt+Space`)**: Immediately summons the floating search palette.
+- **Command Palette (`Ctrl+Shift+Space`)**: Immediately summons the floating search palette.
 - **Shortcut Cheat Sheet (`Ctrl+Shift+/`)**: Opens the floating hotkey HUD.
 - **Snooze Global Hotkeys**: Toggles listener pause on/off. Useful when running full-screen games or applications with overlapping shortcut requirements.
 - **Reload Configuration**: Re-reads configuration files from disk without restarting the application.
@@ -88,7 +109,7 @@ TriggerPoint is pre-configured with three ergonomic global shortcuts that work f
 
 | Shortcut Key | Action | Description |
 | :--- | :--- | :--- |
-| <kbd>Alt</kbd> + <kbd>Space</kbd> | **Spotlight Command Palette** | Opens a floating search bar to launch any action, execute folder items, or evaluate math expressions. |
+| <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd> | **Spotlight Command Palette** | Opens a floating search bar to launch any action, execute folder items, or evaluate math expressions. |
 | <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>/</kbd> | **Shortcut Cheat Sheet HUD** | Displays a non-intrusive floating HUD listing all your configured hotkeys and folder structures. |
 | <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>T</kbd> | **Open Settings Window** | Brings the main TriggerPoint management and workflow window to the front. |
 
@@ -98,20 +119,18 @@ TriggerPoint is pre-configured with three ergonomic global shortcuts that work f
 
 ## Initial Default Configuration
 
-Upon first launch, TriggerPoint checks `%LOCALAPPDATA%\TriggerPoint\config\triggers.json`. If no file exists, it automatically seeds a starter collection of sample actions and folders so you can immediately explore functionality:
+Upon first launch, TriggerPoint checks `%LOCALAPPDATA%\TriggerPoint\config\triggers.json`. If no file exists, it automatically seeds a starter collection of sample actions and folders organized under a single top-level folder so you can immediately explore functionality or easily delete the entire pack in one click:
 
 ![Default Loaded Configuration](images/getting-started-initial-settings.png)
-<!-- SCREENSHOT REQUIRED: Main Settings Window on first launch displaying the default seeded sample structure in the sidebar tree: "General Tools" folder (containing Notepad, Calculator, and Date Snippet actions) and "Developer Tools" folder (containing Command Prompt and Git Bash actions). -->
+<!-- SCREENSHOT REQUIRED: Main Settings Window on first launch displaying the default seeded sample structure in the sidebar tree: "Starter Pack & Examples" folder containing subfolders for Quick Launcher (Cursor Menu), Text Snippets & Templates, Automated Workflows, and Keystroke Automation (Macro). -->
 
-- **General Tools**:
-  - `Notepad` (<kbd>Win</kbd> + <kbd>N</kbd>): Launches the Windows text editor.
-  - `Date Snippet` (<kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>D</kbd>): Expands into today's formatted date stamp: `{date:yyyy-MM-dd}`.
-  - `Calculator` (<kbd>Win</kbd> + <kbd>C</kbd>): Opens the Windows calculator.
-- **Developer Tools**:
-  - `Command Prompt`: Launches `cmd.exe` in your user home directory.
-  - `PowerShell`: Launches an interactive PowerShell console.
+- **Starter Pack & Examples**:
+  - **Quick Launcher (Cursor Menu)** (<kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>Space</kbd>): Floating radial menu at your mouse cursor containing Windows Calculator (`1`), Notepad Scratchpad (`2`), and Search Google (`3`).
+  - **Text Snippets & Templates**: Rich snippets demonstrating dynamic tokens like Current Timestamp (<kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>D</kbd>), Git Conventional Commit with interactive prompts, Meeting Notes Template, and Markdown Code Block clipboard wrapper.
+  - **Automated Workflows**: Multi-step sequences like Morning Workspace Setup (launching websites, delayed Notepad launch, and system notification) and Open Temp Directory.
+  - **Keystroke Automation (Macro)**: Sequential keystroke playback for duplicating lines down.
 
-You can modify, reorganize, or delete these sample items at any time.
+You can modify, reorganize, or delete these sample items at any time. If you prefer a blank canvas, simply delete the top-level `Starter Pack & Examples` folder.
 
 ---
 

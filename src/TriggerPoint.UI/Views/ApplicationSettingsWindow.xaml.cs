@@ -25,6 +25,7 @@ public partial class ApplicationSettingsWindow : Window
     private readonly IConfigRepository _repository;
     private readonly ILogManagerService _logManagerService;
     private readonly IUpdateService _updateService;
+    private readonly IAppPathsService? _pathsService;
     private AppSettings _currentSettings = new();
     private List<TriggerItem> _allItems = [];
     private bool _savedExplorerMenuEnabled;
@@ -43,12 +44,18 @@ public partial class ApplicationSettingsWindow : Window
 
     public bool TreeDataChanged { get; private set; }
 
-    public ApplicationSettingsWindow(IConfigRepository repository, ILogManagerService logManagerService, IUpdateService? updateService = null, SettingsCategory initialCategory = SettingsCategory.Appearance)
+    public ApplicationSettingsWindow(
+        IConfigRepository repository,
+        ILogManagerService logManagerService,
+        IUpdateService? updateService = null,
+        SettingsCategory initialCategory = SettingsCategory.Appearance,
+        IAppPathsService? pathsService = null)
     {
         InitializeComponent();
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _logManagerService = logManagerService ?? throw new ArgumentNullException(nameof(logManagerService));
-        _updateService = updateService ?? new GitHubUpdateService(repository);
+        _pathsService = pathsService;
+        _updateService = updateService ?? new GitHubUpdateService(repository, pathsService);
         _selectedCategory = initialCategory;
 
         Loaded += async (s, e) =>
@@ -61,6 +68,15 @@ public partial class ApplicationSettingsWindow : Window
         {
             ThemeManager.ApplyWindowIcons(this);
         };
+    }
+
+    public ApplicationSettingsWindow(
+        IConfigRepository repository,
+        ILogManagerService logManagerService,
+        IUpdateService? updateService,
+        IAppPathsService? pathsService)
+        : this(repository, logManagerService, updateService, SettingsCategory.Appearance, pathsService)
+    {
     }
 
     protected override void OnSourceInitialized(EventArgs e)
@@ -250,7 +266,35 @@ public partial class ApplicationSettingsWindow : Window
             RecycleRetentionDaysInput.Text = neverDelete ? "0" : _currentSettings.RecycleBinRetentionDays.ToString();
             await RefreshRecycleBinStatusAsync();
 
-            UpdateBackupCardUI();
+            // Populate Portable mode specifics
+            if (_pathsService?.IsPortable == true)
+            {
+                PortableBadge.Visibility = Visibility.Visible;
+                PortableStartupAdvisoryBorder.Visibility = Visibility.Visible;
+                CleanupHostIntegrationOnExitCheck.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                PortableBadge.Visibility = Visibility.Collapsed;
+                PortableStartupAdvisoryBorder.Visibility = Visibility.Collapsed;
+                CleanupHostIntegrationOnExitCheck.Visibility = Visibility.Collapsed;
+            }
+            CleanupHostIntegrationOnExitCheck.IsChecked = _currentSettings.CleanupHostIntegrationOnExit;
+
+            if (_pathsService != null)
+            {
+                DataDirectoryPathText.Text = _pathsService.BaseDataDirectory;
+                if (_pathsService.IsPortable)
+                {
+                    StorageModeTitleText.Text = "Storage Mode: Portable";
+                    DataStorageModeBadgeText.Text = "Portable (data/)";
+                }
+                else
+                {
+                    StorageModeTitleText.Text = "Storage Mode: Standard";
+                    DataStorageModeBadgeText.Text = "Installed (%APPDATA%)";
+                }
+            }
 
             // Populate Update Settings
             PopulateUpdateSettingsUI();
@@ -465,9 +509,10 @@ public partial class ApplicationSettingsWindow : Window
 
             bool enableExplorerMenu = EnableExplorerMenuCheck.IsChecked == true;
             _currentSettings.EnableExplorerContextMenu = enableExplorerMenu;
+            _currentSettings.CleanupHostIntegrationOnExit = CleanupHostIntegrationOnExitCheck.IsChecked == true;
             if (enableExplorerMenu)
             {
-                ExplorerContextMenuHelper.Register();
+                ExplorerContextMenuHelper.Register(isPortable: _pathsService?.IsPortable ?? false);
             }
             else
             {
@@ -557,6 +602,24 @@ public partial class ApplicationSettingsWindow : Window
     private void OpenLogsFolderBtn_Click(object sender, RoutedEventArgs e)
     {
         _logManagerService.OpenLogDirectory();
+    }
+
+    private void OpenDataFolderBtn_Click(object sender, RoutedEventArgs e)
+    {
+        var path = _pathsService?.BaseDataDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TriggerPoint");
+        try
+        {
+            Directory.CreateDirectory(path);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = path,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.Warning(ex, "Failed to open data folder in explorer.");
+        }
     }
 
     private void ExportBackupBtn_Click(object sender, RoutedEventArgs e)
@@ -966,7 +1029,7 @@ public partial class ApplicationSettingsWindow : Window
             {
                 App.LatestAvailableUpdate = result;
                 SettingsStatusText.Text = $"Update v{result.LatestUpdate?.Version} available!";
-                var updateDlg = new UpdateAvailableDialog(result, _updateService, _repository)
+                var updateDlg = new UpdateAvailableDialog(result, _updateService, _repository, _pathsService)
                 {
                     Owner = this
                 };
@@ -989,7 +1052,7 @@ public partial class ApplicationSettingsWindow : Window
 
                 if (viewNotes && result.LatestUpdate != null)
                 {
-                    var viewDlg = new UpdateAvailableDialog(result, _updateService, _repository, isViewOnly: true)
+                    var viewDlg = new UpdateAvailableDialog(result, _updateService, _repository, _pathsService, isViewOnly: true)
                     {
                         Owner = this
                     };
@@ -1020,7 +1083,7 @@ public partial class ApplicationSettingsWindow : Window
     {
         if (App.LatestAvailableUpdate?.LatestUpdate != null)
         {
-            var dlg = new UpdateAvailableDialog(App.LatestAvailableUpdate, _updateService, _repository, isViewOnly: true)
+            var dlg = new UpdateAvailableDialog(App.LatestAvailableUpdate, _updateService, _repository, _pathsService, isViewOnly: true)
             {
                 Owner = this
             };
@@ -1043,7 +1106,7 @@ public partial class ApplicationSettingsWindow : Window
 
             if (result.LatestUpdate != null)
             {
-                var dlg = new UpdateAvailableDialog(result, _updateService, _repository, isViewOnly: true)
+                var dlg = new UpdateAvailableDialog(result, _updateService, _repository, _pathsService, isViewOnly: true)
                 {
                     Owner = this
                 };
@@ -1082,7 +1145,7 @@ public partial class ApplicationSettingsWindow : Window
     {
         if (App.LatestAvailableUpdate?.IsUpdateAvailable == true && App.LatestAvailableUpdate.LatestUpdate != null)
         {
-            var updateDlg = new UpdateAvailableDialog(App.LatestAvailableUpdate, _updateService, _repository)
+            var updateDlg = new UpdateAvailableDialog(App.LatestAvailableUpdate, _updateService, _repository, _pathsService)
             {
                 Owner = this
             };

@@ -201,7 +201,44 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-# 5. Output Verification
+# 5. Build Standalone Portable Archive (.zip)
+Write-Host "`n[*] Building Standalone Portable Archive (.zip)..." -ForegroundColor Cyan
+$portableZipName = "TriggerPoint-v$AppVersion-Portable-win-x64.zip"
+$portableZipPath = Join-Path $ArtifactsDir $portableZipName
+$portableStagingDir = Join-Path $ArtifactsDir "portable-staging"
+
+if (Test-Path $portableStagingDir) {
+    Remove-Item -Path $portableStagingDir -Recurse -Force
+}
+New-Item -ItemType Directory -Path $portableStagingDir -Force | Out-Null
+
+# Copy published binaries to portable staging directory
+Copy-Item -Path "$PublishDir\*" -Destination $portableStagingDir -Recurse -Force
+
+# Create portable sentinel file and data directory
+$portableDat = Join-Path $portableStagingDir "portable.dat"
+Set-Content -Path $portableDat -Value "TriggerPoint Portable Mode Indicator" -Encoding UTF8
+
+$portableDataDir = Join-Path $portableStagingDir "data"
+New-Item -ItemType Directory -Path $portableDataDir -Force | Out-Null
+Set-Content -Path (Join-Path $portableDataDir ".gitkeep") -Value "" -Encoding UTF8
+
+# Copy cleanup script if present
+$cleanupBat = Join-Path $rootDir "cleanup-host-integration.bat"
+if (Test-Path $cleanupBat) {
+    Copy-Item $cleanupBat -Destination $portableStagingDir -Force
+}
+
+# Create zip archive
+if (Test-Path $portableZipPath) {
+    Remove-Item $portableZipPath -Force
+}
+Compress-Archive -Path "$portableStagingDir\*" -DestinationPath $portableZipPath -CompressionLevel Optimal
+
+# Clean up staging directory
+Remove-Item -Path $portableStagingDir -Recurse -Force
+
+# 6. Output Verification
 $setupExe = Join-Path $ArtifactsDir "TriggerPointSetup.exe"
 if (Test-Path $setupExe) {
     $item = Get-Item $setupExe
@@ -211,9 +248,20 @@ if (Test-Path $setupExe) {
     Write-Host "`n============================================================" -ForegroundColor Green
     Write-Host "  TriggerPoint Setup Package Created Successfully!" -ForegroundColor Green
     Write-Host "============================================================" -ForegroundColor Green
-    Write-Host "  Output File : $setupExe" -ForegroundColor White
+    Write-Host "  Installer   : $setupExe" -ForegroundColor White
     Write-Host "  File Size   : $sizeMb MB ($($item.Length) bytes)" -ForegroundColor White
     Write-Host "  SHA256 Hash : $hash" -ForegroundColor DarkGray
+
+    if (Test-Path $portableZipPath) {
+        $zipItem = Get-Item $portableZipPath
+        $zipMb = [math]::Round($zipItem.Length / 1MB, 2)
+        $zipHash = (Get-FileHash $portableZipPath -Algorithm SHA256).Hash
+        Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
+        Write-Host "  Portable ZIP: $portableZipPath" -ForegroundColor White
+        Write-Host "  File Size   : $zipMb MB ($($zipItem.Length) bytes)" -ForegroundColor White
+        Write-Host "  SHA256 Hash : $zipHash" -ForegroundColor DarkGray
+    }
+
     Write-Host "============================================================`n" -ForegroundColor Green
 } else {
     Write-Error "[!] Expected installer file not found at: $setupExe"

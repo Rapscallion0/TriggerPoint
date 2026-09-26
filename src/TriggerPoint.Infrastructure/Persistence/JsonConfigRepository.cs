@@ -202,6 +202,21 @@ public class JsonConfigRepository : IConfigRepository
                             DecryptSecrets(items);
                             return items;
                         }
+
+                        // If file contained a valid empty list (count == 0), check if initial setup was completed
+                        if (items != null && items.Count == 0 && File.Exists(_appSettingsFilePath))
+                        {
+                            try
+                            {
+                                using var sStream = File.OpenRead(_appSettingsFilePath);
+                                var s = await JsonSerializer.DeserializeAsync<AppSettings>(sStream, JsonOptions).ConfigureAwait(false);
+                                if (s?.HasCompletedInitialSetup == true)
+                                {
+                                    return items;
+                                }
+                            }
+                            catch { }
+                        }
                     }
                 }
                 catch (Exception)
@@ -224,12 +239,72 @@ public class JsonConfigRepository : IConfigRepository
                 {
                     return recovered;
                 }
+
+                if (File.Exists(_appSettingsFilePath))
+                {
+                    try
+                    {
+                        using var sStream = File.OpenRead(_appSettingsFilePath);
+                        var s = await JsonSerializer.DeserializeAsync<AppSettings>(sStream, JsonOptions).ConfigureAwait(false);
+                        if (s?.HasCompletedInitialSetup == true)
+                        {
+                            var emptyList = new List<TriggerItem>();
+                            await SaveInternalAsync(emptyList, isGeneratingDefaults: true).ConfigureAwait(false);
+                            return emptyList;
+                        }
+                    }
+                    catch { }
+                }
             }
 
             // Only if primary doesn't exist and no backups exist, generate defaults
             var defaults = CreateDefaultItems();
             await SaveInternalAsync(defaults, isGeneratingDefaults: true).ConfigureAwait(false);
             return defaults;
+        }
+        finally
+        {
+            _fileLock.Release();
+        }
+    }
+
+    public async Task InitializeSetupAsync(ThemePreference theme, bool installStarterPack)
+    {
+        await _fileLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            AppSettings settings;
+            if (File.Exists(_appSettingsFilePath))
+            {
+                try
+                {
+                    using var sStream = File.OpenRead(_appSettingsFilePath);
+                    settings = await JsonSerializer.DeserializeAsync<AppSettings>(sStream, JsonOptions).ConfigureAwait(false) ?? new AppSettings();
+                }
+                catch
+                {
+                    settings = new AppSettings();
+                }
+            }
+            else
+            {
+                settings = new AppSettings();
+            }
+
+            settings.Theme = theme;
+            settings.HasCompletedInitialSetup = true;
+            await SaveSettingsInternalAsync(settings).ConfigureAwait(false);
+
+            if (installStarterPack)
+            {
+                var defaults = CreateDefaultItems();
+                await SaveInternalAsync(defaults, isGeneratingDefaults: true).ConfigureAwait(false);
+            }
+            else
+            {
+                var empty = new List<TriggerItem>();
+                await SaveInternalAsync(empty, isGeneratingDefaults: true).ConfigureAwait(false);
+            }
         }
         finally
         {
@@ -371,108 +446,273 @@ public class JsonConfigRepository : IConfigRepository
 
     private static List<TriggerItem> CreateDefaultItems()
     {
-        var generalFolderId = Guid.NewGuid();
-        var devFolderId = Guid.NewGuid();
+        var starterPackId = Guid.NewGuid();
+        var quickLauncherId = Guid.NewGuid();
+        var snippetsFolderId = Guid.NewGuid();
+        var workflowsFolderId = Guid.NewGuid();
+        var macrosFolderId = Guid.NewGuid();
 
         return
         [
+            // Root Starter Folder
             new TriggerItem
             {
-                Id = generalFolderId,
-                Name = "General Tools",
+                Id = starterPackId,
+                Name = "Starter Pack & Examples",
+                Description = "Explore TriggerPoint features. Keep, customize, or delete this folder anytime.",
                 ActionType = ActionType.Folder,
+                PresentationMode = PresentationMode.Direct,
                 OrderIndex = 0
             },
+
+            // Subfolder 1: Quick Launcher (Cursor Menu)
             new TriggerItem
             {
-                Id = Guid.NewGuid(),
-                ParentId = generalFolderId,
-                Name = "Command Palette",
-                Description = "Universal fuzzy search launcher",
-                Hotkey = new ShortcutBinding(ModifierKeys.Control | ModifierKeys.Shift, 80, "P"), // Ctrl + Shift + P
-                PresentationMode = PresentationMode.CommandPalette,
-                ActionType = ActionType.Shell,
-                OrderIndex = 0
-            },
-            new TriggerItem
-            {
-                Id = Guid.NewGuid(),
-                ParentId = generalFolderId,
-                Name = "Cursor Context Menu",
-                Description = "Lightweight popup menu at mouse pointer",
-                Hotkey = new ShortcutBinding(ModifierKeys.Control | ModifierKeys.Alt, 32, "Space"), // Ctrl + Alt + Space
+                Id = quickLauncherId,
+                ParentId = starterPackId,
+                Name = "Quick Launcher (Cursor Menu)",
+                Description = "Floating context menu summoned directly at mouse cursor",
+                ActionType = ActionType.Folder,
                 PresentationMode = PresentationMode.CursorMenu,
-                ActionType = ActionType.Folder,
-                OrderIndex = 1
+                Hotkey = new ShortcutBinding(ModifierKeys.Control | ModifierKeys.Alt, 32, "Space"), // Ctrl + Alt + Space
+                OrderIndex = 0
             },
             new TriggerItem
             {
                 Id = Guid.NewGuid(),
-                ParentId = generalFolderId,
-                Name = "Calculator",
-                Description = "Windows Calculator",
+                ParentId = quickLauncherId,
+                Name = "Windows Calculator",
+                Description = "Launch native Windows calculator",
                 AcceleratorKey = "1",
-                Hotkey = new ShortcutBinding(ModifierKeys.Control | ModifierKeys.Alt, 67, "C"), // Ctrl + Alt + C
                 PresentationMode = PresentationMode.Direct,
                 ActionType = ActionType.Shell,
                 Payload = new ActionPayload
                 {
                     Command = "calc.exe"
                 },
-                OrderIndex = 2
+                OrderIndex = 0
             },
             new TriggerItem
             {
                 Id = Guid.NewGuid(),
-                ParentId = generalFolderId,
-                Name = "Timestamp Stamp",
-                Description = "Inserts current date and time",
+                ParentId = quickLauncherId,
+                Name = "Notepad Scratchpad",
+                Description = "Quick plain-text notes scratchpad",
                 AcceleratorKey = "2",
                 PresentationMode = PresentationMode.Direct,
-                ActionType = ActionType.Snippet,
+                ActionType = ActionType.Shell,
                 Payload = new ActionPayload
                 {
-                    SnippetTemplate = "[{datetime}] {cursor}"
+                    Command = "notepad.exe"
                 },
-                OrderIndex = 3
-            },
-            new TriggerItem
-            {
-                Id = devFolderId,
-                Name = "Developer Tools",
-                ActionType = ActionType.Folder,
                 OrderIndex = 1
             },
             new TriggerItem
             {
                 Id = Guid.NewGuid(),
-                ParentId = devFolderId,
-                Name = "Git Commit Message",
-                Description = "Interactive prompt to format conventional commit",
-                AcceleratorKey = "G",
+                ParentId = quickLauncherId,
+                Name = "Google Web Search",
+                Description = "Open Google Search in default browser",
+                AcceleratorKey = "3",
+                PresentationMode = PresentationMode.Direct,
+                ActionType = ActionType.Shell,
+                Payload = new ActionPayload
+                {
+                    Command = "https://www.google.com"
+                },
+                OrderIndex = 2
+            },
+
+            // Subfolder 2: Text Snippets & Templates
+            new TriggerItem
+            {
+                Id = snippetsFolderId,
+                ParentId = starterPackId,
+                Name = "Text Snippets & Templates",
+                Description = "Dynamic text expansions, timestamp tokens, interactive prompts, and clipboard wrappers",
+                ActionType = ActionType.Folder,
+                PresentationMode = PresentationMode.Direct,
+                OrderIndex = 1
+            },
+            new TriggerItem
+            {
+                Id = Guid.NewGuid(),
+                ParentId = snippetsFolderId,
+                Name = "Current Timestamp",
+                Description = "Inserts formatted date and time with caret positioned inside",
+                AcceleratorKey = "D",
+                Hotkey = new ShortcutBinding(ModifierKeys.Control | ModifierKeys.Alt, 68, "D"), // Ctrl + Alt + D
                 PresentationMode = PresentationMode.Direct,
                 ActionType = ActionType.Snippet,
                 Payload = new ActionPayload
                 {
-                    SnippetTemplate = "{choice:Type|feat=feat,fix=fix,docs=docs,refactor=refactor}({text:Scope}): {text:Description}\n\n{multiline:Body}\n{cursor}"
+                    SnippetTemplate = "[{datetime:yyyy-MM-dd HH:mm}] {cursor}"
                 },
                 OrderIndex = 0
             },
             new TriggerItem
             {
                 Id = Guid.NewGuid(),
-                ParentId = devFolderId,
-                Name = "Terminal",
-                Description = "Open Windows Terminal",
-                AcceleratorKey = "T",
-                Hotkey = new ShortcutBinding(ModifierKeys.Control | ModifierKeys.Alt, 84, "T"), // Ctrl + Alt + T
+                ParentId = snippetsFolderId,
+                Name = "Git Conventional Commit",
+                Description = "Interactive prompt dialog for standardized conventional commit messages",
+                AcceleratorKey = "G",
                 PresentationMode = PresentationMode.Direct,
-                ActionType = ActionType.Shell,
+                ActionType = ActionType.Snippet,
                 Payload = new ActionPayload
                 {
-                    Command = "wt.exe"
+                    SnippetTemplate = "{choice:Type|feat=feat: New feature,fix=fix: Bug fix,docs=docs: Documentation,refactor=refactor: Code improvement,perf=perf: Performance}({text:Scope}): {text:Summary}\n\n{multiline:Description}\n\n{cursor}"
                 },
                 OrderIndex = 1
+            },
+            new TriggerItem
+            {
+                Id = Guid.NewGuid(),
+                ParentId = snippetsFolderId,
+                Name = "Meeting Notes Template",
+                Description = "Structured meeting template with dynamic date and attendee inputs",
+                AcceleratorKey = "M",
+                PresentationMode = PresentationMode.Direct,
+                ActionType = ActionType.Snippet,
+                Payload = new ActionPayload
+                {
+                    SnippetTemplate = "## Meeting Notes - {date:MMMM dd, yyyy}\n**Attendees:** {text:Attendees}\n\n### Agenda\n- {text:Topic 1}\n- \n\n### Action Items\n- [ ] {cursor}"
+                },
+                OrderIndex = 2
+            },
+            new TriggerItem
+            {
+                Id = Guid.NewGuid(),
+                ParentId = snippetsFolderId,
+                Name = "Markdown Code Block Wrap",
+                Description = "Wraps current clipboard contents in a fenced code block with language selection",
+                AcceleratorKey = "C",
+                PresentationMode = PresentationMode.Direct,
+                ActionType = ActionType.Snippet,
+                Payload = new ActionPayload
+                {
+                    SnippetTemplate = "```{choice:Language|csharp,javascript,json,powershell,sql,bash}\n{clipboard}\n```\n{cursor}"
+                },
+                OrderIndex = 3
+            },
+
+            // Subfolder 3: Automated Workflows
+            new TriggerItem
+            {
+                Id = workflowsFolderId,
+                ParentId = starterPackId,
+                Name = "Automated Workflows",
+                Description = "Multi-step sequential automation with pauses, directory checks, and notifications",
+                ActionType = ActionType.Folder,
+                PresentationMode = PresentationMode.Direct,
+                OrderIndex = 2
+            },
+            new TriggerItem
+            {
+                Id = Guid.NewGuid(),
+                ParentId = workflowsFolderId,
+                Name = "Morning Workspace Setup",
+                Description = "Opens GitHub, pauses, launches Notepad, and confirms with a notification dialog",
+                AcceleratorKey = "W",
+                PresentationMode = PresentationMode.Direct,
+                ActionType = ActionType.Workflow,
+                Payload = new ActionPayload
+                {
+                    WorkflowSteps =
+                    [
+                        new WorkflowStep
+                        {
+                            Name = "Open GitHub",
+                            StepType = WorkflowStepType.OpenUrl,
+                            Url = "https://github.com"
+                        },
+                        new WorkflowStep
+                        {
+                            Name = "Brief Pause",
+                            StepType = WorkflowStepType.Delay,
+                            DelayMs = 600
+                        },
+                        new WorkflowStep
+                        {
+                            Name = "Open Scratchpad",
+                            StepType = WorkflowStepType.LaunchApp,
+                            Command = "notepad.exe"
+                        },
+                        new WorkflowStep
+                        {
+                            Name = "Notification",
+                            StepType = WorkflowStepType.Dialog,
+                            DialogTitle = "Workspace Ready",
+                            DialogMessage = "Morning workspace tools initialized!",
+                            DialogButtons = WorkflowDialogButtons.Ok,
+                            DialogIcon = WorkflowDialogIcon.Information
+                        }
+                    ]
+                },
+                OrderIndex = 0
+            },
+            new TriggerItem
+            {
+                Id = Guid.NewGuid(),
+                ParentId = workflowsFolderId,
+                Name = "Open Temp Directory",
+                Description = "Opens the Windows temporary folder in File Explorer",
+                AcceleratorKey = "T",
+                PresentationMode = PresentationMode.Direct,
+                ActionType = ActionType.Workflow,
+                Payload = new ActionPayload
+                {
+                    WorkflowSteps =
+                    [
+                        new WorkflowStep
+                        {
+                            Name = "Open %TEMP%",
+                            StepType = WorkflowStepType.EnsureDirectory,
+                            DirectoryPath = "%TEMP%",
+                            OpenInExplorer = true
+                        }
+                    ]
+                },
+                OrderIndex = 1
+            },
+
+            // Subfolder 4: Keystroke Automation (Macro)
+            new TriggerItem
+            {
+                Id = macrosFolderId,
+                ParentId = starterPackId,
+                Name = "Keystroke Automation (Macro)",
+                Description = "Automated keyboard sequences and chord playback examples",
+                ActionType = ActionType.Folder,
+                PresentationMode = PresentationMode.Direct,
+                OrderIndex = 3
+            },
+            new TriggerItem
+            {
+                Id = Guid.NewGuid(),
+                ParentId = macrosFolderId,
+                Name = "Duplicate Line Down",
+                Description = "Editor macro that duplicates current line down (Shift+Alt+Down)",
+                AcceleratorKey = "D",
+                PresentationMode = PresentationMode.Direct,
+                ActionType = ActionType.Macro,
+                Payload = new ActionPayload
+                {
+                    Macro = new MacroPayload
+                    {
+                        Events =
+                        [
+                            new MacroEvent { Type = MacroEventType.KeyDown, KeyCode = 16, KeyName = "Shift" },
+                            new MacroEvent { Type = MacroEventType.KeyDown, KeyCode = 18, KeyName = "Alt" },
+                            new MacroEvent { Type = MacroEventType.KeyDown, KeyCode = 40, KeyName = "Down" },
+                            new MacroEvent { Type = MacroEventType.Delay, DelayMs = 50 },
+                            new MacroEvent { Type = MacroEventType.KeyUp, KeyCode = 40, KeyName = "Down" },
+                            new MacroEvent { Type = MacroEventType.KeyUp, KeyCode = 18, KeyName = "Alt" },
+                            new MacroEvent { Type = MacroEventType.KeyUp, KeyCode = 16, KeyName = "Shift" }
+                        ]
+                    }
+                },
+                OrderIndex = 0
             }
         ];
     }

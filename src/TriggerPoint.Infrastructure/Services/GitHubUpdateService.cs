@@ -11,6 +11,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using System.IO.Compression;
 using System.Windows;
 using Serilog;
 using TriggerPoint.Core.Contracts;
@@ -22,15 +23,26 @@ public class GitHubUpdateService : IUpdateService
 {
     private const string DefaultRepo = "Rapscallion0/TriggerPoint";
     private readonly IConfigRepository _configRepository;
+    private readonly IAppPathsService? _pathsService;
     private readonly HttpClient _httpClient;
     private readonly string _repository;
     private string? _customCurrentVersion;
 
-    public GitHubUpdateService(IConfigRepository configRepository, HttpClient? httpClient = null, string repository = DefaultRepo)
+    public GitHubUpdateService(
+        IConfigRepository configRepository,
+        IAppPathsService? pathsService,
+        HttpClient? httpClient = null,
+        string repository = DefaultRepo)
     {
         _configRepository = configRepository;
+        _pathsService = pathsService;
         _httpClient = httpClient ?? new HttpClient();
         _repository = repository;
+    }
+
+    public GitHubUpdateService(IConfigRepository configRepository, HttpClient? httpClient = null, string repository = DefaultRepo)
+        : this(configRepository, null, httpClient, repository)
+    {
     }
 
     /// <summary>
@@ -176,25 +188,51 @@ public class GitHubUpdateService : IUpdateService
                 DateTimeOffset publishedAt = element.TryGetProperty("published_at", out var pubProp) && pubProp.TryGetDateTimeOffset(out var dt) ? dt : DateTimeOffset.UtcNow;
 
                 string downloadUrl = "";
-                string fileName = "TriggerPointSetup.exe";
+                bool isPortable = _pathsService?.IsPortable ?? false;
+                string fileName = isPortable ? "TriggerPoint-Portable.zip" : "TriggerPointSetup.exe";
                 long fileSizeBytes = 0;
 
                 if (element.TryGetProperty("assets", out var assetsProp) && assetsProp.ValueKind == JsonValueKind.Array)
                 {
+                    var assetList = new List<(string Name, string Url, long Size)>();
                     foreach (var asset in assetsProp.EnumerateArray())
                     {
                         var assetName = asset.TryGetProperty("name", out var anProp) ? anProp.GetString() ?? "" : "";
-                        if (assetName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
-                            assetName.Equals("TriggerPointSetup.exe", StringComparison.OrdinalIgnoreCase))
+                        var bdl = asset.TryGetProperty("browser_download_url", out var bdlProp) ? bdlProp.GetString() ?? "" : "";
+                        long size = asset.TryGetProperty("size", out var sizeProp) ? sizeProp.GetInt64() : 0;
+                        if (!string.IsNullOrEmpty(assetName))
                         {
-                            downloadUrl = asset.TryGetProperty("browser_download_url", out var bdlProp) ? bdlProp.GetString() ?? "" : "";
-                            fileName = assetName;
-                            if (asset.TryGetProperty("size", out var sizeProp))
-                            {
-                                fileSizeBytes = sizeProp.GetInt64();
-                            }
-                            break;
+                            assetList.Add((assetName, bdl, size));
                         }
+                    }
+
+                    (string Name, string Url, long Size) selected = default;
+                    if (isPortable)
+                    {
+                        selected = assetList.FirstOrDefault(a => a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) && a.Name.Contains("portable", StringComparison.OrdinalIgnoreCase));
+                        if (string.IsNullOrEmpty(selected.Name))
+                        {
+                            selected = assetList.FirstOrDefault(a => a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+                        }
+                        if (string.IsNullOrEmpty(selected.Name))
+                        {
+                            selected = assetList.FirstOrDefault(a => a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
+                        }
+                    }
+                    else
+                    {
+                        selected = assetList.FirstOrDefault(a => a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || a.Name.Equals("TriggerPointSetup.exe", StringComparison.OrdinalIgnoreCase));
+                        if (string.IsNullOrEmpty(selected.Name))
+                        {
+                            selected = assetList.FirstOrDefault(a => a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+                        }
+                    }
+
+                    if (!string.IsNullOrEmpty(selected.Name))
+                    {
+                        fileName = selected.Name;
+                        downloadUrl = selected.Url;
+                        fileSizeBytes = selected.Size;
                     }
                 }
 
@@ -276,10 +314,14 @@ public class GitHubUpdateService : IUpdateService
             throw new InvalidOperationException("No download URL available for this update.");
         }
 
-        var tempDir = Path.Combine(Path.GetTempPath(), "TriggerPoint", "Updates");
+        var tempDir = _pathsService?.IsPortable == true
+            ? _pathsService.UpdateDirectory
+            : Path.Combine(Path.GetTempPath(), "TriggerPoint", "Updates");
         Directory.CreateDirectory(tempDir);
 
-        var destinationFile = Path.Combine(tempDir, $"TriggerPointSetup-{updateInfo.Version}.exe");
+        var destinationFile = Path.Combine(tempDir, string.IsNullOrWhiteSpace(updateInfo.FileName)
+            ? ((_pathsService?.IsPortable == true) ? $"TriggerPoint-{updateInfo.Version}-Portable.zip" : $"TriggerPointSetup-{updateInfo.Version}.exe")
+            : updateInfo.FileName);
 
         // If file already exists and matches expected size, reuse it
         if (File.Exists(destinationFile) && updateInfo.FileSizeBytes > 0)
@@ -381,6 +423,101 @@ public class GitHubUpdateService : IUpdateService
         Process.Start(startInfo);
 
         // Terminate TriggerPoint cleanly
+        if (Application.Current != null)
+        {
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                Application.Current.Shutdown();
+            });
+        }
+        else
+        {
+            Environment.Exit(0);
+        }
+    }
+
+    public void ApplyPortableUpdateAndExit(string zipPath)
+    {
+        if (!File.Exists(zipPath))
+        {
+            throw new FileNotFoundException("Portable update archive not found.", zipPath);
+        }
+
+        var appDir = _pathsService?.AppDirectory ?? AppContext.BaseDirectory;
+        var updateDir = _pathsService?.UpdateDirectory ?? Path.Combine(appDir, "update");
+        var stagedDir = Path.Combine(updateDir, "staged");
+
+        Log.Information("Extracting portable update {ZipPath} to staged directory {StagedDir}", zipPath, stagedDir);
+
+        try
+        {
+            if (Directory.Exists(stagedDir))
+            {
+                Directory.Delete(stagedDir, true);
+            }
+            Directory.CreateDirectory(stagedDir);
+
+            // Extract the zip archive
+            ZipFile.ExtractToDirectory(zipPath, stagedDir, overwriteFiles: true);
+
+            // CRITICAL INVARIANT: The archive must never overwrite user data
+            var stagedDataDir = Path.Combine(stagedDir, "data");
+            if (Directory.Exists(stagedDataDir))
+            {
+                Log.Warning("Removing staged data folder to protect user configuration and data.");
+                Directory.Delete(stagedDataDir, true);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to stage portable update files from {ZipPath}", zipPath);
+            throw;
+        }
+
+        var currentProcess = Process.GetCurrentProcess();
+        int pid = currentProcess.Id;
+        string exePath = Environment.ProcessPath ?? Path.Combine(appDir, "TriggerPoint.exe");
+
+        var scriptPath = Path.Combine(updateDir, "apply-update.cmd");
+        var scriptContent = new StringBuilder();
+        scriptContent.AppendLine("@echo off");
+        scriptContent.AppendLine("setlocal");
+        scriptContent.AppendLine($"set TARGET_PID={pid}");
+        scriptContent.AppendLine($"set APP_DIR=\"{appDir.TrimEnd('\\')}\"");
+        scriptContent.AppendLine($"set STAGED_DIR=\"{stagedDir.TrimEnd('\\')}\"");
+        scriptContent.AppendLine($"set TARGET_EXE=\"{exePath}\"");
+        scriptContent.AppendLine();
+        scriptContent.AppendLine(":wait_loop");
+        scriptContent.AppendLine("tasklist /fi \"PID eq %TARGET_PID%\" 2>nul | findstr /i \"%TARGET_PID%\" >nul");
+        scriptContent.AppendLine("if not errorlevel 1 (");
+        scriptContent.AppendLine("    timeout /t 1 /nobreak >nul");
+        scriptContent.AppendLine("    goto wait_loop");
+        scriptContent.AppendLine(")");
+        scriptContent.AppendLine();
+        scriptContent.AppendLine("timeout /t 1 /nobreak >nul");
+        scriptContent.AppendLine();
+        scriptContent.AppendLine("robocopy %STAGED_DIR% %APP_DIR% /E /XD data logs backups update /XF portable.dat /NP /NFL /NDL /NJH /NJS >nul");
+        scriptContent.AppendLine();
+        scriptContent.AppendLine("rmdir /s /q %STAGED_DIR% >nul 2>nul");
+        scriptContent.AppendLine();
+        scriptContent.AppendLine("start \"\" %TARGET_EXE%");
+        scriptContent.AppendLine();
+        scriptContent.AppendLine("(goto) 2>nul & del \"%~f0\" & exit");
+
+        File.WriteAllText(scriptPath, scriptContent.ToString(), Encoding.ASCII);
+
+        Log.Information("Launching external updater script {ScriptPath} and terminating TriggerPoint PID {Pid}", scriptPath, pid);
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "cmd.exe",
+            Arguments = $"/c \"\"{scriptPath}\"\"",
+            CreateNoWindow = true,
+            UseShellExecute = false,
+            WorkingDirectory = appDir
+        };
+        Process.Start(startInfo);
+
         if (Application.Current != null)
         {
             Application.Current.Dispatcher.Invoke(() =>

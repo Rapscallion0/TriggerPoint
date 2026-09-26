@@ -37,15 +37,15 @@ This document serves as the centralized tracking checklist for all visual screen
   - **View / Dialog**: Windows Taskbar Notification Area and Tray Context Menu (`TrayIconService.cs`).
   - **Theme**: Dark / Windows Shell Context Menu.
   - **UI State**: System tray notification area magnified showing the active TriggerPoint reticle icon in Armed status alongside the open context menu.
-  - **Sample Data**: Menu items: Open Settings, Check for Updates..., Command Palette (Alt + Space), Shortcut Cheat Sheet (Ctrl + Shift + /), Snooze Global Hotkeys, Reload Configuration, Exit TriggerPoint.
+  - **Sample Data**: Menu items: Open Settings, Check for Updates..., Command Palette (Ctrl + Shift + Space), Shortcut Cheat Sheet (Ctrl + Shift + /), Snooze Global Hotkeys, Reload Configuration, Exit TriggerPoint.
   - **Focus Element**: "Open Settings" menu item hovered.
 
 - [ ] **`images/getting-started-initial-settings.png`**
   - **View / Dialog**: Main Settings Window (`SettingsWindow.xaml`) on clean first launch.
   - **Theme**: Dark Mode.
   - **UI State**: Fresh configuration loaded from default template.
-  - **Sample Data**: Sidebar tree showing default sample folders: "General Tools" (Notepad, Date Snippet, Calculator) and "Developer Tools" (Command Prompt, PowerShell).
-  - **Focus Element**: "General Tools" folder selected in the sidebar tree.
+  - **Sample Data**: Sidebar tree showing default sample folders under "Starter Pack & Examples" (Quick Launcher, Text Snippets & Templates, Automated Workflows, Keystroke Automation).
+  - **Focus Element**: "Starter Pack & Examples" folder selected in the sidebar tree.
 
 ---
 
@@ -264,7 +264,7 @@ This document serves as the centralized tracking checklist for all visual screen
   - **Theme**: Dark Mode.
   - **UI State**: Global hotkey fields displayed:
     - Open Settings: `Ctrl + Alt + T`.
-    - Command Palette: `Alt + Space` (active focus, modifier chips highlighted).
+    - Command Palette: `Ctrl + Shift + Space` (active focus, modifier chips highlighted).
     - Shortcut Cheat Sheet: `Ctrl + Shift + /`.
   - **Focus Element**: Command Palette hotkey recorder field.
 

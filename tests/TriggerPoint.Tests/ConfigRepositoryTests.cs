@@ -38,7 +38,10 @@ public class ConfigRepositoryTests : IDisposable
 
         Assert.NotEmpty(items);
         Assert.True(File.Exists(repo.ConfigFilePath));
-        Assert.Contains(items, x => x.Name == "Calculator");
+        Assert.Contains(items, x => x.Name == "Starter Pack & Examples" && x.ActionType == ActionType.Folder);
+        Assert.Contains(items, x => x.Name == "Quick Launcher (Cursor Menu)" && x.ActionType == ActionType.Folder);
+        Assert.Contains(items, x => x.Name == "Windows Calculator" && x.ActionType == ActionType.Shell);
+        Assert.Contains(items, x => x.Name == "Current Timestamp" && x.ActionType == ActionType.Snippet);
     }
 
     [Fact]
@@ -254,5 +257,59 @@ public class ConfigRepositoryTests : IDisposable
         // LoadAsync must recover from the historical snapshot in backups/
         var loaded = await repo.LoadAsync();
         Assert.Contains(loaded, x => x.Name == "Snapshot Archive Item");
+    }
+
+    [Fact]
+    public async Task InitializeSetupAsync_WithStarterPack_SetsThemeAndSeedsDefaults()
+    {
+        var customDir = Path.Combine(_testDir, "setup_test_with_pack");
+        var repo = new JsonConfigRepository(customDir);
+
+        await repo.InitializeSetupAsync(ThemePreference.Dark, installStarterPack: true);
+
+        var settings = await repo.LoadSettingsAsync();
+        Assert.Equal(ThemePreference.Dark, settings.Theme);
+        Assert.True(settings.HasCompletedInitialSetup);
+
+        var items = await repo.LoadAsync();
+        Assert.NotEmpty(items);
+        Assert.Contains(items, x => x.Name == "Starter Pack & Examples");
+    }
+
+    [Fact]
+    public async Task InitializeSetupAsync_WithoutStarterPack_SetsThemeAndLeavesItemsEmpty()
+    {
+        var customDir = Path.Combine(_testDir, "setup_test_no_pack");
+        var repo = new JsonConfigRepository(customDir);
+
+        await repo.InitializeSetupAsync(ThemePreference.Light, installStarterPack: false);
+
+        var settings = await repo.LoadSettingsAsync();
+        Assert.Equal(ThemePreference.Light, settings.Theme);
+        Assert.True(settings.HasCompletedInitialSetup);
+
+        var items = await repo.LoadAsync();
+        Assert.Empty(items);
+    }
+
+    [Fact]
+    public async Task LoadAsync_RespectsEmptyList_WhenHasCompletedInitialSetupIsTrue()
+    {
+        var customDir = Path.Combine(_testDir, "empty_respect_test");
+        var repo = new JsonConfigRepository(customDir);
+
+        // Pre-create appsettings with HasCompletedInitialSetup = true
+        var settings = new AppSettings
+        {
+            Theme = ThemePreference.System,
+            HasCompletedInitialSetup = true
+        };
+        await repo.SaveSettingsAsync(settings);
+
+        // Pre-create empty triggerpoint.json
+        await File.WriteAllTextAsync(repo.ConfigFilePath, "[]");
+
+        var items = await repo.LoadAsync();
+        Assert.Empty(items);
     }
 }

@@ -18,6 +18,7 @@ public partial class UpdateAvailableDialog : Window
     private readonly UpdateInfo _updateInfo;
     private readonly IUpdateService _updateService;
     private readonly IConfigRepository _configRepository;
+    private readonly IAppPathsService? _pathsService;
     private readonly bool _isViewOnly;
     private CancellationTokenSource? _downloadCts;
     private bool _isDownloading = false;
@@ -26,6 +27,7 @@ public partial class UpdateAvailableDialog : Window
         UpdateCheckResult updateResult,
         IUpdateService updateService,
         IConfigRepository configRepository,
+        IAppPathsService? pathsService = null,
         bool isViewOnly = false)
     {
         InitializeComponent();
@@ -34,6 +36,7 @@ public partial class UpdateAvailableDialog : Window
         _updateInfo = updateResult.LatestUpdate ?? throw new ArgumentNullException(nameof(updateResult.LatestUpdate));
         _updateService = updateService;
         _configRepository = configRepository;
+        _pathsService = pathsService;
         _isViewOnly = isViewOnly;
 
         PopulateDialogData();
@@ -52,7 +55,7 @@ public partial class UpdateAvailableDialog : Window
         }
         else
         {
-            DownloadSizeText.Text = "Setup Installer";
+            DownloadSizeText.Text = (_pathsService?.IsPortable ?? false) ? "Portable Package" : "Setup Installer";
         }
 
         if (!string.IsNullOrWhiteSpace(_updateInfo.Title) && !_updateInfo.Title.Equals(_updateInfo.TagName, StringComparison.OrdinalIgnoreCase))
@@ -240,7 +243,9 @@ public partial class UpdateAvailableDialog : Window
         {
             var downloadedFile = await _updateService.DownloadUpdateAsync(_updateInfo, progress, _downloadCts.Token);
 
-            DownloadStatusText.Text = "Verifying installer & launching...";
+            DownloadStatusText.Text = (_pathsService?.IsPortable ?? false) || downloadedFile.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
+                ? "Extracting & applying portable update..."
+                : "Verifying installer & launching...";
             DownloadPercentText.Text = "100%";
             DownloadProgressBar.Value = 100;
 
@@ -261,7 +266,14 @@ public partial class UpdateAvailableDialog : Window
             // Small delay to let user see 100% completion
             await Task.Delay(350);
 
-            _updateService.LaunchInstallerAndExit(downloadedFile, silent: settings.SilentInstallUpdates);
+            if ((_pathsService?.IsPortable ?? false) || downloadedFile.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+            {
+                _updateService.ApplyPortableUpdateAndExit(downloadedFile);
+            }
+            else
+            {
+                _updateService.LaunchInstallerAndExit(downloadedFile, silent: settings.SilentInstallUpdates);
+            }
         }
         catch (OperationCanceledException)
         {

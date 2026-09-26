@@ -176,6 +176,15 @@ public class ShellActionExecutor : IActionExecutor
             try
             {
                 var expandedPath = Environment.ExpandEnvironmentVariables(command);
+                if (!File.Exists(expandedPath) && !Directory.Exists(expandedPath) && !Path.IsPathRooted(expandedPath))
+                {
+                    var appRelative = Path.Combine(AppContext.BaseDirectory, expandedPath);
+                    if (File.Exists(appRelative) || Directory.Exists(appRelative))
+                    {
+                        expandedPath = appRelative;
+                    }
+                }
+
                 if (!File.Exists(expandedPath) && !Directory.Exists(expandedPath))
                 {
                     var resolvedFromPath = ResolveExecutableFromPath(expandedPath);
@@ -212,6 +221,15 @@ public class ShellActionExecutor : IActionExecutor
         }
 
         var expandedCommand = Environment.ExpandEnvironmentVariables(command);
+        if (!Path.IsPathRooted(expandedCommand))
+        {
+            var appRelative = Path.Combine(AppContext.BaseDirectory, expandedCommand);
+            if (File.Exists(appRelative) || Directory.Exists(appRelative))
+            {
+                expandedCommand = appRelative;
+            }
+        }
+
         if (!Core.Services.ProtocolValidator.IsSafeUrl(expandedCommand, out var rejectReason))
         {
             _logger.Warning("Blocked unsafe shell command/URL '{Command}': {Reason}", expandedCommand, rejectReason);
@@ -236,7 +254,16 @@ public class ShellActionExecutor : IActionExecutor
         // Working directory
         if (!string.IsNullOrWhiteSpace(workingDirectory))
         {
-            psi.WorkingDirectory = Environment.ExpandEnvironmentVariables(workingDirectory);
+            var expandedWorkDir = Environment.ExpandEnvironmentVariables(workingDirectory);
+            if (!Path.IsPathRooted(expandedWorkDir))
+            {
+                var appRelativeDir = Path.Combine(AppContext.BaseDirectory, expandedWorkDir);
+                if (Directory.Exists(appRelativeDir))
+                {
+                    expandedWorkDir = appRelativeDir;
+                }
+            }
+            psi.WorkingDirectory = expandedWorkDir;
         }
             else
             {

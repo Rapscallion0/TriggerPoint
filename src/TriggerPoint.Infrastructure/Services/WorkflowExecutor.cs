@@ -309,6 +309,14 @@ public class WorkflowExecutor : IWorkflowExecutor
                 if (string.IsNullOrWhiteSpace(rawPath)) return false;
 
                 var path = Environment.ExpandEnvironmentVariables(rawPath.Trim());
+                if (!Path.IsPathRooted(path))
+                {
+                    var appRel = Path.Combine(AppContext.BaseDirectory, path);
+                    if (Directory.Exists(appRel))
+                    {
+                        path = appRel;
+                    }
+                }
 
                 if (!Directory.Exists(path))
                 {
@@ -355,6 +363,15 @@ public class WorkflowExecutor : IWorkflowExecutor
                 if (string.IsNullOrWhiteSpace(rawCmd)) return false;
 
                 var cmd = Environment.ExpandEnvironmentVariables(rawCmd.Trim());
+                if (!Path.IsPathRooted(cmd))
+                {
+                    var appRel = Path.Combine(AppContext.BaseDirectory, cmd);
+                    if (File.Exists(appRel) || Directory.Exists(appRel))
+                    {
+                        cmd = appRel;
+                    }
+                }
+
                 var psi = new ProcessStartInfo
                 {
                     FileName = cmd,
@@ -370,7 +387,16 @@ public class WorkflowExecutor : IWorkflowExecutor
                 if (!string.IsNullOrWhiteSpace(step.WorkingDirectory))
                 {
                     var rawDir = ResolveVariables(step.WorkingDirectory, contextVariables);
-                    psi.WorkingDirectory = Environment.ExpandEnvironmentVariables(rawDir.Trim());
+                    var workDir = Environment.ExpandEnvironmentVariables(rawDir.Trim());
+                    if (!Path.IsPathRooted(workDir))
+                    {
+                        var appRelDir = Path.Combine(AppContext.BaseDirectory, workDir);
+                        if (Directory.Exists(appRelDir))
+                        {
+                            workDir = appRelDir;
+                        }
+                    }
+                    psi.WorkingDirectory = workDir;
                 }
 
                 if (isElevated || step.RunAsAdmin)

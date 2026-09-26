@@ -144,7 +144,7 @@ TriggerPoint includes three specialized borderless Heads-Up Display (HUD) window
 ![TriggerPoint Floating HUD Family](images/interface-floating-hud-family.png)
 <!-- SCREENSHOT REQUIRED: Composite visual showing the three floating HUD overlays: (1) Spotlight Command Palette with quick search input and result items, (2) Shortcut Cheat Sheet HUD with two-column shortcut layout, and (3) Chord Indicator HUD displaying "Ctrl + K, ... waiting for second key". -->
 
-### A. Spotlight Command Palette (<kbd>Alt</kbd> + <kbd>Space</kbd>)
+### A. Spotlight Command Palette (<kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd>)
 - A centered, floating search bar inspired by macOS Spotlight and PowerToys Run.
 - Fuzzy searches across all actions, folders, and workflow sequences.
 - Displays folder breadcrumbs (`📁 Tools › Development › Edit Hosts`).
