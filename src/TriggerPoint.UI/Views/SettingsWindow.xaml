@@ -168,15 +168,7 @@
                                 Margin="6,0,0,0"
                                 ToolTip="View options (Density, Hotkey badges, Hidden items, Folders)"
                                 Click="TreeOptionsMenuBtn_Click">
-                            <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock Text="⋮" FontSize="17" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                <Ellipse x:Name="TreeOptionsActiveDot"
-                                         Width="6" Height="6"
-                                         Fill="{DynamicResource AccentBrush}"
-                                         HorizontalAlignment="Right" VerticalAlignment="Top"
-                                         Margin="0,-3,-6,0"
-                                         Visibility="Collapsed"/>
-                            </Grid>
+                            <TextBlock Text="⋮" FontSize="17" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             <Button.ContextMenu>
                                 <ContextMenu x:Name="TreeOptionsMenuContextMenu">
                                     <MenuItem x:Name="MenuToggleDensity" 
@@ -231,6 +223,11 @@
                                     <MenuItem Header="New Recorded Macro" Click="AddMacroActionBtn_Click">
                                         <MenuItem.Icon>
                                             <TextBlock Text="🔴" FontSize="13" Foreground="#FFEF4444"/>
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="New Windows Service" Click="AddServiceActionBtn_Click">
+                                        <MenuItem.Icon>
+                                            <TextBlock Text="⚙️" FontSize="13" Foreground="{DynamicResource AccentBrush}"/>
                                         </MenuItem.Icon>
                                     </MenuItem>
                                     <Separator/>
@@ -342,6 +339,11 @@
                                 <MenuItem x:Name="ContextAddMacroItem" Header="New Recorded Macro" Click="AddMacroActionBtn_Click">
                                     <MenuItem.Icon>
                                         <TextBlock Text="🔴" FontSize="13" Foreground="#FFEF4444"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem x:Name="ContextAddServiceItem" Header="New Windows Service" Click="AddServiceActionBtn_Click">
+                                    <MenuItem.Icon>
+                                        <TextBlock Text="⚙️" FontSize="13" Foreground="{DynamicResource AccentBrush}"/>
                                     </MenuItem.Icon>
                                 </MenuItem>
                                 <Separator/>
@@ -836,7 +838,56 @@
                         </Grid.ColumnDefinitions>
 
                         <StackPanel Grid.Column="0">
-                            <TextBlock Text="Item Name" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                            <Grid Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Item Name" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                <Button Grid.Column="1" 
+                                        x:Name="InheritNameBtn" 
+                                        Click="InheritNameBtn_Click" 
+                                        ToolTip="Auto-fill action name from the selected service or application" 
+                                        Cursor="Hand"
+                                        Height="22"
+                                        VerticalAlignment="Center"
+                                        Visibility="Collapsed">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="Bd" 
+                                                    Background="{DynamicResource AccentSubtleBrush}" 
+                                                    BorderBrush="{DynamicResource AccentBrush}" 
+                                                    BorderThickness="1" 
+                                                    CornerRadius="4" 
+                                                    Padding="7,2"
+                                                    SnapsToDevicePixels="True">
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Path Width="11" Height="11" 
+                                                          Margin="0,0,5,0"
+                                                          Stretch="Uniform" 
+                                                          Fill="{DynamicResource AccentBrush}"
+                                                          Data="{DynamicResource MagicWandGeometry}"
+                                                          VerticalAlignment="Center"/>
+                                                    <TextBlock Text="Inherit Name" 
+                                                               FontSize="11" 
+                                                               FontWeight="SemiBold"
+                                                               Foreground="{DynamicResource AccentBrush}" 
+                                                               VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ItemHoverBrush}"/>
+                                                    <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentHoverBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Setter TargetName="Bd" Property="Opacity" Value="0.75"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                            </Grid>
                             <TextBox x:Name="ItemNameBox" 
                                      Style="{StaticResource ModernTextBoxStyle}" 
                                      Height="34"
@@ -951,6 +1002,118 @@
                                        Margin="0,4,0,0"/>
                         </StackPanel>
                     </Grid>
+
+                    <!-- Inline Abbreviation Expander Settings (Visible for Snippet type, below Global Hotkey Shortcut) -->
+                    <Border x:Name="SnippetAbbreviationGroup"
+                            Background="{DynamicResource CardBgBrush}" 
+                            BorderBrush="{DynamicResource CardBorderBrush}" 
+                            BorderThickness="1" 
+                            CornerRadius="8" 
+                            Padding="16" 
+                            Margin="0,0,0,16" 
+                            Visibility="Collapsed">
+                        <StackPanel>
+                            <!-- Header & Global Status Badge -->
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="⚡" FontSize="13" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Inline Abbreviation Expander" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <Border Grid.Column="1"
+                                        x:Name="SnippetAbbreviationGlobalStatusBorder"
+                                        Background="{DynamicResource AccentSubtleBrush}"
+                                        BorderBrush="{DynamicResource AccentBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="4"
+                                        Padding="6,2">
+                                    <TextBlock x:Name="SnippetAbbreviationGlobalStatusBadge"
+                                               Text="● Active globally" 
+                                               FontSize="10.5" 
+                                               FontWeight="SemiBold" 
+                                               Foreground="{DynamicResource AccentBrush}"/>
+                                </Border>
+                            </Grid>
+
+                            <!-- Global Expander Disabled Notice / Banner -->
+                            <Border x:Name="SnippetAbbreviationGlobalDisabledBanner"
+                                    Background="{DynamicResource WarningSubtleBrush}"
+                                    BorderBrush="{DynamicResource WarningBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="10,8"
+                                    Margin="0,0,0,10"
+                                    Visibility="Collapsed">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="⚠ Expander Disabled Globally"
+                                                   FontWeight="SemiBold"
+                                                   FontSize="11.5"
+                                                   Foreground="{DynamicResource WarningBrush}"
+                                                   Margin="0,0,0,2"/>
+                                        <TextBlock Text="The Inline Abbreviation Expander is currently disabled in Preferences. Abbreviations will not trigger until enabled."
+                                                   FontSize="11"
+                                                   Foreground="{DynamicResource TextPrimaryBrush}"
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <Button Grid.Column="1"
+                                            Content="Enable in Settings..."
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            FontSize="11"
+                                            Padding="8,3"
+                                            Margin="10,0,0,0"
+                                            VerticalAlignment="Center"
+                                            Click="EnableAbbreviationInSettings_Click"/>
+                                </Grid>
+                            </Border>
+
+                            <TextBlock Text="Type this abbreviation in any document, terminal, or browser tab to automatically replace it with your snippet template."
+                                       FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,10" TextWrapping="Wrap"/>
+
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="180"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Abbreviation input box -->
+                                <StackPanel Grid.Column="0" Margin="0,0,14,0">
+                                    <TextBlock Text="Abbreviation / Keyword" FontSize="11" FontWeight="Medium" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4"/>
+                                    <TextBox x:Name="SnippetAbbreviationBox"
+                                             Style="{StaticResource ModernTextBoxStyle}"
+                                             FontFamily="{StaticResource CodeFont}"
+                                             FontSize="12.5"
+                                             ToolTip="Example: ;sig, ;email, brb, !date"/>
+                                </StackPanel>
+
+                                <!-- Trigger Mode options -->
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="Expansion Trigger Mode" FontSize="11" FontWeight="Medium" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4"/>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,0,0">
+                                        <RadioButton x:Name="SnippetModeImmediateRadio"
+                                                     GroupName="SnippetAbbreviationModeGroup"
+                                                     Content="Immediate (on last letter)"
+                                                     FontSize="12"
+                                                     Margin="0,0,16,0"
+                                                     ToolTip="Expands immediately when the final character is typed (recommended for prefixed triggers like ;sig or !date)"/>
+                                        <RadioButton x:Name="SnippetModeDelimiterRadio"
+                                                     GroupName="SnippetAbbreviationModeGroup"
+                                                     Content="Delimiter (Space, Enter, Tab, punctuation)"
+                                                     FontSize="12"
+                                                     IsChecked="True"
+                                                     ToolTip="Expands when followed by a delimiter key such as space, enter, comma, or period (prevents accidental trigger inside longer words)"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
 
                     <!-- Shell Settings Box (Visible for Shell type) -->
                     <Border x:Name="ShellSettingsGroup" 
@@ -1581,8 +1744,12 @@
                                             CornerRadius="4"
                                             Padding="10,8"
                                             MinHeight="56"
-                                            MaxHeight="140">
-                                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                            MaxHeight="140"
+                                            PreviewMouseWheel="SnippetPreviewScrollViewer_PreviewMouseWheel">
+                                        <ScrollViewer x:Name="SnippetPreviewScrollViewer"
+                                                      VerticalScrollBarVisibility="Auto" 
+                                                      HorizontalScrollBarVisibility="Disabled"
+                                                      PreviewMouseWheel="SnippetPreviewScrollViewer_PreviewMouseWheel">
                                             <StackPanel>
                                                 <TextBlock x:Name="SnippetLivePreviewText" 
                                                            Text="Type a snippet template above to see a real-time expansion preview..." 
@@ -1671,6 +1838,29 @@
                                     </Grid.ColumnDefinitions>
 
                                     <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                        <!-- View Mode Switcher Capsule -->
+                                        <Border x:Name="WorkflowViewModeCapsuleBorder"
+                                                Background="{DynamicResource BgSecondaryBrush}"
+                                                BorderBrush="{DynamicResource BorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="14"
+                                                Padding="2"
+                                                Margin="0,0,8,0"
+                                                VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal">
+                                                <Button x:Name="WorkflowViewModeListBtn"
+                                                        Content="☰ List"
+                                                        Style="{StaticResource CapsuleSegmentButtonStyle}"
+                                                        Click="WorkflowViewModeListBtn_Click"
+                                                        ToolTip="View workflow steps as an editable card list"/>
+                                                <Button x:Name="WorkflowViewModeFlowchartBtn"
+                                                        Content="🔀 Flowchart"
+                                                        Style="{StaticResource CapsuleSegmentButtonStyle}"
+                                                        Click="WorkflowViewModeFlowchartBtn_Click"
+                                                        ToolTip="View workflow as an interactive visual node-and-wire flowchart"/>
+                                            </StackPanel>
+                                        </Border>
+
                                         <Button x:Name="WorkflowToggleAllExpandBtn" 
                                                 Style="{StaticResource SecondaryButtonStyle}" 
                                                 Margin="0,0,6,0" 
@@ -1746,6 +1936,131 @@
                                 <!-- Step Cards Host -->
                                 <StackPanel x:Name="WorkflowStepsHost" Margin="0,0,0,8"/>
 
+                                <!-- Flowchart View Container -->
+                                <Border x:Name="WorkflowFlowchartContainer"
+                                        Background="{DynamicResource CardBgBrush}"
+                                        BorderBrush="{DynamicResource CardBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="8"
+                                        MinHeight="460"
+                                        MaxHeight="650"
+                                        Margin="0,0,0,8"
+                                        ClipToBounds="True"
+                                        Visibility="Collapsed">
+                                    <Grid>
+                                        <!-- Pannable & Zoomable Flowchart ScrollViewer -->
+                                        <ScrollViewer x:Name="WorkflowFlowchartScrollViewer"
+                                                      HorizontalScrollBarVisibility="Auto"
+                                                      VerticalScrollBarVisibility="Auto"
+                                                      Background="Transparent"
+                                                      Focusable="True"
+                                                      PreviewMouseWheel="WorkflowFlowchart_PreviewMouseWheel"
+                                                      PreviewMouseDown="WorkflowFlowchart_PreviewMouseDown"
+                                                      PreviewMouseMove="WorkflowFlowchart_PreviewMouseMove"
+                                                      PreviewMouseUp="WorkflowFlowchart_PreviewMouseUp">
+                                            <Canvas x:Name="WorkflowFlowchartCanvas"
+                                                    Background="Transparent"
+                                                    HorizontalAlignment="Left"
+                                                    VerticalAlignment="Top">
+                                                <Canvas.LayoutTransform>
+                                                    <ScaleTransform x:Name="WorkflowFlowchartZoomTransform" ScaleX="1.0" ScaleY="1.0"/>
+                                                </Canvas.LayoutTransform>
+                                            </Canvas>
+                                        </ScrollViewer>
+
+                                        <!-- Flowchart Empty State Overlay -->
+                                        <Border x:Name="WorkflowFlowchartEmptyOverlay"
+                                                Background="{DynamicResource BgInputBrush}"
+                                                BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="8"
+                                                Padding="30,20"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Visibility="Collapsed">
+                                            <StackPanel HorizontalAlignment="Center">
+                                                <TextBlock Text="🔀" FontSize="26" HorizontalAlignment="Center" Margin="0,0,0,6"/>
+                                                <TextBlock Text="No Steps to Diagram" FontWeight="Bold" FontSize="13" HorizontalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                <TextBlock Text="Add steps in List View to generate the visual graph." FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,3,0,10" HorizontalAlignment="Center"/>
+                                                <Button Content="Switch to List View"
+                                                        Style="{StaticResource AccentButtonStyle}"
+                                                        Padding="12,5"
+                                                        FontSize="11"
+                                                        Click="WorkflowViewModeListBtn_Click"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <!-- Floating Zoom & Control HUD Overlay (Top Right) -->
+                                        <Border Background="{DynamicResource BgSecondaryBrush}"
+                                                BorderBrush="{DynamicResource BorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="14"
+                                                Padding="4,2"
+                                                Margin="0,10,12,0"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Top"
+                                                SnapsToDevicePixels="True">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <Button x:Name="WorkflowFlowchartZoomOutBtn"
+                                                        Content="－"
+                                                        Width="24" Height="24"
+                                                        Style="{StaticResource CapsuleSegmentButtonStyle}"
+                                                        FontSize="12"
+                                                        FontWeight="Bold"
+                                                        ToolTip="Zoom Out"
+                                                        Click="WorkflowFlowchartZoomOutBtn_Click"/>
+                                                <TextBlock x:Name="WorkflowFlowchartZoomText"
+                                                           Text="100%"
+                                                           FontSize="11"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource TextPrimaryBrush}"
+                                                           VerticalAlignment="Center"
+                                                           Margin="6,0"
+                                                           Cursor="Hand"
+                                                           ToolTip="Click to reset zoom to 100%"
+                                                           MouseDown="WorkflowFlowchartZoomReset_MouseDown"/>
+                                                <Button x:Name="WorkflowFlowchartZoomInBtn"
+                                                        Content="＋"
+                                                        Width="24" Height="24"
+                                                        Style="{StaticResource CapsuleSegmentButtonStyle}"
+                                                        FontSize="12"
+                                                        FontWeight="Bold"
+                                                        ToolTip="Zoom In"
+                                                        Click="WorkflowFlowchartZoomInBtn_Click"/>
+                                                <Border Width="1" Background="{DynamicResource BorderBrush}" Margin="4,3"/>
+                                                <Button x:Name="WorkflowFlowchartFitBtn"
+                                                        Content="⛶ Fit"
+                                                        Style="{StaticResource CapsuleSegmentButtonStyle}"
+                                                        FontSize="11"
+                                                        Padding="6,2"
+                                                        ToolTip="Reset zoom and center view"
+                                                        Click="WorkflowFlowchartFitBtn_Click"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <!-- Floating Legend (Bottom Left) -->
+                                        <Border Background="{DynamicResource BgSecondaryBrush}"
+                                                BorderBrush="{DynamicResource BorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="6"
+                                                Padding="8,4"
+                                                Margin="12,0,0,10"
+                                                HorizontalAlignment="Left"
+                                                VerticalAlignment="Bottom"
+                                                Opacity="0.9"
+                                                SnapsToDevicePixels="True">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <Ellipse Width="8" Height="8" Fill="{DynamicResource SuccessBrush}" Margin="0,0,4,0"/>
+                                                <TextBlock Text="True" FontSize="10.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,8,0"/>
+                                                <Ellipse Width="8" Height="8" Fill="{DynamicResource WarningBrush}" Margin="0,0,4,0"/>
+                                                <TextBlock Text="False" FontSize="10.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,8,0"/>
+                                                <Border Width="1" Background="{DynamicResource BorderBrush}" Margin="4,2"/>
+                                                <TextBlock Text="💡 Double-click node to edit" FontSize="10" Foreground="{DynamicResource TextMutedBrush}"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+
                                 <!-- Empty State Display -->
                                 <Border x:Name="WorkflowEmptyState" Background="{DynamicResource BgInputBrush}" BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8" Padding="30,20" Margin="0,0,0,8" Visibility="Collapsed">
                                     <StackPanel HorizontalAlignment="Center">
@@ -1771,6 +2086,7 @@
                                                         <MenuItem Header="Inject Snippet" Click="AddStepMenuItem_Click" Tag="InjectSnippet"/>
                                                         <MenuItem Header="Delay / Wait" Click="AddStepMenuItem_Click" Tag="Delay"/>
                                                         <MenuItem Header="Execute Action / Folder" Click="AddStepMenuItem_Click" Tag="ExecuteAction"/>
+                                                        <MenuItem Header="Windows Service" Click="AddStepMenuItem_Click" Tag="Service"/>
                                                         <MenuItem Header="Inline Script (JS)" Click="AddStepMenuItem_Click" Tag="RunScript"/>
                                                     </ContextMenu>
                                                 </Button.ContextMenu>
@@ -1894,6 +2210,92 @@
                             <TextBlock Text="Record and automate keystrokes, delays, and mouse clicks with exact screen coordinates." FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,10"/>
 
                             <controls:MacroEditorControl x:Name="MacroEditor" Height="380"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Windows Service Settings Box (Visible for Service type) -->
+                    <Border x:Name="ServiceSettingsGroup" 
+                            Background="{DynamicResource CardBgBrush}" 
+                            BorderBrush="{DynamicResource CardBorderBrush}" 
+                            BorderThickness="1" 
+                            CornerRadius="8" 
+                            Padding="16" 
+                            Margin="0,0,0,16" 
+                            Visibility="Collapsed">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Windows Service Settings" FontWeight="Bold" FontSize="14" Margin="0,0,0,2"/>
+                                    <TextBlock Text="Control local Windows services directly (Toggle, Start, Stop, Restart)." FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                </StackPanel>
+
+                                <!-- Refresh Services & Live Status Button -->
+                                <Button Grid.Column="1"
+                                        x:Name="RefreshServiceStatusBtn"
+                                        Content="↻"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Width="28" Height="28"
+                                        Padding="0"
+                                        FontSize="14"
+                                        VerticalAlignment="Center"
+                                        ToolTip="Refresh services list and live status from Windows Service Control Manager"
+                                        Click="RefreshServiceStatusBtn_Click"/>
+                            </Grid>
+
+                            <Border Height="1" Background="{DynamicResource BorderSubtleBrush}" Margin="0,8,0,12" SnapsToDevicePixels="True"/>
+
+                            <!-- Target Windows Service Dropdown / Searchable Picker -->
+                            <TextBlock Text="Target Windows Service" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                            <Grid Margin="0,0,0,10">
+                                <controls:SearchableServicePickerControl x:Name="ServicePicker"
+                                                                         ToolTip="Select or search Windows Service by name or description"/>
+                            </Grid>
+
+                            <!-- Operation & Timeout Grid -->
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="16"/>
+                                    <ColumnDefinition Width="160"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Operation (Toggle, Start, Stop, Restart) -->
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Operation" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                    <ComboBox x:Name="ServiceOperationCombo"
+                                              Height="34"
+                                              FontSize="13"
+                                              ToolTip="Operation to perform when triggered">
+                                        <ComboBoxItem Content="Toggle (Start if Stopped, Stop if Running)"/>
+                                        <ComboBoxItem Content="Start Service"/>
+                                        <ComboBoxItem Content="Stop Service"/>
+                                        <ComboBoxItem Content="Restart Service"/>
+                                    </ComboBox>
+                                </StackPanel>
+
+                                <!-- Timeout in seconds (Default 30s) -->
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Timeout (Seconds)" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                    <TextBox x:Name="ServiceTimeoutBox"
+                                             Style="{StaticResource ModernTextBoxStyle}"
+                                             Height="34"
+                                             FontSize="12.5"
+                                             Text="30"
+                                             ToolTip="Maximum wait time in seconds (standard Windows SCM default is 30s)"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- Run Elevated Checkbox -->
+                            <CheckBox x:Name="ServiceRunAsAdminCheck"
+                                      Content="Run elevated as Administrator (sc.exe / net.exe)"
+                                      FontSize="13"
+                                      Margin="0,4,0,0"
+                                      IsChecked="True"
+                                      ToolTip="Windows services usually require administrator privileges to start/stop"/>
                         </StackPanel>
                     </Border>
 

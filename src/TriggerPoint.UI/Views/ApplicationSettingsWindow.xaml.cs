@@ -29,6 +29,10 @@ public partial class ApplicationSettingsWindow : Window
     private AppSettings _currentSettings = new();
     private List<TriggerItem> _allItems = [];
     private bool _savedExplorerMenuEnabled;
+    private ThemePreference _initialTheme;
+    private AccentColorChoice _initialAccent;
+    private bool _isAppearanceLoaded;
+    private bool _settingsSaved;
 
     public enum SettingsCategory
     {
@@ -67,6 +71,15 @@ public partial class ApplicationSettingsWindow : Window
         ThemeManager.ThemeChanged += (s, theme) =>
         {
             ThemeManager.ApplyWindowIcons(this);
+        };
+
+        Closed += (s, e) =>
+        {
+            if (!_settingsSaved)
+            {
+                ThemeManager.ApplyPreference(_initialTheme);
+                ThemeManager.ApplyAccentColor(_initialAccent);
+            }
         };
     }
 
@@ -214,6 +227,9 @@ public partial class ApplicationSettingsWindow : Window
             LogSplitThresholdText.Text = $"{_currentSettings.LogSplitThresholdMb} MB";
 
             // Populate Theme & Visuals
+            _initialTheme = _currentSettings.Theme;
+            _initialAccent = _currentSettings.AccentColor;
+
             ThemeCombo.SelectedIndex = _currentSettings.Theme switch
             {
                 ThemePreference.System => 0,
@@ -221,11 +237,18 @@ public partial class ApplicationSettingsWindow : Window
                 ThemePreference.Light => 2,
                 _ => 0
             };
+            SelectAccentColorSwatch(_currentSettings.AccentColor);
+            _isAppearanceLoaded = true;
+
             EnableBackdropEffectsCheck.IsChecked = _currentSettings.EnableBackdropEffects;
             EnableUiAnimationsCheck.IsChecked = _currentSettings.EnableUiAnimations;
 
             // Populate Startup & Minimized
             RunAtStartupCheck.IsChecked = IsRunAtStartupConfigured() || _currentSettings.RunAtStartup;
+            RunAsAdminStartupCheck.IsChecked = _currentSettings.RunAsAdminAtStartup;
+            RunAsAdminStartupCheck.IsEnabled = RunAtStartupCheck.IsChecked == true;
+            RunAtStartupCheck.Checked += (s, e) => RunAsAdminStartupCheck.IsEnabled = true;
+            RunAtStartupCheck.Unchecked += (s, e) => { RunAsAdminStartupCheck.IsEnabled = false; RunAsAdminStartupCheck.IsChecked = false; };
             StartMinimizedCheck.IsChecked = _currentSettings.StartMinimized;
             HideWindowOnTargetCheck.IsChecked = _currentSettings.HideOnTargetWindow;
             ShowSuccessToastsCheck.IsChecked = _currentSettings.ShowSuccessToasts;
@@ -258,6 +281,13 @@ public partial class ApplicationSettingsWindow : Window
             CommandPaletteHotkeyRecorder.BindingRecorded += (s, b) => CheckHotkeyConflicts();
             CheatSheetHotkeyRecorder.BindingRecorded += (s, b) => CheckHotkeyConflicts();
             CheckHotkeyConflicts();
+
+            // Populate Abbreviation Expander settings
+            EnableAbbreviationExpanderCheck.IsChecked = _currentSettings.EnableAbbreviationExpander;
+            AbbreviationSuppressInFullScreenGamesCheck.IsChecked = _currentSettings.AbbreviationSuppressInFullScreenGames;
+            AbbreviationGlobalExcludedProcessesBox.Text = _currentSettings.AbbreviationGlobalExcludedProcesses != null
+                ? string.Join(", ", _currentSettings.AbbreviationGlobalExcludedProcesses)
+                : string.Empty;
 
             // Populate Recycle Bin retention
             bool neverDelete = _currentSettings.RecycleBinRetentionDays == 0;
@@ -363,6 +393,66 @@ public partial class ApplicationSettingsWindow : Window
     private void RecycleRetentionDaysInput_PreviewTextInput(object sender, TextCompositionEventArgs e)
     {
         e.Handled = !int.TryParse(e.Text, out _);
+    }
+
+    private void SelectAccentColorSwatch(AccentColorChoice choice)
+    {
+        switch (choice)
+        {
+            case AccentColorChoice.ElectricViolet:
+                AccentRadioElectricViolet.IsChecked = true;
+                break;
+            case AccentColorChoice.CyberBlue:
+                AccentRadioCyberBlue.IsChecked = true;
+                break;
+            case AccentColorChoice.EmeraldGreen:
+                AccentRadioEmeraldGreen.IsChecked = true;
+                break;
+            case AccentColorChoice.SunsetOrange:
+                AccentRadioSunsetOrange.IsChecked = true;
+                break;
+            case AccentColorChoice.RoseCrimson:
+                AccentRadioRoseCrimson.IsChecked = true;
+                break;
+            case AccentColorChoice.WindowsSystem:
+                AccentRadioWindowsSystem.IsChecked = true;
+                break;
+            default:
+                AccentRadioIndigo.IsChecked = true;
+                break;
+        }
+    }
+
+    private void AccentSwatch_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is RadioButton { Tag: string tagStr } && Enum.TryParse<AccentColorChoice>(tagStr, out var choice))
+        {
+            ThemeManager.ApplyAccentColor(choice);
+        }
+    }
+
+    private void ThemeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_isAppearanceLoaded) return;
+        var themePref = ThemeCombo.SelectedIndex switch
+        {
+            0 => ThemePreference.System,
+            1 => ThemePreference.Dark,
+            2 => ThemePreference.Light,
+            _ => ThemePreference.System
+        };
+        ThemeManager.ApplyPreference(themePref);
+    }
+
+    private AccentColorChoice GetSelectedAccentChoice()
+    {
+        if (AccentRadioElectricViolet.IsChecked == true) return AccentColorChoice.ElectricViolet;
+        if (AccentRadioCyberBlue.IsChecked == true) return AccentColorChoice.CyberBlue;
+        if (AccentRadioEmeraldGreen.IsChecked == true) return AccentColorChoice.EmeraldGreen;
+        if (AccentRadioSunsetOrange.IsChecked == true) return AccentColorChoice.SunsetOrange;
+        if (AccentRadioRoseCrimson.IsChecked == true) return AccentColorChoice.RoseCrimson;
+        if (AccentRadioWindowsSystem.IsChecked == true) return AccentColorChoice.WindowsSystem;
+        return AccentColorChoice.Indigo;
     }
 
     private async void EmptyRecycleBinBtn_Click(object sender, RoutedEventArgs e)
@@ -490,7 +580,11 @@ public partial class ApplicationSettingsWindow : Window
             _currentSettings.LogRetentionDays = retentionDays;
             _currentSettings.LogSplitThresholdMb = splitThresholdMb;
             _currentSettings.Theme = themePref;
+            var accentChoice = GetSelectedAccentChoice();
+            _currentSettings.AccentColor = accentChoice;
+            bool runAsAdmin = RunAsAdminStartupCheck.IsChecked == true;
             _currentSettings.RunAtStartup = runStartup;
+            _currentSettings.RunAsAdminAtStartup = runAsAdmin;
             _currentSettings.StartMinimized = startMinimized;
             _currentSettings.HideOnTargetWindow = hideOnTarget;
             _currentSettings.ShowSuccessToasts = ShowSuccessToastsCheck.IsChecked == true;
@@ -528,6 +622,14 @@ public partial class ApplicationSettingsWindow : Window
             _currentSettings.EnableUiAnimations = EnableUiAnimationsCheck.IsChecked == true;
             _currentSettings.RecycleBinRetentionDays = recycleDays;
 
+            // Abbreviation Expander settings
+            _currentSettings.EnableAbbreviationExpander = EnableAbbreviationExpanderCheck.IsChecked == true;
+            _currentSettings.AbbreviationSuppressInFullScreenGames = AbbreviationSuppressInFullScreenGamesCheck.IsChecked == true;
+            _currentSettings.AbbreviationGlobalExcludedProcesses = AbbreviationGlobalExcludedProcessesBox.Text
+                .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
             // Update settings
             _currentSettings.UpdateFrequency = UpdateFrequencyCombo.SelectedIndex switch
             {
@@ -547,11 +649,13 @@ public partial class ApplicationSettingsWindow : Window
             // 2. Dynamically apply log level at runtime without app restart
             _logManagerService.UpdateLogLevel(level);
 
-            // 3. Apply theme preference immediately
+            // 3. Apply theme and accent preference immediately
             ThemeManager.ApplyPreference(themePref);
+            ThemeManager.ApplyAccentColor(accentChoice);
+            _settingsSaved = true;
 
-            // 4. Configure Windows Startup Registry Key
-            SetRunAtStartup(runStartup, startMinimized);
+            // 4. Configure Windows Startup Registry Key / Task Scheduler
+            SetRunAtStartup(runStartup, runAsAdmin, startMinimized);
 
             Logger.Information("Application settings successfully updated. LogLevel={LogLevel}, RetentionDays={RetentionDays}, SplitThreshold={SplitThreshold}MB, Theme={Theme}, Startup={Startup}, RecycleDays={RecycleDays}",
                 level, retentionDays, splitThresholdMb, themePref, runStartup, recycleDays);
@@ -753,7 +857,7 @@ public partial class ApplicationSettingsWindow : Window
                     await _repository.SaveSettingsAsync(_currentSettings);
                     _logManagerService.UpdateLogLevel(_currentSettings.LogLevel);
                     ThemeManager.ApplyPreference(_currentSettings.Theme);
-                    SetRunAtStartup(_currentSettings.RunAtStartup, _currentSettings.StartMinimized);
+                    SetRunAtStartup(_currentSettings.RunAtStartup, _currentSettings.RunAsAdminAtStartup, _currentSettings.StartMinimized);
                     await LoadCurrentSettingsAsync();
                     SettingsStatusText.Text = "Application settings restored.";
                     ModernMessageDialog.ShowAlert(this, "Settings Restored", "Application settings have been successfully updated.", ModernDialogType.Info);
@@ -808,7 +912,7 @@ public partial class ApplicationSettingsWindow : Window
                 await _repository.SaveSettingsAsync(_currentSettings);
                 _logManagerService.UpdateLogLevel(_currentSettings.LogLevel);
                 ThemeManager.ApplyPreference(_currentSettings.Theme);
-                SetRunAtStartup(_currentSettings.RunAtStartup, _currentSettings.StartMinimized);
+                SetRunAtStartup(_currentSettings.RunAtStartup, _currentSettings.RunAsAdminAtStartup, _currentSettings.StartMinimized);
                 await LoadCurrentSettingsAsync();
             }
             else
@@ -831,6 +935,11 @@ public partial class ApplicationSettingsWindow : Window
 
     private void CancelBtn_Click(object sender, RoutedEventArgs e)
     {
+        if (!_settingsSaved)
+        {
+            ThemeManager.ApplyPreference(_initialTheme);
+            ThemeManager.ApplyAccentColor(_initialAccent);
+        }
         DialogResult = false;
         Close();
     }
@@ -878,25 +987,42 @@ public partial class ApplicationSettingsWindow : Window
         }
     }
 
-    private static void SetRunAtStartup(bool enable, bool startMinimized)
+    private static void SetRunAtStartup(bool enable, bool runAsAdmin, bool startMinimized)
     {
         try
         {
-            using var key = Registry.CurrentUser.OpenSubKey(StartupRegistryKey, true);
-            if (key != null)
+            var exePath = Environment.ProcessPath;
+            string args = startMinimized ? " --minimized" : "";
+
+            if (enable && runAsAdmin)
             {
-                if (enable)
+                if (!string.IsNullOrWhiteSpace(exePath))
                 {
-                    var exePath = Environment.ProcessPath;
-                    if (!string.IsNullOrWhiteSpace(exePath))
-                    {
-                        string args = startMinimized ? " --minimized" : "";
-                        key.SetValue(AppRegistryValueName, $"\"{exePath}\"{args}");
-                    }
+                    ConfigureTaskSchedulerStartup(true, exePath, args);
                 }
-                else
+
+                // Delete standard current user Run key to avoid duplicate startup
+                using var key = Registry.CurrentUser.OpenSubKey(StartupRegistryKey, true);
+                key?.DeleteValue(AppRegistryValueName, false);
+            }
+            else
+            {
+                ConfigureTaskSchedulerStartup(false, exePath ?? string.Empty, args);
+
+                using var key = Registry.CurrentUser.OpenSubKey(StartupRegistryKey, true);
+                if (key != null)
                 {
-                    key.DeleteValue(AppRegistryValueName, false);
+                    if (enable)
+                    {
+                        if (!string.IsNullOrWhiteSpace(exePath))
+                        {
+                            key.SetValue(AppRegistryValueName, $"\"{exePath}\"{args}");
+                        }
+                    }
+                    else
+                    {
+                        key.DeleteValue(AppRegistryValueName, false);
+                    }
                 }
             }
 
@@ -910,7 +1036,50 @@ public partial class ApplicationSettingsWindow : Window
         }
         catch (Exception ex)
         {
-            Logger.Warning(ex, "Failed to update Windows startup registry key.");
+            Logger.Warning(ex, "Failed to update Windows startup configuration.");
+        }
+    }
+
+    private static void ConfigureTaskSchedulerStartup(bool enable, string exePath, string args)
+    {
+        try
+        {
+            if (enable)
+            {
+                string cmdArgs = $"/Create /TN \"TriggerPoint\" /TR \"\\\"{exePath}\\\"{args}\" /SC ONLOGON /RL HIGHEST /F";
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "schtasks.exe",
+                    Arguments = cmdArgs,
+                    CreateNoWindow = true,
+                    UseShellExecute = false
+                };
+
+                if (!TriggerPoint.Infrastructure.Services.WindowsServiceManager.IsRunningElevated())
+                {
+                    psi.UseShellExecute = true;
+                    psi.Verb = "runas";
+                }
+
+                using var proc = Process.Start(psi);
+                proc?.WaitForExit(3000);
+            }
+            else
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "schtasks.exe",
+                    Arguments = "/Delete /TN \"TriggerPoint\" /F",
+                    CreateNoWindow = true,
+                    UseShellExecute = false
+                };
+                using var proc = Process.Start(psi);
+                proc?.WaitForExit(3000);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Warning(ex, "Failed to configure Task Scheduler startup for TriggerPoint.");
         }
     }
 
@@ -1296,8 +1465,8 @@ public partial class ApplicationSettingsWindow : Window
 
     internal static readonly Dictionary<SettingsCategory, string[]> CategoryKeywords = new()
     {
-        [SettingsCategory.Appearance] = ["appearance", "theme", "dark", "light", "system default", "mica", "acrylic", "material", "transparency", "translucent", "animation", "animations", "micro-transitions", "visual", "look"],
-        [SettingsCategory.Shortcuts] = ["shortcut", "shortcuts", "hotkey", "hotkeys", "global", "action manager", "command palette", "cheat sheet", "hud", "overlay", "conflict", "key", "recorder"],
+        [SettingsCategory.Appearance] = ["appearance", "theme", "dark", "light", "system default", "mica", "acrylic", "material", "transparency", "translucent", "animation", "animations", "micro-transitions", "visual", "look", "accent", "color", "swatch", "indigo", "violet", "blue", "green", "orange", "crimson", "windows accent"],
+        [SettingsCategory.Shortcuts] = ["shortcut", "shortcuts", "hotkey", "hotkeys", "global", "action manager", "command palette", "cheat sheet", "hud", "overlay", "conflict", "key", "recorder", "abbreviation", "abbreviations", "expander", "expansion", "text expansion", "auto-expand", "snippet expander"],
         [SettingsCategory.System] = ["system", "startup", "login", "windows", "minimized", "tray", "system tray", "hide window", "crosshair", "targeting", "toast", "toasts", "notification", "notifications", "monitor", "display", "active monitor", "primary monitor", "screen", "location", "placement", "validate", "path", "revert", "confirm", "unsaved", "explorer", "context menu", "right-click", "add to triggerpoint", "shell"],
         [SettingsCategory.Logging] = ["serilog", "log", "logs", "logging", "diagnostics", "minimum log level", "retention", "days", "split", "threshold", "mb", "folder", "open logs", "verbose", "debug", "information", "warning", "error", "fatal"],
         [SettingsCategory.Updates] = ["update", "updates", "maintenance", "check for updates", "version", "latest", "frequency", "startup", "daily", "weekly", "monthly", "manual", "silent install", "restart", "pre-release", "beta", "preview", "ignored", "ignore", "release"],

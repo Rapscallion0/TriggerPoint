@@ -20,19 +20,16 @@ public static class FuzzyMatcher
     private const double ConsecutiveMatchBonus = 30.0;
     private const double BaseMatchScore = 10.0;
 
-    public static FuzzyMatchResult Match(TriggerItem item, string pattern)
+    public static (double Score, IReadOnlyList<int> MatchedIndices)? MatchText(string candidate, string pattern)
     {
         if (string.IsNullOrWhiteSpace(pattern))
         {
-            // Empty pattern matches everything; boost by telemetry
-            var telemetryScore = CalculateTelemetryBoost(item.UsageStats);
-            return new FuzzyMatchResult(item, 1.0 + telemetryScore, []);
+            return (1.0, Array.Empty<int>());
         }
 
-        var candidate = item.Name;
         if (string.IsNullOrEmpty(candidate))
         {
-            return new FuzzyMatchResult(item, 0, []);
+            return null;
         }
 
         // Exact match
@@ -40,8 +37,7 @@ public static class FuzzyMatcher
         {
             var allIndices = new List<int>(candidate.Length);
             for (int i = 0; i < candidate.Length; i++) allIndices.Add(i);
-            var score = ExactMatchBonus + CalculateTelemetryBoost(item.UsageStats);
-            return new FuzzyMatchResult(item, score, allIndices);
+            return (ExactMatchBonus, allIndices);
         }
 
         // Substring match
@@ -53,9 +49,8 @@ public static class FuzzyMatcher
 
             double score = 200.0 + (pattern.Length * 10);
             if (subIdx == 0) score += PrefixMatchBonus;
-            score += CalculateTelemetryBoost(item.UsageStats);
 
-            return new FuzzyMatchResult(item, score, indices);
+            return (score, indices);
         }
 
         // Sequential fuzzy match
@@ -105,7 +100,7 @@ public static class FuzzyMatcher
         // If not all pattern characters were matched, no match
         if (pIdx < patternChars.Length)
         {
-            return new FuzzyMatchResult(item, 0, []);
+            return null;
         }
 
         // Penalize spread / distance
@@ -113,10 +108,19 @@ public static class FuzzyMatcher
         double penalty = (span - pattern.Length) * 2.0;
         matchScore = Math.Max(1.0, matchScore - penalty);
 
-        // Telemetry boost
-        matchScore += CalculateTelemetryBoost(item.UsageStats);
+        return (matchScore, matchedIndices);
+    }
 
-        return new FuzzyMatchResult(item, matchScore, matchedIndices);
+    public static FuzzyMatchResult Match(TriggerItem item, string pattern)
+    {
+        var match = MatchText(item.Name, pattern);
+        if (match == null)
+        {
+            return new FuzzyMatchResult(item, 0, []);
+        }
+
+        double score = match.Value.Score + CalculateTelemetryBoost(item.UsageStats);
+        return new FuzzyMatchResult(item, score, match.Value.MatchedIndices);
     }
 
     public static IReadOnlyList<FuzzyMatchResult> FilterAndRank(

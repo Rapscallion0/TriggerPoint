@@ -77,6 +77,7 @@ Root: HKCU; Subkey: "Software\Classes\Directory\Background\shell\TriggerPoint\co
 
 [Run]
 Filename: "{app}\TriggerPoint.exe"; Description: "{cm:LaunchProgram,TriggerPoint}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\TriggerPoint.exe"; Flags: nowait runasoriginaluser skipifnotsilent; Check: ShouldLaunchOnSilent
 
 [Code]
 procedure ExitProcess(uExitCode: Integer); external 'ExitProcess@kernel32.dll stdcall';
@@ -209,6 +210,54 @@ begin
     MsgBox(Msg, mbError, MB_OK);
     ExitProcess(0);
   end;
+end;
+
+function HasParam(ParamName: string): Boolean;
+var
+  i: Integer;
+begin
+  Result := False;
+  for i := 1 to ParamCount do
+  begin
+    if CompareText(ParamStr(i), ParamName) = 0 then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+end;
+
+function ShouldLaunchOnSilent(): Boolean;
+var
+  InstallMode: Integer;
+begin
+  // Explicit opt-out takes highest precedence
+  if HasParam('/NOLAUNCH') or HasParam('/NORELAUNCH') then
+  begin
+    Result := False;
+    Exit;
+  end;
+
+  // Explicit opt-in takes precedence
+  if HasParam('/RELAUNCH') or HasParam('/AUTOSTART') or HasParam('/LAUNCH') then
+  begin
+    Result := True;
+    Exit;
+  end;
+
+  // If already detected, use ExistingInstallMode; otherwise detect now
+  InstallMode := ExistingInstallMode;
+  if InstallMode = 0 then
+    InstallMode := DetectExistingInstallation();
+
+  // If updating or repairing an existing installation, automatically relaunch
+  if InstallMode <> 0 then
+  begin
+    Result := True;
+    Exit;
+  end;
+
+  Result := False;
 end;
 
 procedure InitializeWizard();

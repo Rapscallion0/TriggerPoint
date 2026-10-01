@@ -32,7 +32,8 @@ public enum ActionType
     Snippet = 1,
     Folder = 2,
     Workflow = 3,
-    Macro = 4
+    Macro = 4,
+    Service = 5
 }
 
 public enum WorkflowMode
@@ -54,7 +55,8 @@ public enum WorkflowStepType
     Dialog = 8,
     Macro = 9,
     SetVariable = 10,
-    IfCondition = 11
+    IfCondition = 11,
+    Service = 12
 }
 
 public enum ConditionOperator
@@ -146,7 +148,8 @@ public enum CommandPaletteFilterType
     Snippet = 2,
     Workflow = 3,
     Folder = 4,
-    Macro = 5
+    Macro = 5,
+    Service = 6
 }
 
 public enum SnippetContentType
@@ -154,3 +157,21 @@ public enum SnippetContentType
     PlainText = 0,
     RichText = 1
 }
+
+public enum AbbreviationTriggerMode
+{
+    Immediate = 0,
+    Delimiter = 1
+}
+
+public enum AccentColorChoice
+{
+    Indigo = 0,
+    ElectricViolet = 1,
+    CyberBlue = 2,
+    EmeraldGreen = 3,
+    SunsetOrange = 4,
+    RoseCrimson = 5,
+    WindowsSystem = 6
+}
+

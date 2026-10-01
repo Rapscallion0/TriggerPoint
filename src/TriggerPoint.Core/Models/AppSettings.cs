@@ -46,6 +46,7 @@ public class AppSettings
     public LogLevelOption LogLevel { get; set; } = LogLevelOption.Information;
     public int LogRetentionDays { get; set; } = 7;
     public bool RunAtStartup { get; set; } = false;
+    public bool RunAsAdminAtStartup { get; set; } = false;
     public bool StartMinimized { get; set; } = false;
     public bool HideOnTargetWindow { get; set; } = true;
     public int RecycleBinRetentionDays { get; set; } = 30;
@@ -53,6 +54,7 @@ public class AppSettings
     public ShortcutBinding? CommandPaletteHotkey { get; set; } = new(ModifierKeys.Control | ModifierKeys.Shift, 32, "Space");
     public ShortcutBinding? CheatSheetHotkey { get; set; } = new(ModifierKeys.Control | ModifierKeys.Shift, 191, "/");
     public ThemePreference Theme { get; set; } = ThemePreference.System;
+    public AccentColorChoice AccentColor { get; set; } = AccentColorChoice.Indigo;
     public bool HasCompletedInitialSetup { get; set; } = false;
     public bool EnableBackdropEffects { get; set; } = true;
     public bool EnableUiAnimations { get; set; } = true;
@@ -74,6 +76,11 @@ public class AppSettings
     public bool CompactTreeDensity { get; set; } = true;
     public bool ShowDisabledItemsInTree { get; set; } = true;
     public bool ConfirmRevertChanges { get; set; } = true;
+
+    // Inline Abbreviation Expander settings
+    public bool EnableAbbreviationExpander { get; set; } = true;
+    public List<string> AbbreviationGlobalExcludedProcesses { get; set; } = ["mstsc.exe", "vmconnect.exe", "putty.exe"];
+    public bool AbbreviationSuppressInFullScreenGames { get; set; } = true;
 
     // Update settings
     public UpdateCheckFrequency UpdateFrequency { get; set; } = UpdateCheckFrequency.Daily;

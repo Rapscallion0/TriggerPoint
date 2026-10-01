@@ -348,11 +348,104 @@
                                     <ComboBox x:Name="ThemeCombo" 
                                               Height="34" 
                                               FontSize="13"
-                                              ToolTip="Theme selection">
+                                              ToolTip="Theme selection"
+                                              SelectionChanged="ThemeCombo_SelectionChanged">
                                         <ComboBoxItem Content="System Default (Auto-detect Windows theme)"/>
                                         <ComboBoxItem Content="Dark Mode (Deep charcoal slate)"/>
                                         <ComboBoxItem Content="Light Mode (Clean crisp light)"/>
                                     </ComboBox>
+
+                                    <!-- Accent Color Personalization -->
+                                    <TextBlock Text="Accent Color" 
+                                               FontWeight="SemiBold" 
+                                               FontSize="12" 
+                                               Foreground="{DynamicResource TextPrimaryBrush}" 
+                                               Margin="0,16,0,3"/>
+                                    <TextBlock Text="Choose a semantic accent color or automatically sync with your Windows system accent" 
+                                               FontSize="11" 
+                                               Foreground="{DynamicResource TextSecondaryBrush}" 
+                                               Margin="0,0,0,10" 
+                                               TextWrapping="Wrap"/>
+
+                                    <WrapPanel x:Name="AccentSwatchesPanel" Margin="0,0,0,6">
+                                        <!-- Indigo (Default) -->
+                                        <RadioButton x:Name="AccentRadioIndigo" 
+                                                     GroupName="AccentColorGroup" 
+                                                     Style="{StaticResource AccentSwatchRadioButtonStyle}" 
+                                                     Tag="Indigo" 
+                                                     ToolTip="Indigo (Default #6366F1 / #4F46E5)" 
+                                                     Click="AccentSwatch_Click">
+                                            <Border Width="28" Height="28" CornerRadius="14" Background="#6366F1"/>
+                                        </RadioButton>
+
+                                        <!-- Electric Violet -->
+                                        <RadioButton x:Name="AccentRadioElectricViolet" 
+                                                     GroupName="AccentColorGroup" 
+                                                     Style="{StaticResource AccentSwatchRadioButtonStyle}" 
+                                                     Tag="ElectricViolet" 
+                                                     ToolTip="Electric Violet (#A78BFA / #7C3AED)" 
+                                                     Click="AccentSwatch_Click">
+                                            <Border Width="28" Height="28" CornerRadius="14" Background="#A78BFA"/>
+                                        </RadioButton>
+
+                                        <!-- Cyber Blue -->
+                                        <RadioButton x:Name="AccentRadioCyberBlue" 
+                                                     GroupName="AccentColorGroup" 
+                                                     Style="{StaticResource AccentSwatchRadioButtonStyle}" 
+                                                     Tag="CyberBlue" 
+                                                     ToolTip="Cyber Blue (#38BDF8 / #0284C7)" 
+                                                     Click="AccentSwatch_Click">
+                                            <Border Width="28" Height="28" CornerRadius="14" Background="#38BDF8"/>
+                                        </RadioButton>
+
+                                        <!-- Emerald Green -->
+                                        <RadioButton x:Name="AccentRadioEmeraldGreen" 
+                                                     GroupName="AccentColorGroup" 
+                                                     Style="{StaticResource AccentSwatchRadioButtonStyle}" 
+                                                     Tag="EmeraldGreen" 
+                                                     ToolTip="Emerald Green (#34D399 / #059669)" 
+                                                     Click="AccentSwatch_Click">
+                                            <Border Width="28" Height="28" CornerRadius="14" Background="#34D399"/>
+                                        </RadioButton>
+
+                                        <!-- Sunset Orange -->
+                                        <RadioButton x:Name="AccentRadioSunsetOrange" 
+                                                     GroupName="AccentColorGroup" 
+                                                     Style="{StaticResource AccentSwatchRadioButtonStyle}" 
+                                                     Tag="SunsetOrange" 
+                                                     ToolTip="Sunset Orange (#FB923C / #EA580C)" 
+                                                     Click="AccentSwatch_Click">
+                                            <Border Width="28" Height="28" CornerRadius="14" Background="#FB923C"/>
+                                        </RadioButton>
+
+                                        <!-- Rose Crimson -->
+                                        <RadioButton x:Name="AccentRadioRoseCrimson" 
+                                                     GroupName="AccentColorGroup" 
+                                                     Style="{StaticResource AccentSwatchRadioButtonStyle}" 
+                                                     Tag="RoseCrimson" 
+                                                     ToolTip="Rose Crimson (#FB7185 / #E11D48)" 
+                                                     Click="AccentSwatch_Click">
+                                            <Border Width="28" Height="28" CornerRadius="14" Background="#FB7185"/>
+                                        </RadioButton>
+
+                                        <!-- Windows System -->
+                                        <RadioButton x:Name="AccentRadioWindowsSystem" 
+                                                     GroupName="AccentColorGroup" 
+                                                     Style="{StaticResource AccentSwatchRadioButtonStyle}" 
+                                                     Tag="WindowsSystem" 
+                                                     ToolTip="Windows System Accent (Auto-sync with DWM color)" 
+                                                     Click="AccentSwatch_Click">
+                                            <Border Width="28" Height="28" CornerRadius="14">
+                                                <Border.Background>
+                                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                        <GradientStop Color="#0078D7" Offset="0"/>
+                                                        <GradientStop Color="#881798" Offset="1"/>
+                                                    </LinearGradientBrush>
+                                                </Border.Background>
+                                                <TextBlock Text="🪟" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                        </RadioButton>
+                                    </WrapPanel>
 
                                     <!-- Backdrop Translucency Checkbox -->
                                     <CheckBox x:Name="EnableBackdropEffectsCheck"
@@ -419,6 +512,66 @@
                                     <controls:HotkeyRecorderControl x:Name="CheatSheetHotkeyRecorder"/>
                                 </StackPanel>
                             </Border>
+
+                            <!-- Inline Abbreviation Expander Settings Card -->
+                            <Border Background="{DynamicResource BgPrimaryBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="16"
+                                    Margin="0,12,0,0">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Inline Abbreviation Expander" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center"/>
+                                        <Border Grid.Column="1"
+                                                Background="{DynamicResource AccentSubtleBrush}"
+                                                BorderBrush="{DynamicResource AccentBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="4"
+                                                Padding="6,2">
+                                            <TextBlock Text="Auto-Expand" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}"/>
+                                        </Border>
+                                    </Grid>
+
+                                    <TextBlock Text="Configure global text expansion and safety options for snippet abbreviations" 
+                                               FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,8" TextWrapping="Wrap"/>
+
+                                    <Border Height="1" Background="{DynamicResource BorderSubtleBrush}" Margin="0,0,0,12" SnapsToDevicePixels="True"/>
+
+                                    <CheckBox x:Name="EnableAbbreviationExpanderCheck"
+                                              Content="Enable Inline Abbreviation Expander"
+                                              FontSize="13"
+                                              FontWeight="SemiBold"
+                                              Margin="0,0,0,6"
+                                              ToolTip="Enables system-wide automatic expansion of snippet abbreviations"/>
+
+                                    <TextBlock Text="When enabled, typing a snippet's abbreviation anywhere in Windows will automatically backspace the keyword and expand the template."
+                                               FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="24,0,0,12" TextWrapping="Wrap"/>
+
+                                    <CheckBox x:Name="AbbreviationSuppressInFullScreenGamesCheck"
+                                              Content="Suppress expansion during full-screen games &amp; 3D apps"
+                                              FontSize="12.5"
+                                              Margin="0,0,0,6"
+                                              ToolTip="Uses Windows notification query state to prevent abbreviations from expanding while playing full-screen 3D games"/>
+
+                                    <TextBlock Text="Prevents accidental keyword expansion while gaming or running immersive DirectX/OpenGL apps."
+                                               FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="24,0,0,14" TextWrapping="Wrap"/>
+
+                                    <TextBlock Text="Globally Excluded Processes (comma-separated):" FontWeight="SemiBold" FontSize="12.5" Margin="0,0,0,4"/>
+                                    <TextBox x:Name="AbbreviationGlobalExcludedProcessesBox"
+                                             Style="{StaticResource ModernTextBoxStyle}"
+                                             FontFamily="{StaticResource CodeFont}"
+                                             FontSize="12"
+                                             Margin="0,0,0,4"
+                                             ToolTip="Processes where abbreviation expansion is suppressed (e.g. mstsc.exe, vmconnect.exe)"/>
+                                    <TextBlock Text="Expansion will never trigger inside these applications (e.g. Remote Desktop, Virtual Machines, Terminals)."
+                                               FontSize="11" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
 
                         <!-- CATEGORY 3: System Integration -->
@@ -439,7 +592,13 @@
                                               Content="Start TriggerPoint when you log in to Windows" 
                                               FontSize="13" 
                                               Margin="0,0,0,6"
-                                              ToolTip="Adds TriggerPoint to current user's Windows Startup registry run key"/>
+                                              ToolTip="Adds TriggerPoint to current user's Windows Startup configuration"/>
+
+                                    <CheckBox x:Name="RunAsAdminStartupCheck" 
+                                              Content="Run with Administrator privileges (via Windows Task Scheduler)" 
+                                              FontSize="12.5" 
+                                              Margin="24,0,0,6"
+                                              ToolTip="Launches TriggerPoint elevated at Windows logon without showing UAC prompts. Required for silent Windows service control."/>
 
                                     <Border x:Name="PortableStartupAdvisoryBorder"
                                             Visibility="Collapsed"

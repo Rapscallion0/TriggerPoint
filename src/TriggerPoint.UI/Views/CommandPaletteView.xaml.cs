@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -13,6 +14,7 @@ using System.Windows.Threading;
 using TriggerPoint.Core.Contracts;
 using TriggerPoint.Core.Models;
 using TriggerPoint.Core.Services;
+using TriggerPoint.Infrastructure.Services;
 using TriggerPoint.Infrastructure.Win32;
 using ModifierKeys = System.Windows.Input.ModifierKeys;
 
@@ -74,6 +76,9 @@ public class PaletteItemViewModel
     public bool IsSystemAction => Item != null && (Item.Id == App.OpenSettingsActionId || Item.Id == CommandPaletteView.AppSettingsVirtualId);
     public bool IsCalculatorResult { get; init; }
     public CalculatorResult? CalcResult { get; init; }
+    public bool IsServiceItem { get; init; }
+    public WindowsServiceItem? ServiceItem { get; init; }
+    public WindowsServiceStatus? ServiceActionStatus { get; init; }
 
     public IReadOnlyList<AlternativeMeasurement> CommonAlternatives =>
         CalcResult?.Alternatives?.Where(a => a.IsCommon).Take(4).ToList() ?? (IReadOnlyList<AlternativeMeasurement>)Array.Empty<AlternativeMeasurement>();
@@ -84,7 +89,22 @@ public class PaletteItemViewModel
     public bool HasAlternatives => CalcResult?.Alternatives != null && CalcResult.Alternatives.Count > 0;
     public Visibility AlternativesVisibility => (IsCalculatorResult && HasAlternatives) ? Visibility.Visible : Visibility.Collapsed;
     public Cursor SubtitleCursor => (IsCalculatorResult && HasAlternatives) ? Cursors.Hand : Cursors.Arrow;
-    public string? SubtitleTooltip => (IsCalculatorResult && HasAlternatives) ? "Click to view and choose other measurement units" : null;
+    public string? SubtitleTooltip
+    {
+        get
+        {
+            if (IsCalculatorResult)
+            {
+                if (!string.IsNullOrWhiteSpace(Description))
+                {
+                    return HasAlternatives
+                        ? $"{Description}\n\n(Click to view and choose other measurement units)"
+                        : Description;
+                }
+            }
+            return !string.IsNullOrWhiteSpace(Description) ? Description : null;
+        }
+    }
 
     public string Name => Item?.Name ?? string.Empty;
     public string Description => Item?.Description ?? string.Empty;
@@ -94,6 +114,10 @@ public class PaletteItemViewModel
         get
         {
             if (IsSectionHeader) return string.Empty;
+            if (IsServiceItem && ServiceItem != null)
+            {
+                return $"{ServiceItem.ServiceName} • {ServiceItem.StartType} • {ServiceItem.StatusText}";
+            }
             if (!string.IsNullOrWhiteSpace(Description)) return Description;
 
             if (!string.IsNullOrWhiteSpace(ParentPath))
@@ -114,6 +138,17 @@ public class PaletteItemViewModel
                 return $"{count} automated {(count == 1 ? "step" : "steps")}";
             }
 
+            if (Item.ActionType == ActionType.Service)
+            {
+                string op = Item.Payload.ServiceOperation.ToString().ToUpperInvariant();
+                string sName = !string.IsNullOrWhiteSpace(Item.Payload.ServiceName) ? Item.Payload.ServiceName : "Unconfigured";
+                if (ServiceActionStatus.HasValue && ServiceActionStatus.Value != WindowsServiceStatus.Unknown)
+                {
+                    return $"{op} • {sName} • {ServiceActionStatus.Value}";
+                }
+                return $"{op} • {sName}";
+            }
+
             return string.Empty;
         }
     }
@@ -130,7 +165,7 @@ public class PaletteItemViewModel
     {
         get
         {
-            if (IsSectionHeader || IsSystemAction || Item == null) return string.Empty;
+            if (IsSectionHeader || IsSystemAction || IsServiceItem || Item == null) return string.Empty;
             if (Item.UsageStats.LaunchCount <= 0 && !Item.UsageStats.LastExecutedUtc.HasValue) return string.Empty;
 
             long count = Item.UsageStats.LaunchCount;
@@ -152,6 +187,15 @@ public class PaletteItemViewModel
             if (IsSectionHeader) return string.Empty;
             if (IsCalculatorResult) return "CALC";
             if (IsSystemAction) return "SYSTEM";
+            if (IsServiceItem && ServiceItem != null) return ServiceItem.Status.ToString().ToUpperInvariant();
+            if (Item?.ActionType == ActionType.Service)
+            {
+                if (ServiceActionStatus.HasValue && ServiceActionStatus.Value != WindowsServiceStatus.Unknown)
+                {
+                    return ServiceActionStatus.Value.ToString().ToUpperInvariant();
+                }
+                return "SERVICE";
+            }
             return Item?.ActionType switch
             {
                 ActionType.Shell => "APP & COMMAND",
@@ -163,19 +207,40 @@ public class PaletteItemViewModel
         }
     }
 
-    public Visibility AdminBadgeVisibility => (!IsSectionHeader && !IsSystemAction && Item?.Payload?.RunAsAdmin == true) ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility AdminBadgeVisibility => (!IsSectionHeader && !IsSystemAction && !IsServiceItem && (Item?.Payload?.RunAsAdmin == true || (Item?.ActionType == ActionType.Service && Item?.Payload?.ServiceRunAsAdmin == true))) ? Visibility.Visible : Visibility.Collapsed;
 
     public Brush TypeForegroundBrush
     {
         get
         {
             if (IsCalculatorResult || IsSystemAction) return Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.CornflowerBlue;
+            if (IsServiceItem && ServiceItem != null)
+            {
+                return ServiceItem.Status switch
+                {
+                    WindowsServiceStatus.Running => Application.Current.TryFindResource("SnippetBrush") as Brush ?? Brushes.MediumSeaGreen,
+                    WindowsServiceStatus.Paused => Application.Current.TryFindResource("ShellBrush") as Brush ?? Brushes.Goldenrod,
+                    WindowsServiceStatus.StartPending or WindowsServiceStatus.ContinuePending => Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.CornflowerBlue,
+                    _ => Application.Current.TryFindResource("TextMutedBrush") as Brush ?? Brushes.Gray
+                };
+            }
+            if (Item?.ActionType == ActionType.Service && ServiceActionStatus.HasValue && ServiceActionStatus.Value != WindowsServiceStatus.Unknown)
+            {
+                return ServiceActionStatus.Value switch
+                {
+                    WindowsServiceStatus.Running => Application.Current.TryFindResource("SnippetBrush") as Brush ?? Brushes.MediumSeaGreen,
+                    WindowsServiceStatus.Paused => Application.Current.TryFindResource("ShellBrush") as Brush ?? Brushes.Goldenrod,
+                    WindowsServiceStatus.StartPending or WindowsServiceStatus.ContinuePending => Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.CornflowerBlue,
+                    _ => Application.Current.TryFindResource("TextMutedBrush") as Brush ?? Brushes.Gray
+                };
+            }
             return Item?.ActionType switch
             {
                 ActionType.Folder => Application.Current.TryFindResource("FolderBrush") as Brush ?? Brushes.SteelBlue,
                 ActionType.Snippet => Application.Current.TryFindResource("SnippetBrush") as Brush ?? Brushes.MediumSeaGreen,
                 ActionType.Shell => Application.Current.TryFindResource("ShellBrush") as Brush ?? Brushes.Goldenrod,
                 ActionType.Workflow => Application.Current.TryFindResource("WorkflowBrush") as Brush ?? Brushes.MediumPurple,
+                ActionType.Service => Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.DeepSkyBlue,
                 _ => Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.Gray
             };
         }
@@ -186,12 +251,33 @@ public class PaletteItemViewModel
         get
         {
             if (IsCalculatorResult || IsSystemAction) return Application.Current.TryFindResource("AccentSubtleBrush") as Brush ?? new SolidColorBrush(Color.FromArgb(0x18, 0x00, 0x7A, 0xCC));
+            if (IsServiceItem && ServiceItem != null)
+            {
+                return ServiceItem.Status switch
+                {
+                    WindowsServiceStatus.Running => Application.Current.TryFindResource("SnippetSubtleBrush") as Brush ?? new SolidColorBrush(Color.FromArgb(0x18, 0x10, 0xB9, 0x81)),
+                    WindowsServiceStatus.Paused => Application.Current.TryFindResource("ShellSubtleBrush") as Brush ?? new SolidColorBrush(Color.FromArgb(0x18, 0xF5, 0x9E, 0x0B)),
+                    WindowsServiceStatus.StartPending or WindowsServiceStatus.ContinuePending => Application.Current.TryFindResource("AccentSubtleBrush") as Brush ?? new SolidColorBrush(Color.FromArgb(0x18, 0x00, 0x7A, 0xCC)),
+                    _ => Application.Current.TryFindResource("BgTertiaryBrush") as Brush ?? Brushes.Transparent
+                };
+            }
+            if (Item?.ActionType == ActionType.Service && ServiceActionStatus.HasValue && ServiceActionStatus.Value != WindowsServiceStatus.Unknown)
+            {
+                return ServiceActionStatus.Value switch
+                {
+                    WindowsServiceStatus.Running => Application.Current.TryFindResource("SnippetSubtleBrush") as Brush ?? new SolidColorBrush(Color.FromArgb(0x18, 0x10, 0xB9, 0x81)),
+                    WindowsServiceStatus.Paused => Application.Current.TryFindResource("ShellSubtleBrush") as Brush ?? new SolidColorBrush(Color.FromArgb(0x18, 0xF5, 0x9E, 0x0B)),
+                    WindowsServiceStatus.StartPending or WindowsServiceStatus.ContinuePending => Application.Current.TryFindResource("AccentSubtleBrush") as Brush ?? new SolidColorBrush(Color.FromArgb(0x18, 0x00, 0x7A, 0xCC)),
+                    _ => Application.Current.TryFindResource("BgTertiaryBrush") as Brush ?? Brushes.Transparent
+                };
+            }
             return Item?.ActionType switch
             {
                 ActionType.Folder => Application.Current.TryFindResource("FolderSubtleBrush") as Brush ?? new SolidColorBrush(Color.FromArgb(0x18, 0x3B, 0x82, 0xF6)),
                 ActionType.Snippet => Application.Current.TryFindResource("SnippetSubtleBrush") as Brush ?? new SolidColorBrush(Color.FromArgb(0x18, 0x10, 0xB9, 0x81)),
                 ActionType.Shell => Application.Current.TryFindResource("ShellSubtleBrush") as Brush ?? new SolidColorBrush(Color.FromArgb(0x18, 0xF5, 0x9E, 0x0B)),
                 ActionType.Workflow => Application.Current.TryFindResource("WorkflowSubtleBrush") as Brush ?? new SolidColorBrush(Color.FromArgb(0x18, 0x8B, 0x5C, 0xF6)),
+                ActionType.Service => Application.Current.TryFindResource("AccentSubtleBrush") as Brush ?? new SolidColorBrush(Color.FromArgb(0x18, 0x00, 0x7A, 0xCC)),
                 _ => Brushes.Transparent
             };
         }
@@ -202,12 +288,18 @@ public class PaletteItemViewModel
         get
         {
             if (IsSystemAction) return Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.CornflowerBlue;
+            if (IsServiceItem && ServiceItem != null) return TypeForegroundBrush;
+            if (Item?.ActionType == ActionType.Service && ServiceActionStatus.HasValue && ServiceActionStatus.Value != WindowsServiceStatus.Unknown)
+            {
+                return TypeForegroundBrush;
+            }
             return Item?.ActionType switch
             {
                 ActionType.Folder => Application.Current.TryFindResource("FolderBrush") as Brush ?? Brushes.SteelBlue,
                 ActionType.Snippet => Application.Current.TryFindResource("SnippetBrush") as Brush ?? Brushes.MediumSeaGreen,
                 ActionType.Shell => Application.Current.TryFindResource("ShellBrush") as Brush ?? Brushes.Goldenrod,
                 ActionType.Workflow => Application.Current.TryFindResource("WorkflowBrush") as Brush ?? Brushes.MediumPurple,
+                ActionType.Service => Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.CornflowerBlue,
                 _ => Application.Current.TryFindResource("BorderSubtleBrush") as Brush ?? Brushes.Gray
             };
         }
@@ -219,9 +311,21 @@ public class PaletteItemViewModel
         {
             if (IsSectionHeader) return string.Empty;
             if (IsCalculatorResult) return "🧮";
+            if (IsServiceItem && ServiceItem != null) return ServiceItem.StatusBadgeEmoji;
+            if (Item?.ActionType == ActionType.Service && ServiceActionStatus.HasValue && ServiceActionStatus.Value != WindowsServiceStatus.Unknown)
+            {
+                return ServiceActionStatus.Value switch
+                {
+                    WindowsServiceStatus.Running => "🟢",
+                    WindowsServiceStatus.Paused => "🟡",
+                    WindowsServiceStatus.StartPending => "🔄",
+                    WindowsServiceStatus.StopPending => "⏳",
+                    _ => "⚪"
+                };
+            }
             if (IsSystemAction)
             {
-                return Item.Id == App.OpenSettingsActionId ? "🎯" : "⚙️";
+                return Item?.Id == App.OpenSettingsActionId ? "🎯" : "⚙️";
             }
             return Item?.ActionType switch
             {
@@ -229,6 +333,7 @@ public class PaletteItemViewModel
                 ActionType.Snippet => "📝",
                 ActionType.Shell => "⚡",
                 ActionType.Workflow => "🔀",
+                ActionType.Service => "⚙️",
                 _ => "▶"
             };
         }
@@ -239,19 +344,21 @@ public class PaletteItemViewModel
         get
         {
             if (IsSystemAction) return Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.CornflowerBlue;
+            if (IsServiceItem && ServiceItem != null) return TypeForegroundBrush;
             string key = Item?.ActionType switch
             {
                 ActionType.Folder => "FolderBrush",
                 ActionType.Shell => "ShellBrush",
                 ActionType.Snippet => "SnippetBrush",
                 ActionType.Workflow => "WorkflowBrush",
+                ActionType.Service => "AccentBrush",
                 _ => "AccentBrush"
             };
             return Application.Current.TryFindResource(key) as Brush ?? Brushes.Gray;
         }
     }
 
-    public Visibility IsFolder => (Item != null && Item.ActionType == ActionType.Folder && !IsSectionHeader) ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility IsFolder => (Item != null && Item.ActionType == ActionType.Folder && !IsSectionHeader && !IsServiceItem) ? Visibility.Visible : Visibility.Collapsed;
 
     public bool CanRevealInExplorer
     {
@@ -267,6 +374,16 @@ public class PaletteItemViewModel
         get
         {
             if (IsSectionHeader) return string.Empty;
+            if (IsServiceItem && ServiceItem != null)
+            {
+                return $"Service: {ServiceItem.DisplayName} ({ServiceItem.ServiceName}) • Status: {ServiceItem.StatusText} • Startup: {ServiceItem.StartType}";
+            }
+            if (IsCalculatorResult && CalcResult != null)
+            {
+                return !string.IsNullOrWhiteSpace(CalcResult.Description)
+                    ? $"{CalcResult.Expression} ➔ {CalcResult.FormattedResult} • {CalcResult.Description}"
+                    : $"{CalcResult.Expression} = {CalcResult.FormattedResult}";
+            }
             if (IsSystemAction) return Item.Description;
 
             if (Item.ActionType == ActionType.Snippet && !string.IsNullOrWhiteSpace(Item.Payload.SnippetTemplate))
@@ -299,21 +416,66 @@ public class PaletteItemViewModel
                 return !string.IsNullOrWhiteSpace(ParentPath) ? $"Folder inside {ParentPath}" : "Root Folder";
             }
 
+            if (Item.ActionType == ActionType.Service)
+            {
+                string op = Item.Payload.ServiceOperation.ToString();
+                string sName = !string.IsNullOrWhiteSpace(Item.Payload.ServiceName) ? Item.Payload.ServiceName : "Not set";
+                int timeout = Item.Payload.ServiceTimeoutSeconds > 0 ? Item.Payload.ServiceTimeoutSeconds : 30;
+                string adminStr = Item.Payload.ServiceRunAsAdmin ? " [Elevated/Admin]" : "";
+                return $"Windows Service Action: {op} '{sName}' (Timeout: {timeout}s){adminStr}";
+            }
+
             return Item.Description;
         }
     }
 
     public IReadOnlyList<HighlightSegment> HighlightedNameSegments { get; }
 
-    public PaletteItemViewModel(TriggerItem item, FuzzyMatchResult? matchResult, string? parentPath = null)
+    public PaletteItemViewModel(TriggerItem item, FuzzyMatchResult? matchResult, string? parentPath = null, WindowsServiceStatus? serviceActionStatus = null)
     {
         Item = item;
         MatchResult = matchResult;
         ParentPath = parentPath;
+        if (serviceActionStatus.HasValue)
+        {
+            ServiceActionStatus = serviceActionStatus;
+        }
+        else if (item?.ActionType == ActionType.Service && !string.IsNullOrWhiteSpace(item?.Payload?.ServiceName))
+        {
+            try
+            {
+                using var sc = new System.ServiceProcess.ServiceController(item.Payload.ServiceName);
+                ServiceActionStatus = (WindowsServiceStatus)(int)sc.Status;
+            }
+            catch
+            {
+                ServiceActionStatus = WindowsServiceStatus.Unknown;
+            }
+        }
         IsSectionHeader = false;
         SectionHeaderText = string.Empty;
         HeaderBorderThickness = new Thickness(0);
-        HighlightedNameSegments = BuildHighlightedSegments(item.Name, matchResult?.MatchedIndices);
+        HighlightedNameSegments = BuildHighlightedSegments(item?.Name ?? string.Empty, matchResult?.MatchedIndices);
+    }
+
+    public PaletteItemViewModel(WindowsServiceItem serviceItem, IReadOnlyList<int>? matchedIndices = null, double score = 0)
+    {
+        ServiceItem = serviceItem;
+        IsServiceItem = true;
+        Item = new TriggerItem
+        {
+            Id = Guid.NewGuid(),
+            Name = serviceItem.DisplayName,
+            Description = $"{serviceItem.ServiceName} ({serviceItem.StatusText})",
+            ActionType = ActionType.Shell,
+            Payload = new ActionPayload { Command = serviceItem.ServiceName }
+        };
+        MatchResult = matchedIndices != null ? new FuzzyMatchResult(Item, score, matchedIndices) : null;
+        ParentPath = null;
+        IsSectionHeader = false;
+        SectionHeaderText = string.Empty;
+        HeaderBorderThickness = new Thickness(0);
+        HighlightedNameSegments = BuildHighlightedSegments(serviceItem.DisplayName, matchedIndices);
     }
 
     private PaletteItemViewModel(string sectionHeader, bool hasTopDivider)
@@ -417,6 +579,8 @@ public partial class CommandPaletteView : Window
     private readonly IActionExecutor _executor;
     private readonly IConfigRepository? _repository;
     private readonly IntPtr _targetHwnd;
+    private readonly IWindowsServiceManager _serviceManager;
+    private IReadOnlyList<WindowsServiceItem>? _cachedServices;
 
     private Guid? _currentScopeFolderId;
     private string? _currentScopeFolderName;
@@ -427,6 +591,7 @@ public partial class CommandPaletteView : Window
     private CommandPaletteSortMode _currentSortMode = CommandPaletteSortMode.Smart;
     private readonly DispatcherTimer _feedbackTimer;
     private bool _isLoaded;
+    private bool _isCalcPromoted;
 
     private TriggerItem? _folderConfirmTargetFolder;
     private List<TriggerItem> _folderConfirmResolvedActions = [];
@@ -441,6 +606,8 @@ public partial class CommandPaletteView : Window
         new("@snip", "Snippets & Templates", "Ctrl+3", "📝", CommandPaletteFilterType.Snippet),
         new("@flow", "Workflows", "Ctrl+4", "🔀", CommandPaletteFilterType.Workflow),
         new("@folder", "Folders", "Ctrl+5", "📁", CommandPaletteFilterType.Folder),
+        new("@service", "Windows Services", "Ctrl+6", "⚙️", CommandPaletteFilterType.Service),
+        new("@svc", "Services (Shorthand)", "", "⚙️", CommandPaletteFilterType.Service),
         new("@calc", "Calculator & Math", "=", "🧮", CommandPaletteFilterType.All),
         new("@current", "Current App Context", "", "🎯", CommandPaletteFilterType.All),
     ];
@@ -450,8 +617,9 @@ public partial class CommandPaletteView : Window
         IActionExecutor executor,
         Guid? scopedFolderId = null,
         string? scopedFolderName = null,
-        IntPtr targetHwnd = default)
-        : this(items, executor, (Application.Current as App)?.Repository, scopedFolderId, scopedFolderName, targetHwnd)
+        IntPtr targetHwnd = default,
+        IWindowsServiceManager? serviceManager = null)
+        : this(items, executor, (Application.Current as App)?.Repository, scopedFolderId, scopedFolderName, targetHwnd, serviceManager)
     {
     }
 
@@ -461,12 +629,14 @@ public partial class CommandPaletteView : Window
         IConfigRepository? repository,
         Guid? scopedFolderId = null,
         string? scopedFolderName = null,
-        IntPtr targetHwnd = default)
+        IntPtr targetHwnd = default,
+        IWindowsServiceManager? serviceManager = null)
     {
         InitializeComponent();
         _executor = executor;
         _repository = repository;
         _targetHwnd = targetHwnd;
+        _serviceManager = serviceManager ?? new WindowsServiceManager();
         _currentScopeFolderId = scopedFolderId;
         _currentScopeFolderName = scopedFolderName;
 
@@ -756,6 +926,12 @@ public partial class CommandPaletteView : Window
             int spaceIdx = rawQuery.IndexOf(' ');
             effectiveQuery = spaceIdx >= 0 ? rawQuery.Substring(spaceIdx).Trim() : string.Empty;
         }
+        else if (rawQuery.StartsWith("@service", StringComparison.OrdinalIgnoreCase) || rawQuery.StartsWith("@svc", StringComparison.OrdinalIgnoreCase))
+        {
+            _activeFilter = CommandPaletteFilterType.Service;
+            int spaceIdx = rawQuery.IndexOf(' ');
+            effectiveQuery = spaceIdx >= 0 ? rawQuery.Substring(spaceIdx).Trim() : string.Empty;
+        }
         else if (rawQuery.StartsWith("@all", StringComparison.OrdinalIgnoreCase))
         {
             _activeFilter = CommandPaletteFilterType.All;
@@ -827,7 +1003,59 @@ public partial class CommandPaletteView : Window
         // 4. Build results list
         var vms = new List<PaletteItemViewModel>();
 
-        if (_currentSortMode == CommandPaletteSortMode.ActionTree)
+        if (_activeFilter == CommandPaletteFilterType.Service)
+        {
+            // Dedicated user-configured service actions are prioritized ABOVE all raw system services
+            var dedicatedActions = scopeCandidates.Where(x => x.ActionType == ActionType.Service).ToList();
+            var dedicatedVms = new List<PaletteItemViewModel>();
+            if (string.IsNullOrWhiteSpace(effectiveQuery))
+            {
+                dedicatedVms.AddRange(dedicatedActions.Select(item => new PaletteItemViewModel(
+                    item,
+                    null,
+                    item.ParentId.HasValue && _folderPaths.TryGetValue(item.ParentId.Value, out var path) ? path : null)));
+            }
+            else
+            {
+                var rankedDedicated = FuzzyMatcher.FilterAndRank(dedicatedActions, effectiveQuery, _currentSortMode);
+                dedicatedVms.AddRange(rankedDedicated.Select(r => new PaletteItemViewModel(
+                    r.Item,
+                    r,
+                    r.Item.ParentId.HasValue && _folderPaths.TryGetValue(r.Item.ParentId.Value, out var path) ? path : null)));
+            }
+
+            _cachedServices ??= _serviceManager.GetServices();
+            var serviceVms = new List<PaletteItemViewModel>();
+            foreach (var svc in _cachedServices)
+            {
+                if (string.IsNullOrWhiteSpace(effectiveQuery))
+                {
+                    serviceVms.Add(CreateServiceViewModel(svc, null, 0));
+                }
+                else
+                {
+                    var nameMatch = FuzzyMatcher.MatchText(svc.DisplayName, effectiveQuery);
+                    var idMatch = FuzzyMatcher.MatchText(svc.ServiceName, effectiveQuery);
+                    var best = (nameMatch != null && idMatch != null)
+                        ? (nameMatch.Value.Score >= idMatch.Value.Score ? nameMatch : idMatch)
+                        : (nameMatch ?? idMatch);
+
+                    if (best != null)
+                    {
+                        serviceVms.Add(CreateServiceViewModel(svc, best.Value.MatchedIndices, best.Value.Score));
+                    }
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(effectiveQuery))
+            {
+                serviceVms = serviceVms.OrderByDescending(x => x.MatchResult?.Score ?? 0).ToList();
+            }
+
+            vms.AddRange(dedicatedVms);
+            vms.AddRange(serviceVms);
+        }
+        else if (_currentSortMode == CommandPaletteSortMode.ActionTree)
         {
             var treeOrdered = OrderByActionTree(filteredCandidates, _currentScopeFolderId);
             if (string.IsNullOrWhiteSpace(effectiveQuery))
@@ -882,10 +1110,17 @@ public partial class CommandPaletteView : Window
                 r.Item.ParentId.HasValue && _folderPaths.TryGetValue(r.Item.ParentId.Value, out var path) ? path : null)));
         }
 
-        bool isCalcMode = rawQuery.StartsWith("=") || rawQuery.StartsWith("@calc", StringComparison.OrdinalIgnoreCase);
+        bool hasExplicitPrefix = rawQuery.StartsWith("=") || rawQuery.StartsWith("@calc", StringComparison.OrdinalIgnoreCase);
 
         // Evaluate quick math or unit conversion utility
         var calcResult = QuickCalculatorService.TryEvaluate(rawQuery);
+
+        if (_isCalcPromoted && !hasExplicitPrefix && calcResult == null)
+        {
+            _isCalcPromoted = false;
+        }
+
+        bool isCalcMode = hasExplicitPrefix || _isCalcPromoted;
 
         if (isCalcMode)
         {
@@ -924,8 +1159,9 @@ public partial class CommandPaletteView : Window
                 CalcResultBanner.Visibility = Visibility.Visible;
                 CalcDraftBanner.Visibility = Visibility.Collapsed;
                 CalcResultValueText.Text = calcResult.FormattedResult;
-                CalcResultValueText.ToolTip = $"Calculation: {calcResult.Expression.TrimStart('=', ' ').Trim()} = {calcResult.FormattedResult} (Enter to paste)";
+                CalcResultValueText.ToolTip = $"Calculation: {calcResult.Expression.TrimStart('=', ' ').Trim()} = {calcResult.FormattedResult} (Shift+Enter to paste, Enter to copy)";
                 CalcResultDescText.Text = !string.IsNullOrWhiteSpace(calcResult.Description) ? calcResult.Description : "Calculation result";
+                CalcResultDescText.ToolTip = CalcResultDescText.Text;
                 CalcResultMoreUnitsBtn.Visibility = (calcResult.Alternatives != null && calcResult.Alternatives.Count > 0) ? Visibility.Visible : Visibility.Collapsed;
             }
             else
@@ -982,7 +1218,21 @@ public partial class CommandPaletteView : Window
                     CalcResult = calcResult
                 };
                 _activeCalcVm = calcVm;
-                vms.Insert(0, calcVm);
+
+                bool isBareNumber = IsBareNumber(rawQuery);
+                bool hasMatchingActions = vms.Count > 0;
+
+                if (isBareNumber && hasMatchingActions)
+                {
+                    // Action Priority: User typed a bare number (e.g. '42') and matching action(s) exist (e.g. 'Server 42')
+                    // Place matching actions first, calculator item below them to prevent hijacking action workflow
+                    vms.Add(calcVm);
+                }
+                else
+                {
+                    // Unambiguous calculation (e.g. '40 + 2') OR bare number with no matching actions: calculator is #1
+                    vms.Insert(0, calcVm);
+                }
             }
             else
             {
@@ -1036,6 +1286,27 @@ public partial class CommandPaletteView : Window
         }
 
         UpdatePreviewAndHints();
+    }
+
+    internal static bool IsBareNumber(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query)) return false;
+        string trimmed = query.Trim();
+
+        // Hexadecimal format (e.g. 0x2A)
+        if (trimmed.StartsWith("0x", StringComparison.OrdinalIgnoreCase) && trimmed.Length > 2)
+        {
+            return long.TryParse(trimmed.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _);
+        }
+
+        // Binary format (e.g. 0b101010)
+        if (trimmed.StartsWith("0b", StringComparison.OrdinalIgnoreCase) && trimmed.Length > 2)
+        {
+            return trimmed.Substring(2).All(c => c == '0' || c == '1');
+        }
+
+        // Standard decimal / integer float
+        return double.TryParse(trimmed, NumberStyles.Float, CultureInfo.InvariantCulture, out _);
     }
 
     private double _currentAnimatedTargetHeight = 520;
@@ -1232,12 +1503,27 @@ public partial class CommandPaletteView : Window
         int snipCount = list.Count(x => x.ActionType == ActionType.Snippet);
         int wfCount = list.Count(x => x.ActionType == ActionType.Workflow);
         int folderCount = list.Count(x => x.ActionType == ActionType.Folder);
+        int dedicatedServiceCount = list.Count(x => x.ActionType == ActionType.Service);
 
         FilterCountAll.Text = $"All ({allCount})";
-        FilterCountApp.Text = $"Apps & Commands ({appCount})";
+        FilterCountApp.Text = $"Apps ({appCount})";
         FilterCountSnippet.Text = $"Snippets ({snipCount})";
         FilterCountWorkflow.Text = $"Workflows ({wfCount})";
         FilterCountFolder.Text = $"Folders ({folderCount})";
+        if (FilterCountService != null)
+        {
+            int totalServices = (_cachedServices?.Count ?? 0) + dedicatedServiceCount;
+            FilterCountService.Text = $"Services ({totalServices})";
+        }
+    }
+
+    private void FilterPillsScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (FilterPillsScrollViewer != null && e.Delta != 0)
+        {
+            FilterPillsScrollViewer.ScrollToHorizontalOffset(FilterPillsScrollViewer.HorizontalOffset - e.Delta);
+            e.Handled = true;
+        }
     }
 
     private void UpdateFilterPillsUi()
@@ -1247,6 +1533,10 @@ public partial class CommandPaletteView : Window
         FilterPillSnippet.Tag = _activeFilter == CommandPaletteFilterType.Snippet ? "Selected" : "";
         FilterPillWorkflow.Tag = _activeFilter == CommandPaletteFilterType.Workflow ? "Selected" : "";
         FilterPillFolder.Tag = _activeFilter == CommandPaletteFilterType.Folder ? "Selected" : "";
+        if (FilterPillService != null)
+        {
+            FilterPillService.Tag = _activeFilter == CommandPaletteFilterType.Service ? "Selected" : "";
+        }
     }
 
     private void FilterPill_Click(object sender, RoutedEventArgs e)
@@ -1267,6 +1557,10 @@ public partial class CommandPaletteView : Window
         {
             _activeFilter = _activeFilter == CommandPaletteFilterType.Folder ? CommandPaletteFilterType.All : CommandPaletteFilterType.Folder;
         }
+        else if (sender == FilterPillService)
+        {
+            _activeFilter = _activeFilter == CommandPaletteFilterType.Service ? CommandPaletteFilterType.All : CommandPaletteFilterType.Service;
+        }
         else
         {
             _activeFilter = CommandPaletteFilterType.All;
@@ -1284,18 +1578,23 @@ public partial class CommandPaletteView : Window
     private void UpdatePreviewAndHints()
     {
         string rawQuery = SearchTextBox?.Text?.Trim() ?? string.Empty;
-        bool isCalcMode = rawQuery.StartsWith("=") || rawQuery.StartsWith("@calc", StringComparison.OrdinalIgnoreCase);
+        bool hasExplicitPrefix = rawQuery.StartsWith("=") || rawQuery.StartsWith("@calc", StringComparison.OrdinalIgnoreCase);
+        bool isCalcMode = hasExplicitPrefix || _isCalcPromoted;
 
         if (isCalcMode)
         {
             if (_activeCalcResult != null)
             {
-                PreviewDetailText.Text = $"Calculator • {_activeCalcResult.Expression} = {_activeCalcResult.FormattedResult}";
-                FooterHintsText.Text = $"Enter Paste Answer   •   Ctrl+C Copy Answer ({_activeCalcResult.FormattedResult})   •   Ctrl+Shift+C Copy Question & Answer   •   Tab Chain";
+                PreviewDetailText.Text = !string.IsNullOrWhiteSpace(_activeCalcResult.Description)
+                    ? $"Calculator • {_activeCalcResult.Expression} = {_activeCalcResult.FormattedResult} • {_activeCalcResult.Description}"
+                    : $"Calculator • {_activeCalcResult.Expression} = {_activeCalcResult.FormattedResult}";
+                PreviewDetailText.ToolTip = PreviewDetailText.Text;
+                FooterHintsText.Text = $"Shift+Enter Paste Answer   •   Ctrl+C Copy Answer ({_activeCalcResult.FormattedResult})   •   Ctrl+Shift+C Copy Question & Answer   •   Alt+U Units   •   Tab Chain";
             }
             else
             {
                 PreviewDetailText.Text = "Calculator Mode • Active";
+                PreviewDetailText.ToolTip = null;
                 FooterHintsText.Text = "Click keypad to insert operators   •   Esc Exit Calculator";
             }
             return;
@@ -1304,14 +1603,19 @@ public partial class CommandPaletteView : Window
         if (ResultsListBox.SelectedItem is PaletteItemViewModel vm && vm.IsSelectable)
         {
             PreviewDetailText.Text = vm.DetailPreviewText;
+            PreviewDetailText.ToolTip = !string.IsNullOrWhiteSpace(vm.DetailPreviewText) ? vm.DetailPreviewText : null;
 
             // Contextual footer hints
-            if (vm.IsCalculatorResult)
+            if (vm.IsServiceItem && vm.ServiceItem != null)
+            {
+                FooterHintsText.Text = "↵ Toggle (Start/Stop)   •   Ctrl+S Start   •   Ctrl+T Stop   •   Ctrl+R Restart   •   Ctrl+↵ Run as Admin";
+            }
+            else if (vm.IsCalculatorResult)
             {
                 string ans = vm.CalcResult?.FormattedResult ?? string.Empty;
                 FooterHintsText.Text = string.IsNullOrEmpty(ans)
-                    ? "Enter Paste Answer   •   Ctrl+C Copy Answer   •   Ctrl+Shift+C Copy Question & Answer   •   Tab Chain"
-                    : $"Enter Paste Answer   •   Ctrl+C Copy Answer ({ans})   •   Ctrl+Shift+C Copy Question & Answer   •   Tab Chain";
+                    ? "Enter Open Calculator View & Copy   •   Shift+Enter Paste Answer   •   Ctrl+C Copy Answer   •   Tab Chain"
+                    : $"Enter Open Calculator View & Copy ({ans})   •   Shift+Enter Paste Answer   •   Ctrl+C Copy Answer   •   Tab Chain";
             }
             else if (vm.Item.ActionType == ActionType.Snippet)
             {
@@ -1372,17 +1676,45 @@ public partial class CommandPaletteView : Window
                     ? $"Enter Drill into folder   •   Ctrl+Enter Run all ({count})   •   Shift+Enter Cursor menu   •   Alt+Enter Action Manager"
                     : "Enter Drill into folder   •   Shift+Enter Cursor menu   •   Alt+Enter Action Manager";
             }
+            else if (vm.Item.ActionType == ActionType.Service)
+            {
+                FooterHintsText.Text = "Enter Execute Service   •   Ctrl+Enter Run as Admin   •   Alt+Enter Edit in Action Manager";
+            }
         }
         else
         {
             PreviewDetailText.Text = "Select an action to view details";
+            PreviewDetailText.ToolTip = null;
             FooterHintsText.Text = "Enter Run   •   Ctrl+Enter Run as Admin   •   Alt+Enter Edit in Action Manager";
         }
+    }
+
+    private void Window_PreviewKeyUp(object sender, KeyEventArgs e)
+    {
+        if (!Keyboard.IsKeyDown(Key.LeftCtrl) && !Keyboard.IsKeyDown(Key.RightCtrl))
+        {
+            SetFilterPillCtrlHintsVisibility(Visibility.Collapsed);
+        }
+    }
+
+    internal void SetFilterPillCtrlHintsVisibility(Visibility visibility)
+    {
+        if (PillShortcutAll != null) PillShortcutAll.Visibility = visibility;
+        if (PillShortcutApp != null) PillShortcutApp.Visibility = visibility;
+        if (PillShortcutSnippet != null) PillShortcutSnippet.Visibility = visibility;
+        if (PillShortcutWorkflow != null) PillShortcutWorkflow.Visibility = visibility;
+        if (PillShortcutFolder != null) PillShortcutFolder.Visibility = visibility;
+        if (PillShortcutService != null) PillShortcutService.Visibility = visibility;
     }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
+
+        if (key is Key.LeftCtrl or Key.RightCtrl || (Keyboard.Modifiers & ModifierKeys.Control) != 0)
+        {
+            SetFilterPillCtrlHintsVisibility(Visibility.Visible);
+        }
 
         // Overlay Escape
         if (CheatSheetOverlay.Visibility == Visibility.Visible)
@@ -1508,9 +1840,35 @@ public partial class CommandPaletteView : Window
 
             if (key == Key.S)
             {
+                if (ResultsListBox.SelectedItem is PaletteItemViewModel selSvc && selSvc.IsServiceItem && selSvc.ServiceItem != null)
+                {
+                    StartServiceAction(selSvc.ServiceItem, runAsAdmin: false);
+                    e.Handled = true;
+                    return;
+                }
                 OpenSortMenu();
                 e.Handled = true;
                 return;
+            }
+
+            if (key == Key.T)
+            {
+                if (ResultsListBox.SelectedItem is PaletteItemViewModel selSvc && selSvc.IsServiceItem && selSvc.ServiceItem != null)
+                {
+                    StopServiceAction(selSvc.ServiceItem, runAsAdmin: false);
+                    e.Handled = true;
+                    return;
+                }
+            }
+
+            if (key == Key.R)
+            {
+                if (ResultsListBox.SelectedItem is PaletteItemViewModel selSvc && selSvc.IsServiceItem && selSvc.ServiceItem != null)
+                {
+                    RestartServiceAction(selSvc.ServiceItem, runAsAdmin: false);
+                    e.Handled = true;
+                    return;
+                }
             }
 
             if (key == Key.C)
@@ -1555,7 +1913,7 @@ public partial class CommandPaletteView : Window
                 }
             }
 
-            if (key >= Key.D1 && key <= Key.D5)
+            if (key >= Key.D1 && key <= Key.D6)
             {
                 _activeFilter = key switch
                 {
@@ -1563,6 +1921,7 @@ public partial class CommandPaletteView : Window
                     Key.D3 => CommandPaletteFilterType.Snippet,
                     Key.D4 => CommandPaletteFilterType.Workflow,
                     Key.D5 => CommandPaletteFilterType.Folder,
+                    Key.D6 => CommandPaletteFilterType.Service,
                     _ => CommandPaletteFilterType.All
                 };
                 FilterResults();
@@ -1571,8 +1930,32 @@ public partial class CommandPaletteView : Window
             }
         }
 
+        if ((Keyboard.Modifiers & ModifierKeys.Alt) != 0 && key == Key.U)
+        {
+            if (CalculatorUnitsOverlay.Visibility == Visibility.Visible)
+            {
+                CloseCalculatorUnitsOverlay();
+            }
+            else if (_activeCalcVm != null || _activeCalcResult != null)
+            {
+                CalcResultMoreUnitsBtn_Click(sender, e);
+            }
+            e.Handled = true;
+            return;
+        }
+
         if (key == Key.Escape)
         {
+            string rawQuery = SearchTextBox?.Text?.Trim() ?? string.Empty;
+            bool hasExplicitPrefix = rawQuery.StartsWith("=") || rawQuery.StartsWith("@calc", StringComparison.OrdinalIgnoreCase);
+            if (_isCalcPromoted && !hasExplicitPrefix)
+            {
+                _isCalcPromoted = false;
+                FilterResults();
+                e.Handled = true;
+                return;
+            }
+
             if (_currentScopeFolderId.HasValue)
             {
                 ExitFolderScope();
@@ -1596,7 +1979,8 @@ public partial class CommandPaletteView : Window
         {
             if (SearchTextBox == null) return;
             string rawQuery = SearchTextBox.Text?.Trim() ?? string.Empty;
-            bool isCalcMode = rawQuery.StartsWith("=") || rawQuery.StartsWith("@calc", StringComparison.OrdinalIgnoreCase);
+            bool hasExplicitPrefix = rawQuery.StartsWith("=") || rawQuery.StartsWith("@calc", StringComparison.OrdinalIgnoreCase);
+            bool isCalcMode = hasExplicitPrefix || _isCalcPromoted;
 
             if (_activeCalcResult != null)
             {
@@ -1630,8 +2014,15 @@ public partial class CommandPaletteView : Window
             if (string.IsNullOrEmpty(SearchTextBox.Text))
             {
                 // Cycle filter pills
-                int next = ((int)_activeFilter + 1) % 5;
-                _activeFilter = (CommandPaletteFilterType)next;
+                _activeFilter = _activeFilter switch
+                {
+                    CommandPaletteFilterType.All => CommandPaletteFilterType.App,
+                    CommandPaletteFilterType.App => CommandPaletteFilterType.Snippet,
+                    CommandPaletteFilterType.Snippet => CommandPaletteFilterType.Workflow,
+                    CommandPaletteFilterType.Workflow => CommandPaletteFilterType.Folder,
+                    CommandPaletteFilterType.Folder => CommandPaletteFilterType.Service,
+                    _ => CommandPaletteFilterType.All
+                };
                 FilterResults();
                 e.Handled = true;
                 return;
@@ -1654,13 +2045,23 @@ public partial class CommandPaletteView : Window
 
         if (key == Key.Enter)
         {
+            bool isShift = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
             string rawQuery = SearchTextBox?.Text?.Trim() ?? string.Empty;
-            bool isCalcMode = rawQuery.StartsWith("=") || rawQuery.StartsWith("@calc", StringComparison.OrdinalIgnoreCase);
+            bool hasExplicitPrefix = rawQuery.StartsWith("=") || rawQuery.StartsWith("@calc", StringComparison.OrdinalIgnoreCase);
+            bool isCalcMode = hasExplicitPrefix || _isCalcPromoted;
             if (isCalcMode)
             {
                 if (_activeCalcResult != null)
                 {
-                    PasteActiveCalcResult();
+                    if (isShift)
+                    {
+                        PasteActiveCalcResult();
+                    }
+                    else
+                    {
+                        Clipboard.SetText(_activeCalcResult.FormattedResult);
+                        ShowInlineFeedback($"Copied: {_activeCalcResult.FormattedResult} 📋  (Shift+Enter to paste)");
+                    }
                     e.Handled = true;
                     return;
                 }
@@ -1749,6 +2150,11 @@ public partial class CommandPaletteView : Window
             {
                 copyText = $"Workflow: {vm.Item.Name} ({vm.Item.Payload.WorkflowSteps?.Count ?? 0} steps)";
                 feedbackMsg = "Copied workflow summary! 📋";
+            }
+            else if (vm.IsServiceItem && vm.ServiceItem != null)
+            {
+                copyText = vm.ServiceItem.ServiceName;
+                feedbackMsg = $"Copied service name ({vm.ServiceItem.ServiceName})! 📋";
             }
             else if (vm.Item.ActionType == ActionType.Folder)
             {
@@ -1890,6 +2296,7 @@ public partial class CommandPaletteView : Window
 
     private void ExitFolderScope()
     {
+        _isCalcPromoted = false;
         if (!_currentScopeFolderId.HasValue) return;
 
         // Try to step up to parent folder if one exists
@@ -1923,6 +2330,7 @@ public partial class CommandPaletteView : Window
 
     private void DrillIntoFolder(TriggerItem folder)
     {
+        _isCalcPromoted = false;
         _currentScopeFolderId = folder.Id;
         _currentScopeFolderName = folder.Name;
         _activeFilter = CommandPaletteFilterType.All;
@@ -1964,6 +2372,7 @@ public partial class CommandPaletteView : Window
     {
         if (_isClosing) return;
         _isClosing = true;
+        _isCalcPromoted = false;
         try
         {
             if (PrefixAutoCompletePopup != null)
@@ -1982,6 +2391,7 @@ public partial class CommandPaletteView : Window
             {
                 FolderExecutionConfirmOverlay.Visibility = Visibility.Collapsed;
             }
+            SetFilterPillCtrlHintsVisibility(Visibility.Collapsed);
             Close();
         }
         catch { }
@@ -2007,8 +2417,22 @@ public partial class CommandPaletteView : Window
                     return;
                 }
 
-                SafeClose();
-                _ = _executor.ExecuteAsync(vm.Item, executionOverride, _targetHwnd);
+                if (executionOverride == ExecutionOverride.RevealInExplorer)
+                {
+                    // Shift+Enter explicitly pastes answer into the active window
+                    SafeClose();
+                    _ = _executor.ExecuteAsync(vm.Item, ExecutionOverride.Standard, _targetHwnd);
+                    return;
+                }
+
+                // Regular Enter promotes to full Calculator View and copies answer
+                _isCalcPromoted = true;
+                if (vm.CalcResult != null)
+                {
+                    Clipboard.SetText(vm.CalcResult.FormattedResult);
+                    ShowInlineFeedback($"Copied: {vm.CalcResult.FormattedResult} 📋  (Shift+Enter to paste)");
+                }
+                FilterResults();
                 return;
             }
 
@@ -2055,13 +2479,86 @@ public partial class CommandPaletteView : Window
                 return;
             }
 
+            // Windows Service
+            if (vm.IsServiceItem && vm.ServiceItem != null)
+            {
+                ToggleServiceAction(vm.ServiceItem, runAsAdmin: executionOverride == ExecutionOverride.RunAsAdmin);
+                return;
+            }
+
             SafeClose();
             _ = _executor.ExecuteAsync(vm.Item, executionOverride, _targetHwnd);
         }
     }
 
+    private static PaletteItemViewModel CreateServiceViewModel(WindowsServiceItem service, IReadOnlyList<int>? matchedIndices, double score)
+    {
+        return new PaletteItemViewModel(service, matchedIndices, score);
+    }
+
+    private void ToggleServiceAction(WindowsServiceItem service, bool runAsAdmin)
+    {
+        if (service.Status == WindowsServiceStatus.Running)
+        {
+            StopServiceAction(service, runAsAdmin);
+        }
+        else
+        {
+            StartServiceAction(service, runAsAdmin);
+        }
+    }
+
+    private void StartServiceAction(WindowsServiceItem service, bool runAsAdmin)
+    {
+        ShowInlineFeedback($"Starting service '{service.DisplayName}'... 🔄");
+        Task.Run(async () =>
+        {
+            var res = await _serviceManager.StartServiceAsync(service.ServiceName, runAsAdmin);
+            await Dispatcher.InvokeAsync(() =>
+            {
+                service.Status = res.NewStatus;
+                _cachedServices = null;
+                ShowInlineFeedback(res.Success ? $"Started '{service.DisplayName}' 🟢" : $"Failed: {res.Message} ⚠️");
+                FilterResults();
+            });
+        });
+    }
+
+    private void StopServiceAction(WindowsServiceItem service, bool runAsAdmin)
+    {
+        ShowInlineFeedback($"Stopping service '{service.DisplayName}'... ⏳");
+        Task.Run(async () =>
+        {
+            var res = await _serviceManager.StopServiceAsync(service.ServiceName, runAsAdmin);
+            await Dispatcher.InvokeAsync(() =>
+            {
+                service.Status = res.NewStatus;
+                _cachedServices = null;
+                ShowInlineFeedback(res.Success ? $"Stopped '{service.DisplayName}' ⚪" : $"Failed: {res.Message} ⚠️");
+                FilterResults();
+            });
+        });
+    }
+
+    private void RestartServiceAction(WindowsServiceItem service, bool runAsAdmin)
+    {
+        ShowInlineFeedback($"Restarting service '{service.DisplayName}'... 🔄");
+        Task.Run(async () =>
+        {
+            var res = await _serviceManager.RestartServiceAsync(service.ServiceName, runAsAdmin);
+            await Dispatcher.InvokeAsync(() =>
+            {
+                service.Status = res.NewStatus;
+                _cachedServices = null;
+                ShowInlineFeedback(res.Success ? $"Restarted '{service.DisplayName}' 🟢" : $"Failed: {res.Message} ⚠️");
+                FilterResults();
+            });
+        });
+    }
+
     private void Window_Deactivated(object sender, EventArgs e)
     {
+        SetFilterPillCtrlHintsVisibility(Visibility.Collapsed);
         if (!_isLoaded) return;
         SafeClose();
     }
@@ -2071,25 +2568,80 @@ public partial class CommandPaletteView : Window
     private IReadOnlyList<AlternativeMeasurement>? _currentAlternatives;
     private string _selectedCategory = "All";
 
+    private static int GetCategorySortOrder(string category)
+    {
+        return category.ToLowerInvariant() switch
+        {
+            "date formats" => 1,
+            "common" => 2,
+            "fractions" => 3,
+            "physics" => 4,
+            "space" => 5,
+            "popculture" or "pop culture" => 6,
+            "nature" => 7,
+            "historical" => 8,
+            "programmer" => 9,
+            "math" => 10,
+            _ => 100
+        };
+    }
+
+    private Button CreateCategoryChip(string tag, string displayText)
+    {
+        var btn = new Button
+        {
+            Tag = tag,
+            Style = (Style)FindResource("CalcCategoryChipStyle"),
+            Content = new TextBlock { Text = displayText }
+        };
+        btn.Click += CategoryChip_Click;
+        return btn;
+    }
+
+    private void PopulateCategoryChips(IReadOnlyList<AlternativeMeasurement> alternatives)
+    {
+        if (CategoryChipsContainer == null) return;
+        CategoryChipsContainer.Children.Clear();
+
+        // Always add "All" chip first
+        CategoryChipsContainer.Children.Add(CreateCategoryChip("All", "All"));
+
+        var presentCategories = alternatives
+            .Select(a => a.Category)
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(c => GetCategorySortOrder(c))
+            .ThenBy(c => c, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        foreach (var cat in presentCategories)
+        {
+            string display = alternatives.FirstOrDefault(a => string.Equals(a.Category, cat, StringComparison.OrdinalIgnoreCase))?.DisplayCategory ?? cat;
+            CategoryChipsContainer.Children.Add(CreateCategoryChip(cat, display));
+        }
+    }
+
     private void UpdateCategoryChipsUi()
     {
-        var chips = new[] { ChipAll, ChipDateFormats, ChipCommon, ChipPhysics, ChipSpace, ChipPopCulture, ChipNature, ChipHistorical };
-        foreach (var chip in chips)
+        if (CategoryChipsContainer == null) return;
+        foreach (var child in CategoryChipsContainer.Children)
         {
-            if (chip == null) continue;
-            string tag = chip.Tag as string ?? "All";
-            bool isSelected = string.Equals(tag, _selectedCategory, StringComparison.OrdinalIgnoreCase);
-            if (isSelected)
+            if (child is Button chip)
             {
-                chip.Background = (Brush)FindResource("AccentSubtleBrush");
-                chip.BorderBrush = (Brush)FindResource("AccentBrush");
-                chip.Foreground = (Brush)FindResource("AccentBrush");
-            }
-            else
-            {
-                chip.Background = (Brush)FindResource("BgTertiaryBrush");
-                chip.BorderBrush = (Brush)FindResource("BorderSubtleBrush");
-                chip.Foreground = (Brush)FindResource("TextSecondaryBrush");
+                string tag = chip.Tag as string ?? "All";
+                bool isSelected = string.Equals(tag, _selectedCategory, StringComparison.OrdinalIgnoreCase);
+                if (isSelected)
+                {
+                    chip.Background = (Brush)FindResource("AccentSubtleBrush");
+                    chip.BorderBrush = (Brush)FindResource("AccentBrush");
+                    chip.Foreground = (Brush)FindResource("AccentBrush");
+                }
+                else
+                {
+                    chip.Background = (Brush)FindResource("BgTertiaryBrush");
+                    chip.BorderBrush = (Brush)FindResource("BorderSubtleBrush");
+                    chip.Foreground = (Brush)FindResource("TextSecondaryBrush");
+                }
             }
         }
     }
@@ -2103,12 +2655,7 @@ public partial class CommandPaletteView : Window
         _currentAlternatives = vm.CalcResult?.Alternatives ?? Array.Empty<AlternativeMeasurement>();
         _selectedCategory = "All";
 
-        bool hasDateFormats = _currentAlternatives.Any(a => a.Category == "Date Formats");
-        if (ChipDateFormats != null)
-        {
-            ChipDateFormats.Visibility = hasDateFormats ? Visibility.Visible : Visibility.Collapsed;
-        }
-
+        PopulateCategoryChips(_currentAlternatives);
         UpdateCategoryChipsUi();
 
         if (!string.IsNullOrWhiteSpace(vm.CalcResult?.HierarchicalBreakdown))
@@ -2189,6 +2736,8 @@ public partial class CommandPaletteView : Window
 
             return a.FormattedValue.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                    a.Label.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                   a.Category.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                   a.DisplayCategory.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                    (a.ConceptTitle != null && a.ConceptTitle.Contains(query, StringComparison.OrdinalIgnoreCase)) ||
                    (a.ConversationalSentence != null && a.ConversationalSentence.Contains(query, StringComparison.OrdinalIgnoreCase)) ||
                    a.Description.Contains(query, StringComparison.OrdinalIgnoreCase);

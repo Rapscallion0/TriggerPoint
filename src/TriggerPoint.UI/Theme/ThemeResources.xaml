@@ -22,6 +22,7 @@
     <StreamGeometry x:Key="AlignCenterGeometry">M3,5 h18 v2 H3 z M6,9 h12 v2 H6 z M3,13 h18 v2 H3 z M8,17 h8 v2 H8 z</StreamGeometry>
     <StreamGeometry x:Key="AlignRightGeometry">M3,5 h18 v2 H3 z M9,9 h12 v2 H9 z M3,13 h18 v2 H3 z M13,17 h8 v2 H13 z</StreamGeometry>
     <StreamGeometry x:Key="HighlighterPenGeometry">M11.5,3.5 L14.5,6.5 L7,14 L4,14 L4,11 L11.5,3.5 Z M3,18 H17 V20 H3 Z</StreamGeometry>
+    <StreamGeometry x:Key="MagicWandGeometry">M7.5,5.6 L10,3.1 L8.9,2 L6.4,4.5 L7.5,5.6 Z M19,3 L17.5,4.5 L20,7 L21.5,5.5 L19,3 Z M3,17.5 L14.5,6 L17,8.5 L5.5,20 L3,20 Z</StreamGeometry>
 
     <!-- Card Tokens Default Fallbacks -->
     <SolidColorBrush x:Key="CardBgBrush" Color="#242633"/>
@@ -198,6 +199,57 @@
                 <Setter Property="VerticalContentAlignment" Value="Top"/>
             </Trigger>
         </Style.Triggers>
+    </Style>
+
+    <!-- Accent Color Swatch RadioButton Style -->
+    <Style x:Key="AccentSwatchRadioButtonStyle" TargetType="RadioButton">
+        <Setter Property="Margin" Value="0,0,10,6"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Grid>
+                        <!-- Outer Selection Ring -->
+                        <Border x:Name="RingBorder"
+                                Width="36" Height="36"
+                                CornerRadius="18"
+                                BorderThickness="2"
+                                BorderBrush="Transparent"
+                                Background="Transparent"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <!-- Checkmark icon for active swatch -->
+                        <Path x:Name="CheckIcon"
+                              Visibility="Collapsed"
+                              Data="M 3,7.5 L 6.5,11 L 13,3.5"
+                              Stroke="White"
+                              StrokeThickness="2.2"
+                              StrokeStartLineCap="Round"
+                              StrokeEndLineCap="Round"
+                              StrokeLineJoin="Round"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center">
+                            <Path.Effect>
+                                <DropShadowEffect BlurRadius="3" ShadowDepth="1" Opacity="0.85" Color="#000000"/>
+                            </Path.Effect>
+                        </Path>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="RingBorder" Property="BorderBrush" Value="{DynamicResource TextSecondaryBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="RingBorder" Property="BorderBrush" Value="{DynamicResource TextPrimaryBrush}"/>
+                            <Setter TargetName="CheckIcon" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!-- Modern Button Style (Accent) -->
@@ -547,6 +599,18 @@
                                           VerticalAlignment="Center"
                                           HorizontalAlignment="Left"/>
 
+                        <TextBox x:Name="PART_EditableTextBox"
+                                 HorizontalAlignment="Stretch"
+                                 VerticalAlignment="Center"
+                                 Margin="12,0,26,0"
+                                 Focusable="True"
+                                 Background="Transparent"
+                                 Foreground="{DynamicResource TextPrimaryBrush}"
+                                 CaretBrush="{DynamicResource AccentBrush}"
+                                 BorderThickness="0"
+                                 Visibility="Hidden"
+                                 IsReadOnly="{TemplateBinding IsReadOnly}"/>
+
                         <Popup x:Name="Popup"
                                Placement="Bottom"
                                IsOpen="{TemplateBinding IsDropDownOpen}"
@@ -572,6 +636,13 @@
                             </Border>
                         </Popup>
                     </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsEditable" Value="True">
+                            <Setter Property="IsTabStop" Value="False"/>
+                            <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="ContentSite" Property="Visibility" Value="Hidden"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

@@ -34,6 +34,113 @@ public class ToastNotificationService : IToastNotificationService
         ShowToast(ToastType.Warning, title, message);
     }
 
+    public void ShowInfo(string title, string message)
+    {
+        ShowToast(ToastType.Information, title, message);
+    }
+
+    public IToastProgressHandle? ShowProgress(string title, string message, Action? onCancel = null, string cancelButtonText = "Cancel")
+    {
+        if (Application.Current == null) return null;
+
+        ServiceProgressHudWindow? hud = null;
+        if (Application.Current.Dispatcher.CheckAccess())
+        {
+            hud = new ServiceProgressHudWindow(title, message, onCancel, cancelButtonText);
+            hud.Show();
+        }
+        else
+        {
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                hud = new ServiceProgressHudWindow(title, message, onCancel, cancelButtonText);
+                hud.Show();
+            });
+        }
+
+        return hud;
+    }
+
+    private ToastNotificationWindow? CreateAndShowProgressToast(string title, string message, Action? onCancel, string cancelButtonText)
+    {
+        try
+        {
+            var placement = ToastMonitorPlacement.PrimaryMonitor;
+            if (_configRepository != null)
+            {
+                try
+                {
+                    var settings = _configRepository.LoadSettingsAsync().GetAwaiter().GetResult();
+                    placement = settings.ToastPlacement;
+                }
+                catch { }
+            }
+
+            double verticalOffset = 0;
+            lock (_lock)
+            {
+                _activeToasts.RemoveAll(t => !t.IsVisible && t.IsLoaded);
+                while (_activeToasts.Count >= 3)
+                {
+                    var oldest = _activeToasts[0];
+                    _activeToasts.RemoveAt(0);
+                    oldest.Dismiss();
+                }
+
+                foreach (var active in _activeToasts)
+                {
+                    verticalOffset += active.ActualHeight > 0 ? (active.ActualHeight + 8) : 76.0;
+                }
+            }
+
+            var toast = new ToastNotificationWindow(
+                ToastType.Information,
+                title,
+                message,
+                placement,
+                verticalOffset,
+                onCancel,
+                cancelButtonText,
+                autoClose: false);
+
+            lock (_lock)
+            {
+                _activeToasts.Add(toast);
+            }
+
+            toast.Show();
+            return toast;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private sealed class ProgressHandle : IDisposable
+    {
+        private ToastNotificationWindow? _window;
+        public ProgressHandle(ToastNotificationWindow? window) => _window = window;
+
+        public void Dispose()
+        {
+            var win = Interlocked.Exchange(ref _window, null);
+            if (win == null) return;
+            try
+            {
+                if (win.Dispatcher.CheckAccess())
+                {
+                    win.Dismiss();
+                }
+                else
+                {
+                    win.Dispatcher.InvokeAsync(() => win.Dismiss());
+                }
+            }
+            catch { }
+        }
+    }
+
     private void ShowToast(ToastType type, string title, string message)
     {
         if (Application.Current == null) return;

@@ -138,4 +138,170 @@ public class CursorContextMenuViewTests
             throw new InvalidOperationException($"Test failed: {caughtEx.Message}", caughtEx);
         }
     }
+
+    [Fact]
+    public void CursorContextMenuView_TypeToFilter_FiltersAndHighlightsCorrectly()
+    {
+        Exception? caughtEx = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                EnsureApplicationAndThemeResources();
+
+                var items = new List<TriggerItem>
+                {
+                    new() { Id = Guid.NewGuid(), Name = "Google Chrome", ActionType = ActionType.Shell, Payload = new ActionPayload { Command = "chrome.exe" } },
+                    new() { Id = Guid.NewGuid(), Name = "Google Drive", ActionType = ActionType.Shell, Payload = new ActionPayload { Command = "https://drive.google.com" } },
+                    new() { Id = Guid.NewGuid(), Name = "Notepad Scratchpad", ActionType = ActionType.Shell, Payload = new ActionPayload { Command = "notepad.exe" } },
+                    new() { Id = Guid.NewGuid(), Name = "Calculator", ActionType = ActionType.Shell, Payload = new ActionPayload { Command = "calc.exe" } }
+                };
+
+                var view = new CursorContextMenuView(items, new DummyExecutor());
+
+                // 1. Initial State: No filter
+                Assert.Equal(string.Empty, view.FilterQuery);
+                Assert.Equal(Visibility.Collapsed, view.SearchFilterPill.Visibility);
+                Assert.Equal(4, view.DisplayedItems.Count);
+
+                // 2. Apply filter for "Google"
+                view.SetFilterQueryForTesting("Google");
+                Assert.Equal("Google", view.FilterQuery);
+                Assert.Equal(Visibility.Visible, view.SearchFilterPill.Visibility);
+                Assert.Equal("Google", view.SearchFilterText.Text);
+                Assert.Equal(2, view.DisplayedItems.Count);
+                Assert.Equal("Google Chrome", view.DisplayedItems[0].Name);
+                Assert.Equal("Google Drive", view.DisplayedItems[1].Name);
+
+                // Quick keys re-indexed
+                Assert.Equal("1", view.DisplayedItems[0].AcceleratorKey);
+                Assert.Equal("2", view.DisplayedItems[1].AcceleratorKey);
+
+                // Highlighting segments present
+                var chromeSegments = view.DisplayedItems[0].HighlightedNameSegments;
+                Assert.NotEmpty(chromeSegments);
+                Assert.Contains(chromeSegments, s => s.IsMatched && s.Text.Equals("Google", StringComparison.OrdinalIgnoreCase));
+
+                // 3. Clear filter
+                view.SetFilterQueryForTesting(string.Empty);
+                Assert.Equal(string.Empty, view.FilterQuery);
+                Assert.Equal(Visibility.Collapsed, view.SearchFilterPill.Visibility);
+                Assert.Equal(4, view.DisplayedItems.Count);
+
+                // 4. Filter with no matches shows empty notice
+                view.SetFilterQueryForTesting("xyznonexistent");
+                Assert.Empty(view.DisplayedItems);
+                Assert.Equal(Visibility.Collapsed, view.ItemsListBox.Visibility);
+                Assert.Equal(Visibility.Visible, view.EmptyFolderNotice.Visibility);
+                Assert.Contains("xyznonexistent", view.EmptyFolderNotice.Text);
+
+                view.Close();
+            }
+            catch (Exception ex)
+            {
+                caughtEx = ex;
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join(5000);
+
+        if (caughtEx != null)
+        {
+            throw new InvalidOperationException($"Test failed: {caughtEx.Message}", caughtEx);
+        }
+    }
+
+    [Fact]
+    public void CursorContextMenuView_TypeToFilter_KeyboardInteractionsWork()
+    {
+        Exception? caughtEx = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                EnsureApplicationAndThemeResources();
+
+                var items = new List<TriggerItem>
+                {
+                    new() { Id = Guid.NewGuid(), Name = "Google Chrome", ActionType = ActionType.Shell, Payload = new ActionPayload { Command = "chrome.exe" } },
+                    new() { Id = Guid.NewGuid(), Name = "Firefox", ActionType = ActionType.Shell, Payload = new ActionPayload { Command = "firefox.exe" } },
+                    new() { Id = Guid.NewGuid(), Name = "Notepad", ActionType = ActionType.Shell, Payload = new ActionPayload { Command = "notepad.exe" } }
+                };
+
+                var view = new CursorContextMenuView(items, new DummyExecutor());
+
+                // Simulate typing 'f' (Key.F)
+                var keyEventArgsF = new System.Windows.Input.KeyEventArgs(
+                    System.Windows.Input.Keyboard.PrimaryDevice,
+                    new System.Windows.Interop.HwndSource(0, 0, 0, 0, 0, "", IntPtr.Zero),
+                    0,
+                    System.Windows.Input.Key.F)
+                {
+                    RoutedEvent = System.Windows.Input.Keyboard.PreviewKeyDownEvent
+                };
+                view.RaiseEvent(keyEventArgsF);
+
+                Assert.Equal("f", view.FilterQuery);
+                Assert.Equal(Visibility.Visible, view.SearchFilterPill.Visibility);
+                Assert.Single(view.DisplayedItems);
+                Assert.Equal("Firefox", view.DisplayedItems[0].Name);
+
+                // Simulate typing 'i' (Key.I)
+                var keyEventArgsI = new System.Windows.Input.KeyEventArgs(
+                    System.Windows.Input.Keyboard.PrimaryDevice,
+                    new System.Windows.Interop.HwndSource(0, 0, 0, 0, 0, "", IntPtr.Zero),
+                    0,
+                    System.Windows.Input.Key.I)
+                {
+                    RoutedEvent = System.Windows.Input.Keyboard.PreviewKeyDownEvent
+                };
+                view.RaiseEvent(keyEventArgsI);
+                Assert.Equal("fi", view.FilterQuery);
+
+                // Simulate Backspace (Key.Back)
+                var keyEventArgsBack = new System.Windows.Input.KeyEventArgs(
+                    System.Windows.Input.Keyboard.PrimaryDevice,
+                    new System.Windows.Interop.HwndSource(0, 0, 0, 0, 0, "", IntPtr.Zero),
+                    0,
+                    System.Windows.Input.Key.Back)
+                {
+                    RoutedEvent = System.Windows.Input.Keyboard.PreviewKeyDownEvent
+                };
+                view.RaiseEvent(keyEventArgsBack);
+                Assert.Equal("f", view.FilterQuery);
+
+                // Simulate Escape (Key.Escape) -> clears filter
+                var keyEventArgsEsc = new System.Windows.Input.KeyEventArgs(
+                    System.Windows.Input.Keyboard.PrimaryDevice,
+                    new System.Windows.Interop.HwndSource(0, 0, 0, 0, 0, "", IntPtr.Zero),
+                    0,
+                    System.Windows.Input.Key.Escape)
+                {
+                    RoutedEvent = System.Windows.Input.Keyboard.PreviewKeyDownEvent
+                };
+                view.RaiseEvent(keyEventArgsEsc);
+                Assert.Equal(string.Empty, view.FilterQuery);
+                Assert.Equal(Visibility.Collapsed, view.SearchFilterPill.Visibility);
+                Assert.Equal(3, view.DisplayedItems.Count);
+
+                view.Close();
+            }
+            catch (Exception ex)
+            {
+                caughtEx = ex;
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join(5000);
+
+        if (caughtEx != null)
+        {
+            throw new InvalidOperationException($"Test failed: {caughtEx.Message}", caughtEx);
+        }
+    }
 }
+

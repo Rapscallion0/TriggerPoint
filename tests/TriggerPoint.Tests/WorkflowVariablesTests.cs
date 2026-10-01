@@ -29,6 +29,14 @@ public class WorkflowVariablesTests
         public void ShowSuccess(string title, string message) { }
         public void ShowError(string title, string message) { }
         public void ShowWarning(string title, string message) { }
+        public void ShowInfo(string title, string message) { }
+        public IToastProgressHandle ShowProgress(string title, string message, Action? onCancel = null, string cancelButtonText = "Cancel") => new DummyProgressHandle();
+        private class DummyProgressHandle : IToastProgressHandle
+        {
+            public void Dispose() { }
+            public void ReportSuccess(string message) { }
+            public void ReportError(string message) { }
+        }
     }
 
     private class MockSnippetService : ISnippetService

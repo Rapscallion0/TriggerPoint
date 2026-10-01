@@ -88,14 +88,16 @@ public class CommandPaletteViewTests
         Assert.Empty(CommandPaletteView.GetPrefixSuggestions("notepad"));
         Assert.Empty(CommandPaletteView.GetPrefixSuggestions("@app query")); // space means query entered
 
-        // Single '@' returns all 7 prefixes
+        // Single '@' returns all 9 prefixes
         var all = CommandPaletteView.GetPrefixSuggestions("@");
-        Assert.Equal(7, all.Count);
+        Assert.Equal(9, all.Count);
         Assert.Contains(all, x => x.Prefix == "@all");
         Assert.Contains(all, x => x.Prefix == "@app");
         Assert.Contains(all, x => x.Prefix == "@snip");
         Assert.Contains(all, x => x.Prefix == "@flow");
         Assert.Contains(all, x => x.Prefix == "@folder");
+        Assert.Contains(all, x => x.Prefix == "@service");
+        Assert.Contains(all, x => x.Prefix == "@svc");
         Assert.Contains(all, x => x.Prefix == "@calc");
         Assert.Contains(all, x => x.Prefix == "@current");
 
@@ -523,4 +525,386 @@ public class CommandPaletteViewTests
             throw new InvalidOperationException($"Test failed: {caughtEx.Message}", caughtEx);
         }
     }
+
+    [Theory]
+    [InlineData("42", true)]
+    [InlineData("42.5", true)]
+    [InlineData("-42", true)]
+    [InlineData("+42", true)]
+    [InlineData("0x2A", true)]
+    [InlineData("0b101010", true)]
+    [InlineData("1000", true)]
+    [InlineData("40 + 2", false)]
+    [InlineData("42 in to cm", false)]
+    [InlineData("15% of 42", false)]
+    [InlineData("10 * 5", false)]
+    [InlineData("now + 3d", false)]
+    [InlineData("Server 42", false)]
+    [InlineData("", false)]
+    [InlineData("   ", false)]
+    public void IsBareNumber_AccuratelyClassifiesNumericVsExpressions(string query, bool expected)
+    {
+        bool actual = CommandPaletteView.IsBareNumber(query);
+        Assert.Equal(expected, actual);
+    }
+
+    [Fact]
+    public void CommandPaletteView_BareNumberWithMatchingAction_PrioritizesActionOverCalculator()
+    {
+        Exception? caughtEx = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                EnsureApplicationAndThemeResources();
+
+                var matchingAction = new TriggerItem
+                {
+                    Id = Guid.NewGuid(),
+                    Name = "Server 42 - Deploy",
+                    ActionType = ActionType.Shell,
+                    Payload = new ActionPayload { Command = "deploy.ps1" },
+                    IsEnabled = true
+                };
+
+                var items = new List<TriggerItem> { matchingAction };
+                var view = new CommandPaletteView(items, new DummyExecutor());
+
+                // User types "42"
+                view.SearchTextBox.Text = "42";
+
+                var results = (view.ResultsListBox.ItemsSource as IEnumerable<PaletteItemViewModel>)?.ToList();
+                Assert.NotNull(results);
+                Assert.True(results.Count >= 2);
+
+                // Index 0 MUST be the matching action to prevent hijacking action workflow
+                Assert.Equal("Server 42 - Deploy", results[0].Item.Name);
+                Assert.False(results[0].IsCalculatorResult);
+
+                // Index 1 is the calculator result
+                Assert.True(results[1].IsCalculatorResult);
+                Assert.Equal("42", results[1].CalcResult?.FormattedResult);
+
+                // The selected item MUST be the action
+                var selected = view.ResultsListBox.SelectedItem as PaletteItemViewModel;
+                Assert.NotNull(selected);
+                Assert.Equal("Server 42 - Deploy", selected.Item.Name);
+            }
+            catch (Exception ex)
+            {
+                caughtEx = ex;
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join(5000);
+
+        if (caughtEx != null)
+        {
+            throw new InvalidOperationException($"Test failed: {caughtEx.Message}", caughtEx);
+        }
+    }
+
+    [Fact]
+    public void CommandPaletteView_UnambiguousCalculation_PrioritizesCalculator()
+    {
+        Exception? caughtEx = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                EnsureApplicationAndThemeResources();
+
+                var mathAction = new TriggerItem
+                {
+                    Id = Guid.NewGuid(),
+                    Name = "Math 40 + 2 Script",
+                    ActionType = ActionType.Shell,
+                    Payload = new ActionPayload { Command = "script.ps1" },
+                    IsEnabled = true
+                };
+
+                var items = new List<TriggerItem> { mathAction };
+                var view = new CommandPaletteView(items, new DummyExecutor());
+
+                // User types unambiguous calculation "40 + 2"
+                view.SearchTextBox.Text = "40 + 2";
+
+                var results = (view.ResultsListBox.ItemsSource as IEnumerable<PaletteItemViewModel>)?.ToList();
+                Assert.NotNull(results);
+                Assert.True(results.Count >= 1);
+
+                // Index 0 MUST be the calculator result
+                Assert.True(results[0].IsCalculatorResult);
+                Assert.Equal("42", results[0].CalcResult?.FormattedResult);
+
+                // The selected item MUST be the calculator
+                var selected = view.ResultsListBox.SelectedItem as PaletteItemViewModel;
+                Assert.NotNull(selected);
+                Assert.True(selected.IsCalculatorResult);
+            }
+            catch (Exception ex)
+            {
+                caughtEx = ex;
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join(5000);
+
+        if (caughtEx != null)
+        {
+            throw new InvalidOperationException($"Test failed: {caughtEx.Message}", caughtEx);
+        }
+    }
+
+    [Fact]
+    public void CommandPaletteView_BareNumberWithoutMatchingAction_PrioritizesCalculator()
+    {
+        Exception? caughtEx = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                EnsureApplicationAndThemeResources();
+
+                var otherAction = new TriggerItem
+                {
+                    Id = Guid.NewGuid(),
+                    Name = "Open Notepad",
+                    ActionType = ActionType.Shell,
+                    Payload = new ActionPayload { Command = "notepad.exe" },
+                    IsEnabled = true
+                };
+
+                var items = new List<TriggerItem> { otherAction };
+                var view = new CommandPaletteView(items, new DummyExecutor());
+
+                // User types "987654" which matches no actions
+                view.SearchTextBox.Text = "987654";
+
+                var results = (view.ResultsListBox.ItemsSource as IEnumerable<PaletteItemViewModel>)?.ToList();
+                Assert.NotNull(results);
+                Assert.True(results.Count >= 1);
+
+                // Index 0 MUST be the calculator result
+                Assert.True(results[0].IsCalculatorResult);
+                Assert.Equal("987,654", results[0].CalcResult?.FormattedResult);
+
+                // The selected item MUST be the calculator
+                var selected = view.ResultsListBox.SelectedItem as PaletteItemViewModel;
+                Assert.NotNull(selected);
+                Assert.True(selected.IsCalculatorResult);
+            }
+            catch (Exception ex)
+            {
+                caughtEx = ex;
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join(5000);
+
+        if (caughtEx != null)
+        {
+            throw new InvalidOperationException($"Test failed: {caughtEx.Message}", caughtEx);
+        }
+    }
+
+    [Fact]
+    public void CommandPaletteView_SetFilterPillCtrlHintsVisibility_TogglesAllBadges()
+    {
+        Exception? caughtEx = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                EnsureApplicationAndThemeResources();
+
+                var view = new CommandPaletteView(new List<TriggerItem>(), new DummyExecutor());
+
+                // Assert elements exist
+                Assert.NotNull(view.PillShortcutAll);
+                Assert.NotNull(view.PillShortcutApp);
+                Assert.NotNull(view.PillShortcutSnippet);
+                Assert.NotNull(view.PillShortcutWorkflow);
+                Assert.NotNull(view.PillShortcutFolder);
+                Assert.NotNull(view.PillShortcutService);
+
+                // Initial state must be Collapsed
+                Assert.Equal(Visibility.Collapsed, view.PillShortcutAll.Visibility);
+                Assert.Equal(Visibility.Collapsed, view.PillShortcutApp.Visibility);
+                Assert.Equal(Visibility.Collapsed, view.PillShortcutSnippet.Visibility);
+                Assert.Equal(Visibility.Collapsed, view.PillShortcutWorkflow.Visibility);
+                Assert.Equal(Visibility.Collapsed, view.PillShortcutFolder.Visibility);
+                Assert.Equal(Visibility.Collapsed, view.PillShortcutService.Visibility);
+
+                // Set to Visible
+                view.SetFilterPillCtrlHintsVisibility(Visibility.Visible);
+                Assert.Equal(Visibility.Visible, view.PillShortcutAll.Visibility);
+                Assert.Equal(Visibility.Visible, view.PillShortcutApp.Visibility);
+                Assert.Equal(Visibility.Visible, view.PillShortcutSnippet.Visibility);
+                Assert.Equal(Visibility.Visible, view.PillShortcutWorkflow.Visibility);
+                Assert.Equal(Visibility.Visible, view.PillShortcutFolder.Visibility);
+                Assert.Equal(Visibility.Visible, view.PillShortcutService.Visibility);
+
+                // Set back to Collapsed
+                view.SetFilterPillCtrlHintsVisibility(Visibility.Collapsed);
+                Assert.Equal(Visibility.Collapsed, view.PillShortcutAll.Visibility);
+                Assert.Equal(Visibility.Collapsed, view.PillShortcutApp.Visibility);
+                Assert.Equal(Visibility.Collapsed, view.PillShortcutSnippet.Visibility);
+                Assert.Equal(Visibility.Collapsed, view.PillShortcutWorkflow.Visibility);
+                Assert.Equal(Visibility.Collapsed, view.PillShortcutFolder.Visibility);
+                Assert.Equal(Visibility.Collapsed, view.PillShortcutService.Visibility);
+
+                // Verify overlay architecture: Badges must be sibling overlay elements (not inside button content)
+                Assert.IsType<System.Windows.Controls.Grid>(view.PillShortcutAll.Parent);
+                Assert.IsType<System.Windows.Controls.Grid>(view.PillShortcutApp.Parent);
+                Assert.IsType<System.Windows.Controls.Grid>(view.PillShortcutSnippet.Parent);
+                Assert.IsType<System.Windows.Controls.Grid>(view.PillShortcutWorkflow.Parent);
+                Assert.IsType<System.Windows.Controls.Grid>(view.PillShortcutFolder.Parent);
+                Assert.IsType<System.Windows.Controls.Grid>(view.PillShortcutService.Parent);
+
+                // Overlay badges must have IsHitTestVisible = false so mouse clicks pass through
+                Assert.False(view.PillShortcutAll.IsHitTestVisible);
+                Assert.False(view.PillShortcutApp.IsHitTestVisible);
+                Assert.False(view.PillShortcutSnippet.IsHitTestVisible);
+                Assert.False(view.PillShortcutWorkflow.IsHitTestVisible);
+                Assert.False(view.PillShortcutFolder.IsHitTestVisible);
+            }
+            catch (Exception ex)
+            {
+                caughtEx = ex;
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join(5000);
+
+        if (caughtEx != null)
+        {
+            throw new InvalidOperationException($"Test failed: {caughtEx.Message}", caughtEx);
+        }
+    }
+
+    [Fact]
+    public void CommandPaletteView_CheatSheetOverlay_ContainsRequiredShortcutsAndHelp()
+    {
+        Exception? caughtEx = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                EnsureApplicationAndThemeResources();
+
+                var view = new CommandPaletteView(new List<TriggerItem>(), new DummyExecutor());
+
+                Assert.NotNull(view.CheatSheetOverlay);
+
+                // Collect all TextBlock texts from the CheatSheetOverlay logical tree
+                var textBlocks = new List<string>();
+                void CollectText(DependencyObject obj)
+                {
+                    if (obj is System.Windows.Controls.TextBlock tb && !string.IsNullOrWhiteSpace(tb.Text))
+                    {
+                        textBlocks.Add(tb.Text);
+                    }
+                    foreach (object rawChild in LogicalTreeHelper.GetChildren(obj))
+                    {
+                        if (rawChild is DependencyObject child)
+                        {
+                            CollectText(child);
+                        }
+                    }
+                }
+
+                CollectText(view.CheatSheetOverlay);
+
+                // Assert expected keys and prefixes are present
+                Assert.Contains(textBlocks, t => t.Contains("=, @calc"));
+                Assert.Contains(textBlocks, t => t.Contains("@current"));
+                Assert.Contains(textBlocks, t => t.Contains("@app, @apps"));
+                Assert.Contains(textBlocks, t => t.Contains("@snip, @snippets"));
+                Assert.Contains(textBlocks, t => t.Contains("@flow, @workflows"));
+                Assert.Contains(textBlocks, t => t.Contains("@folder, @folders"));
+                Assert.Contains(textBlocks, t => t.Contains("#<tag>"));
+                Assert.Contains(textBlocks, t => t.Contains("? or >"));
+                Assert.Contains(textBlocks, t => t.Contains("Ctrl+Shift+C"));
+                Assert.Contains(textBlocks, t => t.Contains("Alt+U"));
+                Assert.Contains(textBlocks, t => t.Contains("Hold Ctrl"));
+                Assert.Contains(textBlocks, t => t.Contains("Ctrl+1 .. 5"));
+                Assert.Contains(textBlocks, t => t.Contains("full Calculator Workspace"));
+            }
+            catch (Exception ex)
+            {
+                caughtEx = ex;
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join(5000);
+
+        if (caughtEx != null)
+        {
+            throw new InvalidOperationException($"Test failed: {caughtEx.Message}", caughtEx);
+        }
+    }
+
+    [Fact]
+    public void CommandPalette_IncompatibleConversion_DescriptionWrapsAndDisplaysFullTooltip()
+    {
+        Exception? caughtEx = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                EnsureApplicationAndThemeResources();
+                var items = new List<TriggerItem>();
+                var dummyExecutor = new DummyExecutor();
+                var view = new CommandPaletteView(items, dummyExecutor);
+
+                // Step 1: Incompatible unit conversion in calc mode
+                view.SearchTextBox.Text = "= 24 inches in litres";
+
+                Assert.Equal(Visibility.Visible, view.CalcResultBanner.Visibility);
+                Assert.Equal("Cannot convert Length to Volume", view.CalcResultValueText.Text);
+                Assert.Equal(TextWrapping.Wrap, view.CalcResultDescText.TextWrapping);
+                Assert.False(string.IsNullOrWhiteSpace(view.CalcResultDescText.Text));
+                Assert.Equal(view.CalcResultDescText.Text, view.CalcResultDescText.ToolTip as string);
+
+                // Step 2: Incompatible unit conversion in standard search mode
+                view.SearchTextBox.Text = "24 inches in litres";
+                Assert.NotNull(view.ResultsListBox.SelectedItem);
+                var vm = view.ResultsListBox.SelectedItem as PaletteItemViewModel;
+                Assert.NotNull(vm);
+                Assert.True(vm.IsCalculatorResult);
+                Assert.NotNull(vm.SubtitleTooltip);
+                Assert.Contains(vm.Description, vm.SubtitleTooltip);
+                Assert.Contains("24 in", vm.DetailPreviewText);
+                Assert.Contains("Cannot convert", vm.DetailPreviewText);
+                Assert.Contains(vm.Description, vm.DetailPreviewText);
+                Assert.Equal(vm.DetailPreviewText, view.PreviewDetailText.ToolTip as string);
+            }
+            catch (Exception ex)
+            {
+                caughtEx = ex;
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join(5000);
+
+        if (caughtEx != null)
+        {
+            throw new InvalidOperationException($"Test failed: {caughtEx.Message}", caughtEx);
+        }
+    }
 }
+
+

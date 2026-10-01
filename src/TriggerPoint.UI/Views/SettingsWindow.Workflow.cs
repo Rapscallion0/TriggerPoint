@@ -317,6 +317,10 @@ public partial class SettingsWindow
         }
 
         UpdateWorkflowMiniMapActiveStep();
+        if (_isFlowchartView)
+        {
+            HighlightActiveFlowchartCard();
+        }
     }
 
     private static void FocusFirstInputInCard(Border card)
@@ -353,6 +357,10 @@ public partial class SettingsWindow
         {
             if (WorkflowEmptyState != null) WorkflowEmptyState.Visibility = Visibility.Visible;
             UpdateToggleAllExpandButtonUi();
+            if (_isFlowchartView)
+            {
+                RebuildWorkflowFlowchart();
+            }
             return;
         }
 
@@ -513,6 +521,10 @@ public partial class SettingsWindow
         }
 
         RebuildWorkflowMiniMap();
+        if (_isFlowchartView)
+        {
+            RebuildWorkflowFlowchart();
+        }
     }
 
     private FrameworkElement CreateStepInsertionPill(string label, int insertIndex, Guid stepId)
@@ -671,6 +683,7 @@ public partial class SettingsWindow
             ("Recorded Macro Sequence", WorkflowStepType.Macro, "🔴"),
             ("Delay / Pause Execution", WorkflowStepType.Delay, "⏱"),
             ("Execute Action / Folder", WorkflowStepType.ExecuteAction, "⚡"),
+            ("Windows Service", WorkflowStepType.Service, "⚙️"),
             ("Inline JavaScript", WorkflowStepType.RunScript, "📜")
         };
 
@@ -774,6 +787,15 @@ public partial class SettingsWindow
         else if (stepType == WorkflowStepType.ExecuteAction)
         {
             step.Name = "Execute Action";
+        }
+        else if (stepType == WorkflowStepType.Service)
+        {
+            step.Name = "Windows Service";
+            step.ServiceName = string.Empty;
+            step.ServiceOperation = ServiceOperation.Toggle;
+            step.ServiceWaitForCompletion = true;
+            step.ServiceTimeoutSeconds = 30;
+            step.ServiceRunAsAdmin = true;
         }
 
         return step;
@@ -2102,6 +2124,139 @@ public partial class SettingsWindow
                 break;
             }
 
+            case WorkflowStepType.Service:
+            {
+                var srvStack = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
+
+                srvStack.Children.Add(new TextBlock 
+                { 
+                    Text = "Target Windows Service", 
+                    FontSize = 11, 
+                    FontWeight = FontWeights.SemiBold, 
+                    Margin = new Thickness(0, 0, 0, 3) 
+                });
+
+                var srvPicker = new TriggerPoint.UI.Controls.SearchableServicePickerControl
+                {
+                    Margin = new Thickness(0, 0, 0, 8)
+                };
+
+                try
+                {
+                    _availableServicesCache ??= _serviceManager.GetServices();
+                    srvPicker.InitializeServices(_availableServicesCache, _serviceManager);
+                    srvPicker.SetSelectedService(step.ServiceName);
+                }
+                catch
+                {
+                    srvPicker.SetSelectedService(step.ServiceName);
+                }
+
+                srvPicker.SelectedServiceChanged += (s, item) =>
+                {
+                    step.ServiceName = item?.ServiceName ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(step.Name) || 
+                        step.Name.Equals("Windows Service", StringComparison.OrdinalIgnoreCase) || 
+                        step.Name.Equals("Manage Windows Service", StringComparison.OrdinalIgnoreCase))
+                    {
+                        step.Name = string.IsNullOrWhiteSpace(step.ServiceName) 
+                            ? "Windows Service" 
+                            : $"{step.ServiceOperation} {step.ServiceName}";
+                    }
+                    summaryText.Text = GetStepLiveSummary(step);
+                    OnFormEdited();
+                };
+                srvStack.Children.Add(srvPicker);
+
+                var opRow = new Grid { Margin = new Thickness(0, 0, 0, 8) };
+                opRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                opRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
+                opRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(140) });
+
+                var opCol = new StackPanel();
+                opCol.Children.Add(new TextBlock { Text = "Operation", FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 3) });
+                var opCombo = new ComboBox { Height = 34, FontSize = 12.5 };
+                opCombo.Items.Add(new ComboBoxItem { Content = "Toggle (Start if Stopped, Stop if Running)" });
+                opCombo.Items.Add(new ComboBoxItem { Content = "Start Service" });
+                opCombo.Items.Add(new ComboBoxItem { Content = "Stop Service" });
+                opCombo.Items.Add(new ComboBoxItem { Content = "Restart Service" });
+                opCombo.SelectedIndex = Math.Clamp((int)step.ServiceOperation, 0, 3);
+                opCombo.SelectionChanged += (s, e) =>
+                {
+                    step.ServiceOperation = (ServiceOperation)opCombo.SelectedIndex;
+                    if (!string.IsNullOrWhiteSpace(step.ServiceName) && 
+                        (string.IsNullOrWhiteSpace(step.Name) || 
+                         step.Name.Equals("Windows Service", StringComparison.OrdinalIgnoreCase) ||
+                         step.Name.Equals("Manage Windows Service", StringComparison.OrdinalIgnoreCase) ||
+                         step.Name.StartsWith("Toggle ", StringComparison.OrdinalIgnoreCase) ||
+                         step.Name.StartsWith("Start ", StringComparison.OrdinalIgnoreCase) ||
+                         step.Name.StartsWith("Stop ", StringComparison.OrdinalIgnoreCase) ||
+                         step.Name.StartsWith("Restart ", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        step.Name = $"{step.ServiceOperation} {step.ServiceName}";
+                    }
+                    summaryText.Text = GetStepLiveSummary(step);
+                    OnFormEdited();
+                };
+                opCol.Children.Add(opCombo);
+                Grid.SetColumn(opCol, 0);
+                opRow.Children.Add(opCol);
+
+                var timeoutCol = new StackPanel();
+                timeoutCol.Children.Add(new TextBlock { Text = "Timeout (Seconds)", FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 3) });
+                var timeoutBox = new TextBox
+                {
+                    Text = (step.ServiceTimeoutSeconds > 0 ? step.ServiceTimeoutSeconds : 30).ToString(),
+                    Height = 34,
+                    FontSize = 12.5,
+                    Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style
+                };
+                timeoutBox.TextChanged += (s, e) =>
+                {
+                    if (int.TryParse(timeoutBox.Text, out int sec) && sec > 0)
+                    {
+                        step.ServiceTimeoutSeconds = sec;
+                        OnFormEdited();
+                    }
+                };
+                timeoutCol.Children.Add(timeoutBox);
+                Grid.SetColumn(timeoutCol, 2);
+                opRow.Children.Add(timeoutCol);
+
+                srvStack.Children.Add(opRow);
+
+                var waitCheck = new CheckBox
+                {
+                    Content = "Wait for service to reach target status before executing next step",
+                    IsChecked = step.ServiceWaitForCompletion,
+                    FontSize = 12,
+                    Margin = new Thickness(0, 0, 0, 4)
+                };
+                waitCheck.Click += (s, e) =>
+                {
+                    step.ServiceWaitForCompletion = waitCheck.IsChecked == true;
+                    OnFormEdited();
+                };
+                srvStack.Children.Add(waitCheck);
+
+                var adminCheck = new CheckBox
+                {
+                    Content = "Run elevated as Administrator (sc.exe / net.exe)",
+                    IsChecked = step.ServiceRunAsAdmin,
+                    FontSize = 12,
+                    Margin = new Thickness(0, 0, 0, 2)
+                };
+                adminCheck.Click += (s, e) =>
+                {
+                    step.ServiceRunAsAdmin = adminCheck.IsChecked == true;
+                    OnFormEdited();
+                };
+                srvStack.Children.Add(adminCheck);
+
+                container.Children.Add(srvStack);
+                break;
+            }
+
             case WorkflowStepType.ExecuteAction:
             {
                 var execStack = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
@@ -2795,6 +2950,7 @@ public partial class SettingsWindow
         WorkflowStepType.Delay => "⏱ Delay / Pause",
         WorkflowStepType.ExecuteAction => "⚡ Execute Action / Folder",
         WorkflowStepType.RunScript => "📜 Inline Script",
+        WorkflowStepType.Service => "⚙️ Windows Service",
         _ => "Step"
     };
 
@@ -2828,6 +2984,7 @@ public partial class SettingsWindow
             ? (_items?.FirstOrDefault(i => i.Id == step.TargetItemId.Value) is { } target ? $"Run: {target.Name} ({(target.ActionType == ActionType.Folder ? "Folder Menu" : target.ActionType.ToString())})" : "Target item not found")
             : "No action or folder selected",
         WorkflowStepType.RunScript => string.IsNullOrWhiteSpace(step.InlineScript) ? "Empty script" : "Custom JavaScript",
+        WorkflowStepType.Service => string.IsNullOrWhiteSpace(step.ServiceName) ? "No service configured" : $"{step.ServiceOperation} '{step.ServiceName}'",
         _ => string.Empty
     };
 
@@ -2961,6 +3118,7 @@ public partial class SettingsWindow
             "Delay" => WorkflowStepType.Delay,
             "ExecuteAction" => WorkflowStepType.ExecuteAction,
             "RunScript" => WorkflowStepType.RunScript,
+            "Service" => WorkflowStepType.Service,
             _ => WorkflowStepType.Prompt
         };
 
@@ -4777,6 +4935,7 @@ public partial class SettingsWindow
             ("Recorded Macro Sequence", WorkflowStepType.Macro, "🔴"),
             ("Delay / Pause Execution", WorkflowStepType.Delay, "⏱"),
             ("Execute Action / Folder", WorkflowStepType.ExecuteAction, "⚡"),
+            ("Windows Service", WorkflowStepType.Service, "⚙️"),
             ("Inline JavaScript", WorkflowStepType.RunScript, "📜")
         };
 

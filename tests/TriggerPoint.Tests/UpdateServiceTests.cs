@@ -406,6 +406,25 @@ public class UpdateServiceTests : IDisposable
         Assert.Equal("TriggerPointSetup.exe", result.LatestUpdate.FileName);
     }
 
+    [Fact]
+    public void GetInstallerArguments_Silent_ContainsRelaunchAndSilentFlags()
+    {
+        var args = GitHubUpdateService.GetInstallerArguments(silent: true);
+
+        Assert.Contains("/SILENT", args);
+        Assert.Contains("/SUPPRESSMSGBOXES", args);
+        Assert.Contains("/NORESTART", args);
+        Assert.Contains("/RELAUNCH", args);
+    }
+
+    [Fact]
+    public void GetInstallerArguments_NonSilent_ReturnsEmptyString()
+    {
+        var args = GitHubUpdateService.GetInstallerArguments(silent: false);
+
+        Assert.Equal(string.Empty, args);
+    }
+
     private class MockHttpMessageHandler : HttpMessageHandler
     {
         private readonly string _responseContent;

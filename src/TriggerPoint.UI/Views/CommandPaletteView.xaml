@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:TriggerPoint.UI.Views"
         Title="TriggerPoint Command Palette"
-        Width="680"
+        Width="720"
         Height="520"
         MinHeight="360"
         WindowStartupLocation="CenterScreen"
@@ -14,7 +14,8 @@
         Topmost="True"
         ShowInTaskbar="False"
         Deactivated="Window_Deactivated"
-        PreviewKeyDown="Window_PreviewKeyDown">
+        PreviewKeyDown="Window_PreviewKeyDown"
+        PreviewKeyUp="Window_PreviewKeyUp">
 
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
@@ -153,8 +154,8 @@
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="FontWeight" Value="Medium"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Margin" Value="0,0,6,0"/>
-            <Setter Property="Padding" Value="8,3"/>
+            <Setter Property="Margin" Value="0,0,5,0"/>
+            <Setter Property="Padding" Value="7,2.5"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -181,6 +182,32 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+
+        <!-- Filter Pill Ctrl Shortcut Badge Styles -->
+        <Style x:Key="PillCtrlBadgeStyle" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource BgSecondaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Padding" Value="4,1"/>
+            <Setter Property="VerticalAlignment" Value="Top"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="Margin" Value="0,0,-3,0"/>
+            <Setter Property="Panel.ZIndex" Value="10"/>
+            <Setter Property="IsHitTestVisible" Value="False"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect BlurRadius="4" ShadowDepth="1" Opacity="0.45" Direction="270"/>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PillCtrlBadgeTextStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="9"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
         </Style>
 
         <!-- Calculator Guide Tab Button Style -->
@@ -409,12 +436,13 @@
             <!-- Row 0: Search Input & Controls Box -->
             <Border Grid.Row="0"
                     x:Name="SearchBoxBorder"
+                    Panel.ZIndex="1"
                     Background="{DynamicResource BgInputBrush}"
                     BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="1"
                     CornerRadius="8"
                     Padding="10,8"
-                    Margin="0,0,0,8">
+                    Margin="0,0,0,6">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/> <!-- Back Button (Scoped) -->
@@ -652,60 +680,115 @@
             </Popup>
 
             <!-- Row 1: Filter Pills Bar -->
-            <Border Grid.Row="1" x:Name="FilterPillsBar" Margin="0,0,0,6">
-                <StackPanel Orientation="Horizontal">
-                    <!-- Filter Pill: All -->
-                    <Button x:Name="FilterPillAll" 
-                            Click="FilterPill_Click" 
-                            Tag="All" 
-                            Style="{StaticResource FilterPillStyle}">
-                        <TextBlock x:Name="FilterCountAll" Text="All (0)"/>
-                    </Button>
+            <Border Grid.Row="1" x:Name="FilterPillsBar" Panel.ZIndex="50" Margin="0,0,0,6" ClipToBounds="False">
+                <ScrollViewer x:Name="FilterPillsScrollViewer"
+                              HorizontalScrollBarVisibility="Hidden"
+                              VerticalScrollBarVisibility="Disabled"
+                              Focusable="False"
+                              Padding="2,0,16,2"
+                              PreviewMouseWheel="FilterPillsScrollViewer_PreviewMouseWheel"
+                              ClipToBounds="False">
+                    <StackPanel Orientation="Horizontal" ClipToBounds="False">
+                        <!-- Filter Pill: All -->
+                        <Grid ClipToBounds="False" Margin="0,0,12,0">
+                            <Button x:Name="FilterPillAll" 
+                                    Click="FilterPill_Click" 
+                                    Tag="All" 
+                                    Margin="0,7,0,0"
+                                    Style="{StaticResource FilterPillStyle}">
+                                <TextBlock x:Name="FilterCountAll" Text="All (0)"/>
+                            </Button>
+                            <Border x:Name="PillShortcutAll" Style="{StaticResource PillCtrlBadgeStyle}" Visibility="Collapsed">
+                                <TextBlock Text="Ctrl+1" Style="{StaticResource PillCtrlBadgeTextStyle}"/>
+                            </Border>
+                        </Grid>
 
-                    <!-- Filter Pill: Apps & Commands -->
-                    <Button x:Name="FilterPillApp" 
-                            Click="FilterPill_Click" 
-                            Tag="App" 
-                            Style="{StaticResource FilterPillStyle}">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="⚡ " FontSize="11" Foreground="{DynamicResource ShellBrush}"/>
-                            <TextBlock x:Name="FilterCountApp" Text="Apps &amp; Commands (0)"/>
-                        </StackPanel>
-                    </Button>
+                        <!-- Filter Pill: Apps -->
+                        <Grid ClipToBounds="False" Margin="0,0,12,0">
+                            <Button x:Name="FilterPillApp" 
+                                    Click="FilterPill_Click" 
+                                    Tag="App" 
+                                    Margin="0,7,0,0"
+                                    Style="{StaticResource FilterPillStyle}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="⚡ " FontSize="11" Foreground="{DynamicResource ShellBrush}"/>
+                                    <TextBlock x:Name="FilterCountApp" Text="Apps (0)"/>
+                                </StackPanel>
+                            </Button>
+                            <Border x:Name="PillShortcutApp" Style="{StaticResource PillCtrlBadgeStyle}" Visibility="Collapsed">
+                                <TextBlock Text="Ctrl+2" Style="{StaticResource PillCtrlBadgeTextStyle}"/>
+                            </Border>
+                        </Grid>
 
-                    <!-- Filter Pill: Snippets -->
-                    <Button x:Name="FilterPillSnippet" 
-                            Click="FilterPill_Click" 
-                            Tag="Snippet" 
-                            Style="{StaticResource FilterPillStyle}">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="📝 " FontSize="11" Foreground="{DynamicResource SnippetBrush}"/>
-                            <TextBlock x:Name="FilterCountSnippet" Text="Snippets (0)"/>
-                        </StackPanel>
-                    </Button>
+                        <!-- Filter Pill: Snippets -->
+                        <Grid ClipToBounds="False" Margin="0,0,12,0">
+                            <Button x:Name="FilterPillSnippet" 
+                                    Click="FilterPill_Click" 
+                                    Tag="Snippet" 
+                                    Margin="0,7,0,0"
+                                    Style="{StaticResource FilterPillStyle}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="📝 " FontSize="11" Foreground="{DynamicResource SnippetBrush}"/>
+                                    <TextBlock x:Name="FilterCountSnippet" Text="Snippets (0)"/>
+                                </StackPanel>
+                            </Button>
+                            <Border x:Name="PillShortcutSnippet" Style="{StaticResource PillCtrlBadgeStyle}" Visibility="Collapsed">
+                                <TextBlock Text="Ctrl+3" Style="{StaticResource PillCtrlBadgeTextStyle}"/>
+                            </Border>
+                        </Grid>
 
-                    <!-- Filter Pill: Workflows -->
-                    <Button x:Name="FilterPillWorkflow" 
-                            Click="FilterPill_Click" 
-                            Tag="Workflow" 
-                            Style="{StaticResource FilterPillStyle}">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="🔀 " FontSize="11" Foreground="{DynamicResource WorkflowBrush}"/>
-                            <TextBlock x:Name="FilterCountWorkflow" Text="Workflows (0)"/>
-                        </StackPanel>
-                    </Button>
+                        <!-- Filter Pill: Workflows -->
+                        <Grid ClipToBounds="False" Margin="0,0,12,0">
+                            <Button x:Name="FilterPillWorkflow" 
+                                    Click="FilterPill_Click" 
+                                    Tag="Workflow" 
+                                    Margin="0,7,0,0"
+                                    Style="{StaticResource FilterPillStyle}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="🔀 " FontSize="11" Foreground="{DynamicResource WorkflowBrush}"/>
+                                    <TextBlock x:Name="FilterCountWorkflow" Text="Workflows (0)"/>
+                                </StackPanel>
+                            </Button>
+                            <Border x:Name="PillShortcutWorkflow" Style="{StaticResource PillCtrlBadgeStyle}" Visibility="Collapsed">
+                                <TextBlock Text="Ctrl+4" Style="{StaticResource PillCtrlBadgeTextStyle}"/>
+                            </Border>
+                        </Grid>
 
-                    <!-- Filter Pill: Folders -->
-                    <Button x:Name="FilterPillFolder" 
-                            Click="FilterPill_Click" 
-                            Tag="Folder" 
-                            Style="{StaticResource FilterPillStyle}">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="📁 " FontSize="11" Foreground="{DynamicResource FolderBrush}"/>
-                            <TextBlock x:Name="FilterCountFolder" Text="Folders (0)"/>
-                        </StackPanel>
-                    </Button>
-                </StackPanel>
+                        <!-- Filter Pill: Folders -->
+                        <Grid ClipToBounds="False" Margin="0,0,12,0">
+                            <Button x:Name="FilterPillFolder" 
+                                    Click="FilterPill_Click" 
+                                    Tag="Folder" 
+                                    Margin="0,7,0,0"
+                                    Style="{StaticResource FilterPillStyle}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="📁 " FontSize="11" Foreground="{DynamicResource FolderBrush}"/>
+                                    <TextBlock x:Name="FilterCountFolder" Text="Folders (0)"/>
+                                </StackPanel>
+                            </Button>
+                            <Border x:Name="PillShortcutFolder" Style="{StaticResource PillCtrlBadgeStyle}" Visibility="Collapsed">
+                                <TextBlock Text="Ctrl+5" Style="{StaticResource PillCtrlBadgeTextStyle}"/>
+                            </Border>
+                        </Grid>
+
+                        <!-- Filter Pill: Services -->
+                        <Grid ClipToBounds="False" Margin="0,0,12,0">
+                            <Button x:Name="FilterPillService" 
+                                    Click="FilterPill_Click" 
+                                    Tag="Service" 
+                                    Margin="0,7,0,0"
+                                    Style="{StaticResource FilterPillStyle}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="⚙️ " FontSize="11" Foreground="{DynamicResource AccentBrush}"/>
+                                    <TextBlock x:Name="FilterCountService" Text="Services (0)"/>
+                                </StackPanel>
+                            </Button>
+                            <Border x:Name="PillShortcutService" Style="{StaticResource PillCtrlBadgeStyle}" Visibility="Collapsed">
+                                <TextBlock Text="Ctrl+6" Style="{StaticResource PillCtrlBadgeTextStyle}"/>
+                            </Border>
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
             </Border>
 
             <!-- Row 2: Results List & Empty State View -->
@@ -794,7 +877,10 @@
                                          <!-- Secondary Detail / Description (Clickable in calc mode to explore units) -->
                                          <TextBlock Text="{Binding SecondaryDetail}"
                                                     FontSize="11"
+                                                    LineHeight="15"
                                                     Foreground="{DynamicResource TextSecondaryBrush}"
+                                                    TextWrapping="Wrap"
+                                                    MaxHeight="36"
                                                     TextTrimming="CharacterEllipsis"
                                                     Visibility="{Binding HasSecondaryDetail}"
                                                     Margin="0,1,0,0"
@@ -999,9 +1085,10 @@
                                         <TextBlock x:Name="CalcResultDescText" 
                                                    Text="Calculation result" 
                                                    FontSize="11" 
+                                                   LineHeight="15"
                                                    Foreground="{DynamicResource TextSecondaryBrush}" 
                                                    Margin="0,2,0,0" 
-                                                   TextTrimming="CharacterEllipsis"/>
+                                                   TextWrapping="Wrap"/>
                                     </StackPanel>
 
                                     <!-- Right: Quick Action Buttons -->
@@ -1009,14 +1096,14 @@
                                         <Button x:Name="CalcResultPasteBtn" 
                                                 Style="{StaticResource CalcUnitActionButtonStyle}" 
                                                 Click="CalcResultPasteBtn_Click" 
-                                                ToolTip="Paste answer into active window (Enter)" 
+                                                ToolTip="Paste answer into active window (Shift+Enter)" 
                                                 Width="28" Height="26" Padding="0" Margin="0,0,4,0">
                                             <TextBlock Text="↵" FontSize="13" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                         </Button>
                                         <Button x:Name="CalcResultCopyValueBtn" 
                                                 Style="{StaticResource CalcUnitActionButtonStyle}" 
                                                 Click="CalcResultCopyValueBtn_Click" 
-                                                ToolTip="Copy answer to clipboard (Ctrl+C)" 
+                                                ToolTip="Copy answer to clipboard (Enter / Ctrl+C)" 
                                                 Width="28" Height="26" Padding="0" Margin="0,0,4,0">
                                             <TextBlock Text="📋" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                         </Button>
@@ -1459,18 +1546,41 @@
                                     <WrapPanel Margin="0,0,0,10">
                                         <Button Content="to" Style="{StaticResource CalcKeypadButtonStyle}" Tag="to" Click="CalcOperatorButton_Click" ToolTip="Conversion keyword"/>
                                         <Button Content="in" Style="{StaticResource CalcKeypadButtonStyle}" Tag="in" Click="CalcOperatorButton_Click" ToolTip="Conversion keyword"/>
+                                        <Button Content="in → mm" Style="{StaticResource CalcKeypadButtonStyle}" Tag="in to mm" Click="CalcOperatorButton_Click" ToolTip="Inches to millimeters"/>
+                                        <Button Content="mm → in" Style="{StaticResource CalcKeypadButtonStyle}" Tag="mm to in" Click="CalcOperatorButton_Click" ToolTip="Millimeters to fractional inches"/>
+                                        <Button Content="ft → m" Style="{StaticResource CalcKeypadButtonStyle}" Tag="ft to m" Click="CalcOperatorButton_Click" ToolTip="Feet to meters"/>
                                         <Button Content="px → rem" Style="{StaticResource CalcKeypadButtonStyle}" Tag="px to rem" Click="CalcOperatorButton_Click" ToolTip="Pixels to REM"/>
                                         <Button Content="rem → px" Style="{StaticResource CalcKeypadButtonStyle}" Tag="rem to px" Click="CalcOperatorButton_Click" ToolTip="REM to pixels"/>
                                         <Button Content="°C → °F" Style="{StaticResource CalcKeypadButtonStyle}" Tag="c to f" Click="CalcOperatorButton_Click" ToolTip="Celsius to Fahrenheit"/>
                                         <Button Content="°F → °C" Style="{StaticResource CalcKeypadButtonStyle}" Tag="f to c" Click="CalcOperatorButton_Click" ToolTip="Fahrenheit to Celsius"/>
                                         <Button Content="kg → lbs" Style="{StaticResource CalcKeypadButtonStyle}" Tag="kg to lbs" Click="CalcOperatorButton_Click" ToolTip="Kilograms to pounds"/>
+                                        <Button Content="oz → g" Style="{StaticResource CalcKeypadButtonStyle}" Tag="oz to g" Click="CalcOperatorButton_Click" ToolTip="Ounces to grams"/>
+                                        <Button Content="gal → L" Style="{StaticResource CalcKeypadButtonStyle}" Tag="gal to l" Click="CalcOperatorButton_Click" ToolTip="Gallons to liters"/>
                                         <Button Content="km → mi" Style="{StaticResource CalcKeypadButtonStyle}" Tag="km to mi" Click="CalcOperatorButton_Click" ToolTip="Kilometers to miles"/>
+                                        <Button Content="psi → bar" Style="{StaticResource CalcKeypadButtonStyle}" Tag="psi to bar" Click="CalcOperatorButton_Click" ToolTip="PSI to bar pressure"/>
+                                        <Button Content="sqft → sqm" Style="{StaticResource CalcKeypadButtonStyle}" Tag="sqft to sqm" Click="CalcOperatorButton_Click" ToolTip="Square feet to square meters"/>
                                         <Button Content="mb → gb" Style="{StaticResource CalcKeypadButtonStyle}" Tag="mb to gb" Click="CalcOperatorButton_Click" ToolTip="Megabytes to gigabytes"/>
                                     </WrapPanel>
 
                                     <!-- Tier 2: Structured Examples with Descriptions -->
                                     <TextBlock Text="UNIT &amp; COLOR CONVERSIONS" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,6"/>
                                     <StackPanel>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="10 in to mm" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= 10 in to mm" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Length conversion from inches to millimeters" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="12.7 mm to in" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= 12.7 mm to in" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Millimeters to exact fractional inch (1/2 in)" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
                                         <Grid Margin="0,0,0,4">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="220"/>
@@ -1484,8 +1594,24 @@
                                                 <ColumnDefinition Width="220"/>
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
-                                            <Button Grid.Column="0" Content="1.5rem to px" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= 1.5rem to px" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
-                                            <TextBlock Grid.Column="1" Text="Root EM units to screen pixels" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                            <Button Grid.Column="0" Content="1 gal to L" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= 1 gal to l" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Liquid volume from US gallons to liters" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="100 sqft to sqm" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= 100 sqft to sqm" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Floor area from square feet to square meters" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="14.7 psi to bar" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= 14.7 psi to bar" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Pressure conversion from PSI to bar" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
                                         </Grid>
                                         <Grid Margin="0,0,0,4">
                                             <Grid.ColumnDefinitions>
@@ -1502,22 +1628,6 @@
                                             </Grid.ColumnDefinitions>
                                             <Button Grid.Column="0" Content="75 kg in lb" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= 75 kg in lb" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
                                             <TextBlock Grid.Column="1" Text="Mass conversion from kilograms to pounds" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
-                                        </Grid>
-                                        <Grid Margin="0,0,0,4">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="220"/>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
-                                            <Button Grid.Column="0" Content="150 km in mi" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= 150 km in mi" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
-                                            <TextBlock Grid.Column="1" Text="Distance conversion from kilometers to miles" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
-                                        </Grid>
-                                        <Grid Margin="0,0,0,4">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="220"/>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
-                                            <Button Grid.Column="0" Content="500 mb in gb" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= 500 mb in gb" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
-                                            <TextBlock Grid.Column="1" Text="Data storage conversion from MB to GB" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
                                         </Grid>
                                         <Grid Margin="0,0,0,4">
                                             <Grid.ColumnDefinitions>
@@ -1644,10 +1754,10 @@
                         <!-- Content Cards -->
                         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                             <StackPanel Margin="0,0,10,0">
-                                <!-- Group 1: Filter Prefixes -->
+                                <!-- Group 1: Filter & Mode Prefixes -->
                                 <Border Background="{DynamicResource BgInputBrush}" CornerRadius="6" Padding="14,10" Margin="0,0,0,10">
                                     <StackPanel>
-                                        <TextBlock Text="SEARCH FILTER PREFIXES" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,0,0,8"/>
+                                        <TextBlock Text="FILTER &amp; MODE PREFIXES" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,0,0,8"/>
                                         
                                         <Grid Margin="0,2.5">
                                             <Grid.ColumnDefinitions>
@@ -1655,7 +1765,29 @@
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
                                             <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
-                                                <TextBlock Text="@app, @cmd" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                <TextBlock Text="=, @calc" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Calculator mode (live math, conversions, date math)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="@current" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Actions scoped to active window / foreground app" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="@app, @apps" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             </Border>
                                             <TextBlock Grid.Column="1" Text="Filter to Apps &amp; Shell Commands (Ctrl+2)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                         </Grid>
@@ -1666,7 +1798,7 @@
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
                                             <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
-                                                <TextBlock Text="@snip, @text" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                <TextBlock Text="@snip, @snippets" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             </Border>
                                             <TextBlock Grid.Column="1" Text="Filter to Snippets &amp; Templates (Ctrl+3)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                         </Grid>
@@ -1677,7 +1809,7 @@
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
                                             <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
-                                                <TextBlock Text="@flow, @wf" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                <TextBlock Text="@flow, @workflows" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             </Border>
                                             <TextBlock Grid.Column="1" Text="Filter to Workflows (Ctrl+4)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                         </Grid>
@@ -1688,9 +1820,20 @@
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
                                             <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
-                                                <TextBlock Text="@folder, @dir" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                <TextBlock Text="@folder, @folders" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             </Border>
                                             <TextBlock Grid.Column="1" Text="Filter to Folders (Ctrl+5)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="@service, @svc" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Manage Windows Services (Ctrl+6)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                         </Grid>
 
                                         <Grid Margin="0,2.5">
@@ -1703,13 +1846,35 @@
                                             </Border>
                                             <TextBlock Grid.Column="1" Text="Reset to All Items (Ctrl+1)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                         </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="#&lt;tag&gt;" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Filter actions by tag (e.g. #dev, #work)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="? or &gt;" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Search help / quick command launcher" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
                                     </StackPanel>
                                 </Border>
 
-                                <!-- Group 2: Execution Keys -->
+                                <!-- Group 2: Action & Execution Shortcuts -->
                                 <Border Background="{DynamicResource BgInputBrush}" CornerRadius="6" Padding="14,10" Margin="0,0,0,10">
                                     <StackPanel>
-                                        <TextBlock Text="EXECUTION MODIFIERS" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,0,0,8"/>
+                                        <TextBlock Text="ACTION &amp; EXECUTION SHORTCUTS" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,0,0,8"/>
 
                                         <Grid Margin="0,2.5">
                                             <Grid.ColumnDefinitions>
@@ -1719,18 +1884,7 @@
                                             <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
                                                 <TextBlock Text="Enter" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             </Border>
-                                            <TextBlock Grid.Column="1" Text="Execute action / Drill into selected folder" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                                        </Grid>
-
-                                        <Grid Margin="0,2.5">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="140"/>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
-                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
-                                                <TextBlock Text="Ctrl+Enter" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
-                                            </Border>
-                                            <TextBlock Grid.Column="1" Text="Run Application as Administrator" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1" Text="Execute action / Drill into folder / Open Calc View" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                         </Grid>
 
                                         <Grid Margin="0,2.5">
@@ -1741,7 +1895,51 @@
                                             <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
                                                 <TextBlock Text="Shift+Enter" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             </Border>
-                                            <TextBlock Grid.Column="1" Text="Reveal target in Windows File Explorer (Local files only)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1" Text="Reveal in Explorer / Direct paste calc answer" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="Ctrl+Enter" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Run App as Administrator / Run all in folder / Admin Service" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="Ctrl+S" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Start selected Service / Open Sort Menu" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="Ctrl+T" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Stop selected Windows service" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="Ctrl+R" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Restart selected Windows service" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                         </Grid>
 
                                         <Grid Margin="0,2.5">
@@ -1752,7 +1950,51 @@
                                             <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
                                                 <TextBlock Text="Ctrl+C" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             </Border>
-                                            <TextBlock Grid.Column="1" Text="Copy Snippet text or Command directly to clipboard" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1" Text="Copy Snippet, Command, or Calc answer" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="Ctrl+Shift+C" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Copy expression &amp; answer (e.g. 50 + 15% = 57.5)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="Alt+U" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Open units &amp; alternative measurements overlay" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="Ctrl+Shift+A" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Toggle auto-hide when window loses focus" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="Ctrl+D" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Toggle full description / preview details" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                         </Grid>
 
                                         <Grid Margin="0,2.5">
@@ -1768,10 +2010,76 @@
                                     </StackPanel>
                                 </Border>
 
-                                <!-- Group 3: Navigation & Management -->
-                                <Border Background="{DynamicResource BgInputBrush}" CornerRadius="6" Padding="14,10">
+                                <!-- Group 3: Navigation & Window Shortcuts -->
+                                <Border Background="{DynamicResource BgInputBrush}" CornerRadius="6" Padding="14,10" Margin="0,0,0,10">
                                     <StackPanel>
-                                        <TextBlock Text="NAVIGATION &amp; GENERAL" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,0,0,8"/>
+                                        <TextBlock Text="NAVIGATION &amp; WINDOW SHORTCUTS" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,0,0,8"/>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="Hold Ctrl" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Show quick filter jump keys (Ctrl+1 .. Ctrl+5)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="Ctrl+1 .. 5" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Switch filter pills directly" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="↑ / ↓" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Navigate action &amp; calculator results" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="Tab" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Cycle filter pills / Chain calculator answer" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="Backspace" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Back out of current folder scope (when search is empty)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="Esc" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Exit Calc View / Back out of folder / Close palette" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
 
                                         <Grid Margin="0,2.5">
                                             <Grid.ColumnDefinitions>
@@ -1812,39 +2120,6 @@
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
                                             <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
-                                                <TextBlock Text="Tab / Shift+Tab" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
-                                            </Border>
-                                            <TextBlock Grid.Column="1" Text="Cycle through filter pills" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                                        </Grid>
-
-                                        <Grid Margin="0,2.5">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="140"/>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
-                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
-                                                <TextBlock Text="Backspace" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
-                                            </Border>
-                                            <TextBlock Grid.Column="1" Text="Back out of current folder scope (when search is empty)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                                        </Grid>
-
-                                        <Grid Margin="0,2.5">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="140"/>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
-                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
-                                                <TextBlock Text="Esc" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
-                                            </Border>
-                                            <TextBlock Grid.Column="1" Text="Back out of folder scope / Close Command Palette" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                                        </Grid>
-
-                                        <Grid Margin="0,2.5">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="140"/>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
-                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
                                                 <TextBlock Text="? / F1" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             </Border>
                                             <TextBlock Grid.Column="1" Text="Toggle this shortcuts &amp; help window" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
@@ -1852,10 +2127,10 @@
                                     </StackPanel>
                                 </Border>
 
-                                <!-- Group 4: Calculator & Unit Converters -->
-                                <Border Background="{DynamicResource BgInputBrush}" CornerRadius="6" Padding="14,10" Margin="0,8,0,0">
+                                <!-- Group 4: Quick Calculations & Conversions -->
+                                <Border Background="{DynamicResource BgInputBrush}" CornerRadius="6" Padding="14,10">
                                     <StackPanel>
-                                        <TextBlock Text="CALCULATOR &amp; CONVERTERS (= or @calc)" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,0,0,8"/>
+                                        <TextBlock Text="QUICK CALCULATIONS &amp; CONVERSIONS (= or @calc)" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,0,0,8"/>
 
                                         <Grid Margin="0,2.5">
                                             <Grid.ColumnDefinitions>
@@ -1865,7 +2140,7 @@
                                             <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
                                                 <TextBlock Text="= 120 * 1.15" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             </Border>
-                                            <TextBlock Grid.Column="1" Text="Math &amp; percentages (e.g. 50 + 15%, 20% of 850)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1" Text="Math, percentages &amp; scientific (50 + 15%, 20% of 850, sin(45), sqrt(144))" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                         </Grid>
 
                                         <Grid Margin="0,2.5">
@@ -1876,18 +2151,7 @@
                                             <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
                                                 <TextBlock Text="32px to rem" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             </Border>
-                                            <TextBlock Grid.Column="1" Text="CSS units (px to rem, rem to px, pt to px)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                                        </Grid>
-
-                                        <Grid Margin="0,2.5">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="140"/>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
-                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
-                                                <TextBlock Text="100c to f" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
-                                            </Border>
-                                            <TextBlock Grid.Column="1" Text="Temperature, length (mi to km), weight (lbs to kg), bytes (mb to gb)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1" Text="Conversions: CSS, currency, temperature, length, weight, bytes, volume" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                         </Grid>
 
                                         <Grid Margin="0,2.5">
@@ -1898,8 +2162,17 @@
                                             <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
                                                 <TextBlock Text="= now + 3d" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             </Border>
-                                            <TextBlock Grid.Column="1" Text="Date calculations (now + 3d, now - 2h, unix 1727184000)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1" Text="Date countdowns &amp; time (now + 3d, time until Christmas, unix 1727184000)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                         </Grid>
+
+                                        <!-- Discovery Tip to Full Calc Workspace -->
+                                        <Border Background="{DynamicResource AccentSubtleBrush}" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,8,0,0">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="💡 " FontSize="12" VerticalAlignment="Center"/>
+                                                <TextBlock Text="Tip: Type = or @calc to open the full Calculator Workspace with interactive keypad, conversion categories, and complete 5-tab reference guide." 
+                                                           FontSize="11.5" Foreground="{DynamicResource TextPrimaryBrush}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Border>
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
@@ -2047,32 +2320,7 @@
 
                             <!-- Category Chips Bar -->
                             <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                                <StackPanel Orientation="Horizontal" x:Name="CategoryChipsContainer" VerticalAlignment="Center">
-                                    <Button x:Name="ChipAll" Tag="All" Style="{StaticResource CalcCategoryChipStyle}" Click="CategoryChip_Click">
-                                        <TextBlock Text="All"/>
-                                    </Button>
-                                    <Button x:Name="ChipDateFormats" Tag="Date Formats" Style="{StaticResource CalcCategoryChipStyle}" Click="CategoryChip_Click">
-                                        <TextBlock Text="Date Formats"/>
-                                    </Button>
-                                    <Button x:Name="ChipCommon" Tag="Common" Style="{StaticResource CalcCategoryChipStyle}" Click="CategoryChip_Click">
-                                        <TextBlock Text="Common"/>
-                                    </Button>
-                                    <Button x:Name="ChipPhysics" Tag="Physics" Style="{StaticResource CalcCategoryChipStyle}" Click="CategoryChip_Click">
-                                        <TextBlock Text="Physics"/>
-                                    </Button>
-                                    <Button x:Name="ChipSpace" Tag="Space" Style="{StaticResource CalcCategoryChipStyle}" Click="CategoryChip_Click">
-                                        <TextBlock Text="Space"/>
-                                    </Button>
-                                    <Button x:Name="ChipPopCulture" Tag="PopCulture" Style="{StaticResource CalcCategoryChipStyle}" Click="CategoryChip_Click">
-                                        <TextBlock Text="Pop Culture"/>
-                                    </Button>
-                                    <Button x:Name="ChipNature" Tag="Nature" Style="{StaticResource CalcCategoryChipStyle}" Click="CategoryChip_Click">
-                                        <TextBlock Text="Nature"/>
-                                    </Button>
-                                    <Button x:Name="ChipHistorical" Tag="Historical" Style="{StaticResource CalcCategoryChipStyle}" Click="CategoryChip_Click">
-                                        <TextBlock Text="Historical"/>
-                                    </Button>
-                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" x:Name="CategoryChipsContainer" VerticalAlignment="Center"/>
                             </ScrollViewer>
                         </Grid>
 
@@ -2106,7 +2354,7 @@
                                                                 Padding="4,1"
                                                                 Margin="6,0,0,0"
                                                                 VerticalAlignment="Center">
-                                                            <TextBlock Text="{Binding Category}"
+                                                            <TextBlock Text="{Binding DisplayCategory}"
                                                                        FontSize="9"
                                                                        FontWeight="SemiBold"
                                                                        Foreground="{DynamicResource AccentBrush}"/>

@@ -113,11 +113,19 @@ public interface IPromptDialogService
         => ShowPromptDialogAsync(promptTokens, null, null);
 }
 
+public interface IToastProgressHandle : IDisposable
+{
+    void ReportSuccess(string message);
+    void ReportError(string message);
+}
+
 public interface IToastNotificationService
 {
     void ShowSuccess(string title, string message);
     void ShowError(string title, string message);
     void ShowWarning(string title, string message);
+    void ShowInfo(string title, string message);
+    IToastProgressHandle? ShowProgress(string title, string message, Action? onCancel = null, string cancelButtonText = "Cancel");
 }
 
 public interface IConfirmationDialogService
@@ -195,6 +203,24 @@ public interface ISecretsVaultService
     string Protect(string plainText);
     string Unprotect(string cipherText);
     bool IsProtected(string? value);
+}
+
+public interface IWindowsServiceManager
+{
+    IReadOnlyList<WindowsServiceItem> GetServices();
+    WindowsServiceStatus GetServiceStatus(string serviceName);
+    Task<ServiceOperationResult> StartServiceAsync(string serviceName, bool runAsAdmin = false, int timeoutSeconds = 30, CancellationToken cancellationToken = default);
+    Task<ServiceOperationResult> StopServiceAsync(string serviceName, bool runAsAdmin = false, int timeoutSeconds = 30, CancellationToken cancellationToken = default);
+    Task<ServiceOperationResult> RestartServiceAsync(string serviceName, bool runAsAdmin = false, int timeoutSeconds = 30, CancellationToken cancellationToken = default);
+    Task<ServiceOperationResult> ToggleServiceAsync(string serviceName, bool runAsAdmin = false, int timeoutSeconds = 30, CancellationToken cancellationToken = default);
+}
+
+public interface IAbbreviationExpanderService : IDisposable
+{
+    void Start();
+    void Stop();
+    bool IsRunning { get; }
+    void UpdateSnippets(IEnumerable<TriggerItem> items);
 }
 
 

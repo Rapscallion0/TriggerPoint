@@ -22,6 +22,7 @@ public class WorkflowExecutor : IWorkflowExecutor
     private readonly ITelemetryService _telemetryService;
     private readonly IContextFilterService _contextFilterService;
     private readonly IBrowserDetectionService? _browserDetectionService;
+    private readonly IWindowsServiceManager? _windowsServiceManager;
 
     private static readonly AsyncLocal<HashSet<Guid>> _callStack = new();
 
@@ -38,7 +39,8 @@ public class WorkflowExecutor : IWorkflowExecutor
         ISnippetService snippetService,
         ITelemetryService telemetryService,
         IContextFilterService contextFilterService,
-        IBrowserDetectionService? browserDetectionService = null)
+        IBrowserDetectionService? browserDetectionService = null,
+        IWindowsServiceManager? windowsServiceManager = null)
     {
         _scriptEngineService = scriptEngineService;
         _promptDialogService = promptDialogService;
@@ -48,6 +50,7 @@ public class WorkflowExecutor : IWorkflowExecutor
         _telemetryService = telemetryService;
         _contextFilterService = contextFilterService;
         _browserDetectionService = browserDetectionService;
+        _windowsServiceManager = windowsServiceManager;
     }
 
     public async Task ExecuteWorkflowAsync(
@@ -552,6 +555,78 @@ public class WorkflowExecutor : IWorkflowExecutor
                     }
                 }
                 return true;
+            }
+
+            case WorkflowStepType.Service:
+            {
+                var rawServiceName = step.ServiceName?.Trim() ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(rawServiceName))
+                {
+                    _logger.Warning("Workflow service step '{Name}' has empty service name", step.Name);
+                    _toastNotificationService.ShowError("Workflow Error", $"Step '{step.Name}': Service name is not configured.");
+                    return false;
+                }
+
+                if (_windowsServiceManager == null)
+                {
+                    _logger.Warning("WindowsServiceManager not configured for workflow step '{Name}'", step.Name);
+                    _toastNotificationService.ShowError("Workflow Error", "Windows Service Manager is not available on this system.");
+                    return false;
+                }
+
+                var serviceName = ResolveVariables(rawServiceName, contextVariables);
+                var operation = step.ServiceOperation;
+                int timeoutSeconds = step.ServiceTimeoutSeconds > 0 ? step.ServiceTimeoutSeconds : 30;
+                bool runAsAdmin = isElevated || step.ServiceRunAsAdmin;
+
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                using var progress = _toastNotificationService.ShowProgress(
+                    "Workflow Step",
+                    $"⏳ Step '{step.Name}': {operation}ing service '{serviceName}'...",
+                    onCancel: () => linkedCts.Cancel(),
+                    cancelButtonText: "Cancel");
+
+                try
+                {
+                    ServiceOperationResult result;
+                    switch (operation)
+                    {
+                        case ServiceOperation.Start:
+                            result = await _windowsServiceManager.StartServiceAsync(serviceName, runAsAdmin, timeoutSeconds, linkedCts.Token);
+                            break;
+                        case ServiceOperation.Stop:
+                            result = await _windowsServiceManager.StopServiceAsync(serviceName, runAsAdmin, timeoutSeconds, linkedCts.Token);
+                            break;
+                        case ServiceOperation.Restart:
+                            result = await _windowsServiceManager.RestartServiceAsync(serviceName, runAsAdmin, timeoutSeconds, linkedCts.Token);
+                            break;
+                        case ServiceOperation.Toggle:
+                        default:
+                            result = await _windowsServiceManager.ToggleServiceAsync(serviceName, runAsAdmin, timeoutSeconds, linkedCts.Token);
+                            break;
+                    }
+
+                    if (result.Success)
+                    {
+                        progress?.ReportSuccess(result.Message);
+                        _logger.Information("Workflow service step '{Name}' succeeded: {Message}", step.Name, result.Message);
+                        return true;
+                    }
+                    else
+                    {
+                        progress?.ReportError(result.Message);
+                        _logger.Warning("Workflow service step '{Name}' failed: {Message}", step.Name, result.Message);
+                        _toastNotificationService.ShowError("Workflow Step Failed", $"Step '{step.Name}' failed:\n{result.Message}");
+                        return false;
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    progress?.Dispose();
+                    _logger.Information("Workflow service step '{Name}' was cancelled.", step.Name);
+                    _toastNotificationService.ShowWarning("Workflow Cancelled", $"Step '{step.Name}' was cancelled.");
+                    return false;
+                }
             }
 
             default:

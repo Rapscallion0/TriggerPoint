@@ -43,6 +43,18 @@ public class ScriptEngineTests
         public void ShowSuccess(string title, string message) => Notifications.Add($"SUCCESS:{title}:{message}");
         public void ShowError(string title, string message) => Notifications.Add($"ERROR:{title}:{message}");
         public void ShowWarning(string title, string message) => Notifications.Add($"WARN:{title}:{message}");
+        public void ShowInfo(string title, string message) => Notifications.Add($"INFO:{title}:{message}");
+        public IToastProgressHandle ShowProgress(string title, string message, Action? onCancel = null, string cancelButtonText = "Cancel")
+        {
+            Notifications.Add($"PROGRESS:{title}:{message}");
+            return new DummyProgressHandle();
+        }
+        private class DummyProgressHandle : IToastProgressHandle
+        {
+            public void Dispose() { }
+            public void ReportSuccess(string message) { }
+            public void ReportError(string message) { }
+        }
     }
 
     private class MockSnippetService : ISnippetService

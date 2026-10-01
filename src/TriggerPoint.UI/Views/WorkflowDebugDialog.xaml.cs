@@ -38,6 +38,7 @@ public class WorkflowStepDebugViewModel
             WorkflowStepType.Delay => $"Delay: {step.DelayMs}ms",
             WorkflowStepType.SetVariable => $"Set {step.SetVariableName} = {step.SetVariableValue}",
             WorkflowStepType.IfCondition => $"If {step.ConditionLeft} {step.ConditionOperator} {step.ConditionRight}",
+            WorkflowStepType.Service => $"Service: {step.ServiceOperation} '{step.ServiceName}'",
             _ => step.StepType.ToString()
         };
     }
@@ -180,6 +181,10 @@ public partial class WorkflowDebugDialog : Window
 
                     case WorkflowStepType.InjectSnippet:
                         AppendLog($"  -> Mock Type Snippet: {step.SnippetTemplate}");
+                        break;
+
+                    case WorkflowStepType.Service:
+                        AppendLog($"  -> Mock Service: {step.ServiceOperation} '{step.ServiceName}' (Timeout: {step.ServiceTimeoutSeconds}s)");
                         break;
 
                     default:

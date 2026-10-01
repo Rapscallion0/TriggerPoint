@@ -2,6 +2,7 @@ using System;
 using System.Data;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using TriggerPoint.Core.Units;
 
 namespace TriggerPoint.Core.Services;
 
@@ -12,7 +13,14 @@ public record AlternativeMeasurement(
     string Category = "Common",
     bool IsCommon = false,
     string? ConceptTitle = null,
-    string? ConversationalSentence = null);
+    string? ConversationalSentence = null)
+{
+    public string DisplayCategory => Category switch
+    {
+        "PopCulture" => "Pop Culture",
+        _ => Category
+    };
+}
 
 public record CalculatorResult(
     string Expression,
@@ -86,7 +94,7 @@ public static class QuickCalculatorService
             double.TryParse(pctOfMatch.Groups[2].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double total))
         {
             double res = Math.Round((pct / 100.0) * total, 4);
-            return new CalculatorResult(trimmed, FormatDouble(res), $"{pct}% of {total}");
+            return new CalculatorResult(trimmed, FormatDouble(res), $"{pct}% of {total}", GenerateNumberAlternatives(res));
         }
 
         var pctAddSubMatch = PercentAddSubRegex.Match(trimmed);
@@ -98,7 +106,7 @@ public static class QuickCalculatorService
             double delta = (pctDelta / 100.0) * baseVal;
             double res = op == "+" ? baseVal + delta : baseVal - delta;
             res = Math.Round(res, 4);
-            return new CalculatorResult(trimmed, FormatDouble(res), $"{baseVal} {op} {pctDelta}% ({op}{FormatDouble(delta)})");
+            return new CalculatorResult(trimmed, FormatDouble(res), $"{baseVal} {op} {pctDelta}% ({op}{FormatDouble(delta)})", GenerateNumberAlternatives(res));
         }
 
         var pctChangeMatch = PercentChangeRegex.Match(trimmed);
@@ -115,6 +123,9 @@ public static class QuickCalculatorService
         }
 
         // 5. Unit & Color Conversions
+        var unitConverted = UnitConverterEngine.TryConvert(trimmed);
+        if (unitConverted != null) return unitConverted;
+
         var unitMatch = UnitConversionRegex.Match(trimmed);
         if (unitMatch.Success &&
             double.TryParse(unitMatch.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double val))
@@ -1973,7 +1984,10 @@ public static class QuickCalculatorService
             // Allow known scientific function names (sin, cos, tan, sqrt, etc.)
             bool hasKnownFunc = Regex.IsMatch(mathExpr, @"\b(sin|cos|tan|asin|acos|atan|sqrt|cbrt|abs|log|ln|pi|e)\b", RegexOptions.IgnoreCase);
 
-            if (!hasKnownFunc && (!hasDigit || !hasOp || hasLetters))
+            // Allow pure standalone numbers (e.g. 42, 3.14) so they can evaluate and provide programmer/historical alternatives
+            bool isPureNumber = double.TryParse(mathExpr, NumberStyles.Float, CultureInfo.InvariantCulture, out _);
+
+            if (!hasKnownFunc && !isPureNumber && (!hasDigit || !hasOp || hasLetters))
             {
                 return null;
             }
@@ -2059,7 +2073,8 @@ public static class QuickCalculatorService
                 if (double.IsNaN(num) || double.IsInfinity(num)) return null;
 
                 string formatted = FormatDouble(num);
-                return new CalculatorResult(mathExpr, formatted, "Calculator result (Enter to paste)");
+                var alts = GenerateNumberAlternatives(num);
+                return new CalculatorResult(mathExpr, formatted, "Calculator result", alts);
             }
         }
         catch
@@ -2068,6 +2083,79 @@ public static class QuickCalculatorService
         }
 
         return null;
+    }
+
+    private static IReadOnlyList<AlternativeMeasurement>? GenerateNumberAlternatives(double num)
+    {
+        var list = new List<AlternativeMeasurement>();
+        if (num % 1 == 0 && num >= 0 && num <= 0xFFFFFFFF)
+        {
+            long val = (long)num;
+            list.Add(new AlternativeMeasurement(
+                Label: "Hexadecimal",
+                FormattedValue: $"0x{val:X}",
+                Description: "Base-16 hexadecimal notation",
+                Category: "Programmer",
+                IsCommon: true,
+                ConceptTitle: "💻 Hexadecimal (Base 16)",
+                ConversationalSentence: $"{val} in hexadecimal is 0x{val:X}."));
+
+            if (val <= 0xFFFF)
+            {
+                list.Add(new AlternativeMeasurement(
+                    Label: "Binary",
+                    FormattedValue: $"0b{Convert.ToString(val, 2)}",
+                    Description: "Base-2 binary digital bit representation",
+                    Category: "Programmer",
+                    IsCommon: true,
+                    ConceptTitle: "👾 Binary Bits (Base 2)",
+                    ConversationalSentence: $"{val} in binary is 0b{Convert.ToString(val, 2)}."));
+            }
+
+            list.Add(new AlternativeMeasurement(
+                Label: "Octal",
+                FormattedValue: $"0o{Convert.ToString(val, 8)}",
+                Description: "Base-8 octal representation",
+                Category: "Programmer",
+                IsCommon: false,
+                ConceptTitle: "💾 Octal (Base 8)",
+                ConversationalSentence: $"{val} in octal is 0o{Convert.ToString(val, 8)}."));
+
+            if (val >= 1 && val <= 3999)
+            {
+                string roman = ToRoman((int)val);
+                list.Add(new AlternativeMeasurement(
+                    Label: "Roman Numerals",
+                    FormattedValue: roman,
+                    Description: "Ancient Roman numeral additive notation",
+                    Category: "Historical",
+                    IsCommon: false,
+                    ConceptTitle: "🏛️ Roman Numerals",
+                    ConversationalSentence: $"{val} in Roman numerals is {roman}."));
+            }
+        }
+        return list.Count > 0 ? list : null;
+    }
+
+    private static string ToRoman(int number)
+    {
+        if (number is < 1 or > 3999) return number.ToString();
+        var romanValues = new (int val, string sym)[]
+        {
+            (1000, "M"), (900, "CM"), (500, "D"), (400, "CD"),
+            (100, "C"), (90, "XC"), (50, "L"), (40, "XL"),
+            (10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I")
+        };
+        var sb = new System.Text.StringBuilder();
+        foreach (var (val, sym) in romanValues)
+        {
+            while (number >= val)
+            {
+                sb.Append(sym);
+                number -= val;
+            }
+        }
+        return sb.ToString();
     }
 
     private static string FormatDouble(double val)

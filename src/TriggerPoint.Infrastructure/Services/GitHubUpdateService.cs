@@ -405,6 +405,11 @@ public class GitHubUpdateService : IUpdateService
         return destinationFile;
     }
 
+    public static string GetInstallerArguments(bool silent = true)
+    {
+        return silent ? "/SILENT /SUPPRESSMSGBOXES /NORESTART /RELAUNCH" : "";
+    }
+
     public void LaunchInstallerAndExit(string installerPath, bool silent = true)
     {
         if (!File.Exists(installerPath))
@@ -415,7 +420,7 @@ public class GitHubUpdateService : IUpdateService
         var startInfo = new ProcessStartInfo
         {
             FileName = installerPath,
-            Arguments = silent ? "/SILENT /SUPPRESSMSGBOXES /NORESTART" : "",
+            Arguments = GetInstallerArguments(silent),
             UseShellExecute = true
         };
 

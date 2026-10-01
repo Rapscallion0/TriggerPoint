@@ -24,13 +24,17 @@ public static class ThemeManager
 
     public static AppTheme CurrentTheme { get; private set; } = AppTheme.Dark;
     public static ThemePreference CurrentPreference { get; private set; } = ThemePreference.System;
+    public static AccentColorChoice CurrentAccentChoice { get; private set; } = AccentColorChoice.Indigo;
 
     public static event EventHandler<AppTheme>? ThemeChanged;
+    public static event EventHandler<AccentColorChoice>? AccentChanged;
 
-    public static void Initialize(ThemePreference preference = ThemePreference.System)
+    public static void Initialize(ThemePreference preference = ThemePreference.System, AccentColorChoice accentColor = AccentColorChoice.Indigo)
     {
         CurrentPreference = preference;
+        CurrentAccentChoice = accentColor;
         ApplyPreference(preference);
+        ApplyAccentColor(accentColor);
         ApplyTreeDensity(true);
 
         SystemEvents.UserPreferenceChanged += (s, e) =>
@@ -45,6 +49,11 @@ public static class ThemeManager
                     ApplyTheme(newTheme);
                     ThemeChanged?.Invoke(null, newTheme);
                 }
+            }
+
+            if (CurrentAccentChoice == AccentColorChoice.WindowsSystem && e.Category == UserPreferenceCategory.Color)
+            {
+                ApplyAccentColor(AccentColorChoice.WindowsSystem);
             }
         };
     }
@@ -238,6 +247,8 @@ public static class ThemeManager
             catch { }
         }
 
+        ApplyAccentColor(CurrentAccentChoice);
+
         UpdateNativeIcons(theme);
 
         try
@@ -355,5 +366,90 @@ public static class ThemeManager
         {
             // Graceful fallback
         }
+    }
+
+    public static void ApplyAccentColor(AccentColorChoice choice)
+    {
+        CurrentAccentChoice = choice;
+        if (Application.Current?.Resources == null) return;
+        var res = Application.Current.Resources;
+
+        var (baseColor, hoverColor, subtleColor) = GetAccentColors(choice, CurrentTheme);
+        res["AccentBrush"] = new SolidColorBrush(baseColor);
+        res["AccentHoverBrush"] = new SolidColorBrush(hoverColor);
+        res["AccentSubtleBrush"] = new SolidColorBrush(subtleColor);
+
+        AccentChanged?.Invoke(null, choice);
+    }
+
+    public static (Color Base, Color Hover, Color Subtle) GetAccentColors(AccentColorChoice choice, AppTheme theme)
+    {
+        if (choice == AccentColorChoice.WindowsSystem)
+        {
+            var winBase = GetWindowsAccentColor();
+            if (theme == AppTheme.Dark)
+            {
+                var baseDark = AdjustBrightness(winBase, 1.15f);
+                var hoverDark = AdjustBrightness(baseDark, 1.15f);
+                return (baseDark, hoverDark, Color.FromArgb(40, baseDark.R, baseDark.G, baseDark.B));
+            }
+            else
+            {
+                var baseLight = AdjustBrightness(winBase, 0.85f);
+                var hoverLight = AdjustBrightness(baseLight, 0.85f);
+                return (baseLight, hoverLight, Color.FromArgb(30, baseLight.R, baseLight.G, baseLight.B));
+            }
+        }
+
+        return (choice, theme) switch
+        {
+            (AccentColorChoice.ElectricViolet, AppTheme.Dark) => (Color.FromRgb(167, 139, 250), Color.FromRgb(196, 181, 253), Color.FromArgb(40, 167, 139, 250)),
+            (AccentColorChoice.ElectricViolet, AppTheme.Light) => (Color.FromRgb(124, 58, 237), Color.FromRgb(109, 40, 217), Color.FromArgb(30, 124, 58, 237)),
+
+            (AccentColorChoice.CyberBlue, AppTheme.Dark) => (Color.FromRgb(56, 189, 248), Color.FromRgb(125, 211, 252), Color.FromArgb(40, 56, 189, 248)),
+            (AccentColorChoice.CyberBlue, AppTheme.Light) => (Color.FromRgb(2, 132, 199), Color.FromRgb(3, 105, 161), Color.FromArgb(30, 2, 132, 199)),
+
+            (AccentColorChoice.EmeraldGreen, AppTheme.Dark) => (Color.FromRgb(52, 211, 153), Color.FromRgb(110, 231, 183), Color.FromArgb(40, 52, 211, 153)),
+            (AccentColorChoice.EmeraldGreen, AppTheme.Light) => (Color.FromRgb(5, 150, 105), Color.FromRgb(4, 120, 87), Color.FromArgb(30, 5, 150, 105)),
+
+            (AccentColorChoice.SunsetOrange, AppTheme.Dark) => (Color.FromRgb(251, 146, 60), Color.FromRgb(253, 186, 116), Color.FromArgb(40, 251, 146, 60)),
+            (AccentColorChoice.SunsetOrange, AppTheme.Light) => (Color.FromRgb(234, 88, 12), Color.FromRgb(194, 65, 12), Color.FromArgb(30, 234, 88, 12)),
+
+            (AccentColorChoice.RoseCrimson, AppTheme.Dark) => (Color.FromRgb(251, 113, 133), Color.FromRgb(253, 164, 175), Color.FromArgb(40, 251, 113, 133)),
+            (AccentColorChoice.RoseCrimson, AppTheme.Light) => (Color.FromRgb(225, 29, 72), Color.FromRgb(190, 18, 60), Color.FromArgb(30, 225, 29, 72)),
+
+            // Default: Indigo
+            (_, AppTheme.Light) => (Color.FromRgb(79, 70, 229), Color.FromRgb(67, 56, 202), Color.FromArgb(30, 79, 70, 229)),
+            _ => (Color.FromRgb(99, 102, 241), Color.FromRgb(129, 132, 245), Color.FromArgb(40, 99, 102, 241))
+        };
+    }
+
+    public static Color GetWindowsAccentColor()
+    {
+        try
+        {
+            using var dwmKey = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\DWM");
+            if (dwmKey?.GetValue("ColorizationColor") is int rawDword)
+            {
+                byte r = (byte)((rawDword >> 16) & 0xFF);
+                byte g = (byte)((rawDword >> 8) & 0xFF);
+                byte b = (byte)(rawDword & 0xFF);
+                if (r > 10 || g > 10 || b > 10)
+                {
+                    return Color.FromRgb(r, g, b);
+                }
+            }
+        }
+        catch { }
+
+        return Color.FromRgb(99, 102, 241); // Fallback to Indigo
+    }
+
+    private static Color AdjustBrightness(Color color, float factor)
+    {
+        float r = Math.Clamp(color.R * factor, 0f, 255f);
+        float g = Math.Clamp(color.G * factor, 0f, 255f);
+        float b = Math.Clamp(color.B * factor, 0f, 255f);
+        return Color.FromRgb((byte)r, (byte)g, (byte)b);
     }
 }

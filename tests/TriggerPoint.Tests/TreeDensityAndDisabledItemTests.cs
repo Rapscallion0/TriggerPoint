@@ -904,6 +904,86 @@ public class TreeDensityAndDisabledItemTests
         if (caughtEx != null) throw caughtEx;
     }
 
+    [Fact]
+    public void TogglingItemEnabled_AutoSavesAndDoesNotMarkFormDirty()
+    {
+        Exception? caughtEx = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                EnsureApplication();
+                SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext(System.Windows.Threading.Dispatcher.CurrentDispatcher));
+
+                string tempDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "TP_EnabledTest_" + Guid.NewGuid());
+                System.IO.Directory.CreateDirectory(tempDir);
+                try
+                {
+                    var repo = new TriggerPoint.Infrastructure.Persistence.JsonConfigRepository(tempDir);
+
+                    var activeItem = new TriggerItem
+                    {
+                        Id = Guid.NewGuid(),
+                        Name = "Active Action",
+                        ActionType = ActionType.Shell,
+                        IsEnabled = true,
+                        Payload = new ActionPayload { Command = "calc.exe" }
+                    };
+                    repo.SaveAsync(new[] { activeItem }).GetAwaiter().GetResult();
+
+                    using var listener = new TriggerPoint.Infrastructure.Win32.Win32HotkeyListener();
+                    var window = new SettingsWindow(repo, listener, new DummyExecutor());
+
+                    window.Show();
+
+                    while (!(bool)typeof(SettingsWindow).GetField("_isDataLoaded", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(window)!)
+                    {
+                        System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+                        Thread.Sleep(20);
+                    }
+
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+
+                    window.SelectTreeItem(activeItem);
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+
+                    Assert.False(window.SaveBtn.IsEnabled, "Form must initially be clean");
+
+                    // Toggle enabled via ItemEnabledCheck
+                    window.ItemEnabledCheck.IsChecked = false;
+                    typeof(SettingsWindow).GetMethod("ItemEnabledCheck_Click", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                        .Invoke(window, new object[] { window.ItemEnabledCheck, new RoutedEventArgs() });
+
+                    Assert.False(activeItem.IsEnabled, "Item IsEnabled must be toggled to false");
+                    Assert.False(window.SaveBtn.IsEnabled, "SaveBtn must remain disabled (not marked dirty)");
+
+                    // Re-toggle via ContextToggleEnabledItem
+                    typeof(SettingsWindow).GetMethod("ContextToggleEnabledItem_Click", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                        .Invoke(window, new object[] { window, new RoutedEventArgs() });
+
+                    Assert.True(activeItem.IsEnabled, "Item IsEnabled must be toggled back to true");
+                    Assert.False(window.SaveBtn.IsEnabled, "SaveBtn must still remain disabled");
+
+                    window.Close();
+                }
+                finally
+                {
+                    try { System.IO.Directory.Delete(tempDir, true); } catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                caughtEx = new Exception($"Error in STA thread: {ex}\nStackTrace: {ex.StackTrace}");
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join(10000);
+
+        if (caughtEx != null) throw caughtEx;
+    }
+
     private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
     {
         int count = VisualTreeHelper.GetChildrenCount(parent);

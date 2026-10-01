@@ -42,11 +42,46 @@ public class CursorMenuItemViewModel
         _ => "⚡"
     };
 
-    public CursorMenuItemViewModel(TriggerItem item, string? effectiveKey = null, bool isAutoAssigned = false)
+    public IReadOnlyList<HighlightSegment> HighlightedNameSegments { get; }
+
+    public CursorMenuItemViewModel(TriggerItem item, string? effectiveKey = null, bool isAutoAssigned = false, IReadOnlyList<int>? matchedIndices = null)
     {
         Item = item;
         AcceleratorKey = effectiveKey ?? item.AcceleratorKey;
         IsAutoAssigned = isAutoAssigned;
+        HighlightedNameSegments = BuildHighlightedSegments(item.Name, matchedIndices);
+    }
+
+    private static IReadOnlyList<HighlightSegment> BuildHighlightedSegments(string name, IReadOnlyList<int>? matchedIndices)
+    {
+        if (string.IsNullOrEmpty(name)) return [];
+        if (matchedIndices == null || matchedIndices.Count == 0)
+        {
+            return [new HighlightSegment(name, false)];
+        }
+
+        var segments = new List<HighlightSegment>();
+        var matchSet = new HashSet<int>(matchedIndices);
+        int start = 0;
+        bool inMatch = matchSet.Contains(0);
+
+        for (int i = 1; i < name.Length; i++)
+        {
+            bool isCurrentMatch = matchSet.Contains(i);
+            if (isCurrentMatch != inMatch)
+            {
+                segments.Add(new HighlightSegment(name.Substring(start, i - start), inMatch));
+                start = i;
+                inMatch = isCurrentMatch;
+            }
+        }
+
+        if (start < name.Length)
+        {
+            segments.Add(new HighlightSegment(name.Substring(start), inMatch));
+        }
+
+        return segments;
     }
 }
 
@@ -58,7 +93,12 @@ public partial class CursorContextMenuView : Window
     private readonly IContextFilterService? _contextFilterService;
     private readonly Stack<TriggerItem?> _navHistory = new();
     private TriggerItem? _currentFolder;
-    private List<CursorMenuItemViewModel> _displayedItems = new();
+    private List<TriggerItem> _currentFolderChildren = [];
+    private List<CursorMenuItemViewModel> _displayedItems = [];
+    private string _filterQuery = string.Empty;
+
+    public string FilterQuery => _filterQuery;
+    public IReadOnlyList<CursorMenuItemViewModel> DisplayedItems => _displayedItems;
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -107,33 +147,101 @@ public partial class CursorContextMenuView : Window
                 .ToList();
         }
 
-        var children = _contextFilterService == null
+        _currentFolderChildren = _contextFilterService == null
             ? rawChildren
             : rawChildren.Where(x => _contextFilterService.ShouldExecute(x, _allItems)).ToList();
 
-        var autoMode = _currentFolder?.AutoNumberMode ?? FolderAutoNumberMode.Off;
-        var resolvedKeys = MenuQuickKeyResolver.ResolveKeys(children, autoMode);
-
-        _displayedItems = resolvedKeys.Select(r => new CursorMenuItemViewModel(r.Item, r.Key, r.IsAutoAssigned)).ToList();
-        ItemsListBox.ItemsSource = _displayedItems;
-
-        if (_displayedItems.Count == 0)
-        {
-            EmptyFolderNotice.Visibility = Visibility.Visible;
-            ItemsListBox.Visibility = Visibility.Collapsed;
-            UpdateFooterHints();
-        }
-        else
-        {
-            EmptyFolderNotice.Visibility = Visibility.Collapsed;
-            ItemsListBox.Visibility = Visibility.Visible;
-            ItemsListBox.SelectedIndex = 0;
-            UpdateFooterHints();
-        }
+        _filterQuery = string.Empty;
 
         HeaderBorder.Visibility = Visibility.Visible;
         BackBtn.Visibility = _navHistory.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         HeaderTitleText.Text = BuildBreadcrumb();
+
+        ApplyFilterAndRender();
+    }
+
+    public void SetFilterQueryForTesting(string query)
+    {
+        _filterQuery = query ?? string.Empty;
+        ApplyFilterAndRender();
+    }
+
+    private void ClearFilterBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _filterQuery = string.Empty;
+        ApplyFilterAndRender();
+    }
+
+    private void ApplyFilterAndRender()
+    {
+        var autoMode = _currentFolder?.AutoNumberMode ?? FolderAutoNumberMode.Off;
+
+        if (string.IsNullOrWhiteSpace(_filterQuery))
+        {
+            if (SearchFilterPill != null) SearchFilterPill.Visibility = Visibility.Collapsed;
+
+            var resolvedKeys = MenuQuickKeyResolver.ResolveKeys(_currentFolderChildren, autoMode);
+            _displayedItems = resolvedKeys.Select(r => new CursorMenuItemViewModel(r.Item, r.Key, r.IsAutoAssigned, null)).ToList();
+            ItemsListBox.ItemsSource = _displayedItems;
+
+            if (_displayedItems.Count == 0)
+            {
+                EmptyFolderNotice.Text = "(Folder is empty)";
+                EmptyFolderNotice.Visibility = Visibility.Visible;
+                ItemsListBox.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                EmptyFolderNotice.Visibility = Visibility.Collapsed;
+                ItemsListBox.Visibility = Visibility.Visible;
+                ItemsListBox.SelectedIndex = 0;
+            }
+        }
+        else
+        {
+            if (SearchFilterPill != null)
+            {
+                SearchFilterPill.Visibility = Visibility.Visible;
+                SearchFilterText.Text = _filterQuery;
+            }
+
+            var matches = new List<(TriggerItem Item, FuzzyMatchResult Result)>();
+            foreach (var item in _currentFolderChildren)
+            {
+                var match = FuzzyMatcher.Match(item, _filterQuery);
+                if (match.IsMatch)
+                {
+                    matches.Add((item, match));
+                }
+            }
+
+            var sortedMatches = matches.OrderByDescending(m => m.Result.Score).ToList();
+            var matchedItems = sortedMatches.Select(m => m.Item).ToList();
+
+            // When filtered, re-index visible matches so 1-9 direct keys work on filtered results
+            var effectiveAutoMode = autoMode == FolderAutoNumberMode.Off ? FolderAutoNumberMode.SmartFill : autoMode;
+            var resolvedKeys = MenuQuickKeyResolver.ResolveKeys(matchedItems, effectiveAutoMode);
+
+            _displayedItems = resolvedKeys.Select((r, idx) => 
+                new CursorMenuItemViewModel(r.Item, r.Key, r.IsAutoAssigned, sortedMatches[idx].Result.MatchedIndices)).ToList();
+
+            ItemsListBox.ItemsSource = _displayedItems;
+
+            if (_displayedItems.Count == 0)
+            {
+                EmptyFolderNotice.Text = $"(No matching items for \"{_filterQuery}\")";
+                EmptyFolderNotice.Visibility = Visibility.Visible;
+                ItemsListBox.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                EmptyFolderNotice.Visibility = Visibility.Collapsed;
+                ItemsListBox.Visibility = Visibility.Visible;
+                ItemsListBox.SelectedIndex = 0;
+            }
+        }
+
+        UpdateFooterHints();
     }
 
     private string BuildBreadcrumb()
@@ -360,7 +468,12 @@ public partial class CursorContextMenuView : Window
 
         if (key == Key.Escape)
         {
-            if (_navHistory.Count > 0)
+            if (!string.IsNullOrEmpty(_filterQuery))
+            {
+                _filterQuery = string.Empty;
+                ApplyFilterAndRender();
+            }
+            else if (_navHistory.Count > 0)
             {
                 NavigateBack();
             }
@@ -372,9 +485,28 @@ public partial class CursorContextMenuView : Window
             return;
         }
 
-        if (key == Key.Left || key == Key.Back)
+        if (key == Key.Back)
         {
-            if (_navHistory.Count > 0)
+            if (!string.IsNullOrEmpty(_filterQuery))
+            {
+                _filterQuery = _filterQuery.Length > 1 
+                    ? _filterQuery.Substring(0, _filterQuery.Length - 1) 
+                    : string.Empty;
+                ApplyFilterAndRender();
+                e.Handled = true;
+                return;
+            }
+            else if (_navHistory.Count > 0)
+            {
+                NavigateBack();
+                e.Handled = true;
+                return;
+            }
+        }
+
+        if (key == Key.Left)
+        {
+            if (string.IsNullOrEmpty(_filterQuery) && _navHistory.Count > 0)
             {
                 NavigateBack();
                 e.Handled = true;
@@ -450,15 +582,29 @@ public partial class CursorContextMenuView : Window
             return;
         }
 
-        // Accelerator keys: 1-9, A-Z (excluding 0)
+        if (key == Key.Space)
+        {
+            if (!string.IsNullOrEmpty(_filterQuery))
+            {
+                _filterQuery += " ";
+                ApplyFilterAndRender();
+                e.Handled = true;
+                return;
+            }
+        }
+
+        // Accelerator & Filter keys: 1-9, A-Z (excluding 0)
         string? keyStr = null;
+        bool isDigitKey = false;
         if (key >= Key.D1 && key <= Key.D9)
         {
             keyStr = ((int)key - (int)Key.D0).ToString();
+            isDigitKey = true;
         }
         else if (key >= Key.NumPad1 && key <= Key.NumPad9)
         {
             keyStr = ((int)key - (int)Key.NumPad0).ToString();
+            isDigitKey = true;
         }
         else if (key >= Key.A && key <= Key.Z)
         {
@@ -467,30 +613,60 @@ public partial class CursorContextMenuView : Window
 
         if (!string.IsNullOrEmpty(keyStr))
         {
-            var accelMatch = _displayedItems.FirstOrDefault(x => 
-                !string.IsNullOrWhiteSpace(x.AcceleratorKey) && 
-                string.Equals(x.AcceleratorKey, keyStr, StringComparison.OrdinalIgnoreCase));
-
-            if (accelMatch != null)
+            // Case 1: Numeric quick keys (1-9) always execute the matching item if found
+            if (isDigitKey)
             {
-                var execOverride = DetermineOverride();
-                if (accelMatch.IsFolder)
+                var accelMatch = _displayedItems.FirstOrDefault(x => 
+                    !string.IsNullOrWhiteSpace(x.AcceleratorKey) && 
+                    string.Equals(x.AcceleratorKey, keyStr, StringComparison.OrdinalIgnoreCase));
+
+                if (accelMatch != null)
                 {
-                    if (execOverride == ExecutionOverride.OpenSettings)
-                    {
-                        ExecuteItem(accelMatch.Item, execOverride);
-                    }
-                    else
-                    {
-                        DrillDown(accelMatch.Item);
-                    }
+                    ExecuteMatchedAccelerator(accelMatch);
+                    e.Handled = true;
+                    return;
+                }
+                else if (!string.IsNullOrEmpty(_filterQuery))
+                {
+                    // If no item matched '1-9' and user is filtering, append the digit to the search
+                    _filterQuery += keyStr;
+                    ApplyFilterAndRender();
+                    e.Handled = true;
+                    return;
+                }
+            }
+            // Case 2: Letter keys (A-Z)
+            else
+            {
+                // If filter is already active, any letter appends to filter
+                if (!string.IsNullOrEmpty(_filterQuery))
+                {
+                    _filterQuery += keyStr.ToLowerInvariant();
+                    ApplyFilterAndRender();
+                    e.Handled = true;
+                    return;
                 }
                 else
                 {
-                    ExecuteItem(accelMatch.Item, execOverride);
+                    // Filter is empty: check if there's an explicit manual accelerator
+                    var manualMatch = _displayedItems.FirstOrDefault(x => 
+                        !x.IsAutoAssigned && 
+                        !string.IsNullOrWhiteSpace(x.AcceleratorKey) && 
+                        string.Equals(x.AcceleratorKey, keyStr, StringComparison.OrdinalIgnoreCase));
+
+                    if (manualMatch != null)
+                    {
+                        ExecuteMatchedAccelerator(manualMatch);
+                        e.Handled = true;
+                        return;
+                    }
+
+                    // Otherwise, start filtering with this letter!
+                    _filterQuery = keyStr.ToLowerInvariant();
+                    ApplyFilterAndRender();
+                    e.Handled = true;
+                    return;
                 }
-                e.Handled = true;
-                return;
             }
         }
 
@@ -519,6 +695,26 @@ public partial class CursorContextMenuView : Window
                 }
                 e.Handled = true;
             }
+        }
+    }
+
+    private void ExecuteMatchedAccelerator(CursorMenuItemViewModel accelMatch)
+    {
+        var execOverride = DetermineOverride();
+        if (accelMatch.IsFolder)
+        {
+            if (execOverride == ExecutionOverride.OpenSettings)
+            {
+                ExecuteItem(accelMatch.Item, execOverride);
+            }
+            else
+            {
+                DrillDown(accelMatch.Item);
+            }
+        }
+        else
+        {
+            ExecuteItem(accelMatch.Item, execOverride);
         }
     }
 

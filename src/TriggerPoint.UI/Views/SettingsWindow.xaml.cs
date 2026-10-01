@@ -129,6 +129,7 @@ public class TriggerTreeItemViewModel : INotifyPropertyChanged
         ActionType.Shell => "⚡",
         ActionType.Workflow => "🔀",
         ActionType.Macro => "🔴",
+        ActionType.Service => "⚙️",
         _ => "▶"
     };
 
@@ -215,6 +216,7 @@ public class TriggerTreeItemViewModel : INotifyPropertyChanged
                 ActionType.Snippet => "SnippetBrush",
                 ActionType.Workflow => "WorkflowBrush",
                 ActionType.Macro => "ErrorBrush",
+                ActionType.Service => "AccentBrush",
                 _ => "TextSecondaryBrush"
             };
             return Application.Current.TryFindResource(key) as Brush ?? Brushes.Gray;
@@ -228,6 +230,7 @@ public class TriggerTreeItemViewModel : INotifyPropertyChanged
         ActionType.Snippet => "SNIPPET",
         ActionType.Workflow => "WORKFLOW",
         ActionType.Macro => "MACRO",
+        ActionType.Service => "SERVICE",
         _ => "ACTION"
     };
 
@@ -246,6 +249,7 @@ public class TriggerTreeItemViewModel : INotifyPropertyChanged
                 ActionType.Snippet => "SnippetBrush",
                 ActionType.Workflow => "WorkflowBrush",
                 ActionType.Macro => "ErrorBrush",
+                ActionType.Service => "AccentBrush",
                 _ => "TextSecondaryBrush"
             };
             return Application.Current.TryFindResource(key) as Brush ?? Brushes.Gray;
@@ -267,6 +271,7 @@ public class TriggerTreeItemViewModel : INotifyPropertyChanged
                 ActionType.Snippet => "SnippetSubtleBrush",
                 ActionType.Workflow => "WorkflowSubtleBrush",
                 ActionType.Macro => "ErrorSubtleBrush",
+                ActionType.Service => "AccentSubtleBrush",
                 _ => "BgTertiaryBrush"
             };
             return Application.Current.TryFindResource(key) as Brush ?? Brushes.Transparent;
@@ -409,6 +414,8 @@ public partial class SettingsWindow : Window
     private readonly IMacroService _macroService;
     private readonly IWorkflowTemplateService _workflowTemplateService;
     private readonly IUpdateService? _updateService;
+    private readonly IAbbreviationExpanderService? _abbreviationExpander;
+    private readonly IWindowsServiceManager _serviceManager;
     private UpdateCheckResult? _latestAvailableUpdate;
 
     public bool IsExiting { get; set; }
@@ -423,7 +430,9 @@ public partial class SettingsWindow : Window
         IBrowserDetectionService? browserDetectionService = null,
         IMacroService? macroService = null,
         IWorkflowTemplateService? workflowTemplateService = null,
-        IUpdateService? updateService = null)
+        IUpdateService? updateService = null,
+        IAbbreviationExpanderService? abbreviationExpander = null,
+        IWindowsServiceManager? serviceManager = null)
     {
         InitializeComponent();
         _repository = repository;
@@ -437,6 +446,32 @@ public partial class SettingsWindow : Window
         _macroService = macroService ?? new TriggerPoint.Infrastructure.Services.Win32MacroService();
         _workflowTemplateService = workflowTemplateService ?? new TriggerPoint.Infrastructure.Services.WorkflowTemplateService();
         _updateService = updateService;
+        _abbreviationExpander = abbreviationExpander;
+        _serviceManager = serviceManager ?? new TriggerPoint.Infrastructure.Services.WindowsServiceManager();
+
+        if (_executor is TriggerPoint.Infrastructure.Services.ShellActionExecutor shellExec)
+        {
+            shellExec.ExecutionSucceeded += (item, msg) =>
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    if (_selectedItem?.ActionType == ActionType.Service && item?.Id == _selectedItem?.Id)
+                    {
+                        ServicePicker?.RefreshLiveStatus();
+                    }
+                });
+            };
+            shellExec.ExecutionFailed += (item, msg) =>
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    if (_selectedItem?.ActionType == ActionType.Service && item?.Id == _selectedItem?.Id)
+                    {
+                        ServicePicker?.RefreshLiveStatus();
+                    }
+                });
+            };
+        }
 
         MacroEditor?.Initialize(_macroService);
         if (MacroEditor != null)
@@ -498,6 +533,41 @@ public partial class SettingsWindow : Window
             UpdateEditorAdminBadge(ShellRunAsAdminCheck.IsChecked == true);
             OnFormEdited();
         };
+        if (ServiceRunAsAdminCheck != null)
+        {
+            ServiceRunAsAdminCheck.Click += (s, e) =>
+            {
+                UpdateEditorAdminBadge(ServiceRunAsAdminCheck.IsChecked == true);
+                OnFormEdited();
+            };
+        }
+        if (ServicePicker != null)
+        {
+            ServicePicker.SelectedServiceChanged += (s, item) =>
+            {
+                if (!_isUpdatingForm)
+                {
+                    UpdateServiceLiveStatusBadge(item?.ServiceName);
+                    InheritActionName(force: false);
+                    OnFormEdited();
+                }
+            };
+        }
+        if (ServiceOperationCombo != null)
+        {
+            ServiceOperationCombo.SelectionChanged += (s, e) =>
+            {
+                if (!_isUpdatingForm)
+                {
+                    InheritActionName(force: false);
+                    OnFormEdited();
+                }
+            };
+        }
+        if (ServiceTimeoutBox != null)
+        {
+            ServiceTimeoutBox.TextChanged += (s, e) => OnFormEdited();
+        }
         if (WorkflowScriptEditor != null)
         {
             WorkflowScriptEditor.TextChanged += WorkflowScriptEditor_TextChanged;
@@ -545,6 +615,18 @@ public partial class SettingsWindow : Window
             UpdateContextualTokenAssistant();
             QueueSnippetLivePreviewUpdate();
         };
+        if (SnippetAbbreviationBox != null)
+        {
+            SnippetAbbreviationBox.TextChanged += (s, e) => OnFormEdited();
+        }
+        if (SnippetModeImmediateRadio != null)
+        {
+            SnippetModeImmediateRadio.Checked += (s, e) => OnFormEdited();
+        }
+        if (SnippetModeDelimiterRadio != null)
+        {
+            SnippetModeDelimiterRadio.Checked += (s, e) => OnFormEdited();
+        }
         PresentationModeCombo.SelectionChanged += (s, e) =>
         {
             OnFormEdited();
@@ -715,6 +797,84 @@ public partial class SettingsWindow : Window
                 e.Handled = true;
             }
         }
+    }
+
+    private void SnippetPreviewScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        var sv = SnippetPreviewScrollViewer;
+        if (sv == null) return;
+
+        bool canScrollUp = e.Delta > 0 && sv.VerticalOffset > 0;
+        bool canScrollDown = e.Delta < 0 && sv.VerticalOffset < sv.ScrollableHeight;
+
+        if (canScrollUp || canScrollDown)
+        {
+            sv.ScrollToVerticalOffset(sv.VerticalOffset - (e.Delta / 3.0));
+            e.Handled = true;
+        }
+        else
+        {
+            if (EditorScrollViewer != null)
+            {
+                EditorScrollViewer.ScrollToVerticalOffset(EditorScrollViewer.VerticalOffset - (e.Delta / 3.0));
+                e.Handled = true;
+            }
+        }
+    }
+
+    private void UpdateSnippetAbbreviationGlobalWarning()
+    {
+        if (SnippetAbbreviationGlobalDisabledBanner == null || SnippetAbbreviationGlobalStatusBadge == null) return;
+
+        bool isGlobalExpanderEnabled = _appSettings?.EnableAbbreviationExpander ?? true;
+        if (isGlobalExpanderEnabled)
+        {
+            SnippetAbbreviationGlobalDisabledBanner.Visibility = Visibility.Collapsed;
+            SnippetAbbreviationGlobalStatusBadge.Text = "● Active globally";
+            if (TryFindResource("AccentBrush") is Brush accent)
+            {
+                SnippetAbbreviationGlobalStatusBadge.Foreground = accent;
+                SnippetAbbreviationGlobalStatusBorder.BorderBrush = accent;
+            }
+            if (TryFindResource("AccentSubtleBrush") is Brush subtle)
+            {
+                SnippetAbbreviationGlobalStatusBorder.Background = subtle;
+            }
+        }
+        else
+        {
+            SnippetAbbreviationGlobalDisabledBanner.Visibility = Visibility.Visible;
+            SnippetAbbreviationGlobalStatusBadge.Text = "⚠ Disabled globally";
+            if (TryFindResource("WarningBrush") is Brush warn)
+            {
+                SnippetAbbreviationGlobalStatusBadge.Foreground = warn;
+                SnippetAbbreviationGlobalStatusBorder.BorderBrush = warn;
+            }
+            if (TryFindResource("WarningSubtleBrush") is Brush warnSubtle)
+            {
+                SnippetAbbreviationGlobalStatusBorder.Background = warnSubtle;
+            }
+        }
+    }
+
+    private async void EnableAbbreviationInSettings_Click(object sender, RoutedEventArgs e)
+    {
+        if (_logManagerService == null) return;
+        var dlg = new ApplicationSettingsWindow(_repository, _logManagerService, _updateService, ApplicationSettingsWindow.SettingsCategory.Shortcuts)
+        {
+            Owner = this
+        };
+        dlg.ShowDialog();
+        try
+        {
+            _appSettings = await _repository.LoadSettingsAsync();
+            UpdateSnippetAbbreviationGlobalWarning();
+            if (Application.Current is App app)
+            {
+                _ = app.ReloadApplicationSettingsAndHotkeysAsync();
+            }
+        }
+        catch { }
     }
 
     private static T? FindAncestor<T>(DependencyObject? current) where T : DependencyObject
@@ -975,6 +1135,8 @@ public partial class SettingsWindow : Window
         target.ContextFilter.ExcludedUrls = [.. snapshot.ContextFilter.ExcludedUrls];
         target.InheritContextFilter = snapshot.InheritContextFilter;
         target.ConflictStatus = snapshot.ConflictStatus;
+        target.Abbreviation = snapshot.Abbreviation;
+        target.AbbreviationMode = snapshot.AbbreviationMode;
     }
 
     private bool PromptSaveIfDirty()
@@ -1067,6 +1229,7 @@ public partial class SettingsWindow : Window
             allItems.AddRange(App.CreateVirtualApplicationItems(_appSettings));
         }
         _shortcutListener.RegisterAll(allItems);
+        _abbreviationExpander?.UpdateSnippets(_items);
     }
 
     private async Task RebuildTreeAsync()
@@ -1461,6 +1624,23 @@ public partial class SettingsWindow : Window
             }
             UpdateSnippetFormatUI(_currentSnippetContentType);
 
+            if (SnippetAbbreviationBox != null)
+            {
+                SnippetAbbreviationBox.Text = item.Abbreviation ?? string.Empty;
+            }
+            if (SnippetModeImmediateRadio != null && SnippetModeDelimiterRadio != null)
+            {
+                if (item.AbbreviationMode == AbbreviationTriggerMode.Immediate)
+                {
+                    SnippetModeImmediateRadio.IsChecked = true;
+                }
+                else
+                {
+                    SnippetModeDelimiterRadio.IsChecked = true;
+                }
+            }
+            UpdateSnippetAbbreviationGlobalWarning();
+
             // Workflow payload
             if (WorkflowVisualContainer != null && WorkflowScriptContainer != null)
             {
@@ -1482,6 +1662,25 @@ public partial class SettingsWindow : Window
                 MacroEditor.SetMacro(item.Payload.Macro);
             }
 
+            // Windows Service payload
+            if (item.ActionType == ActionType.Service)
+            {
+                PopulateServicePicker(item.Payload.ServiceName);
+                if (ServiceOperationCombo != null)
+                {
+                    ServiceOperationCombo.SelectedIndex = Math.Clamp((int)item.Payload.ServiceOperation, 0, 3);
+                }
+                if (ServiceTimeoutBox != null)
+                {
+                    ServiceTimeoutBox.Text = (item.Payload.ServiceTimeoutSeconds > 0 ? item.Payload.ServiceTimeoutSeconds : 30).ToString();
+                }
+                if (ServiceRunAsAdminCheck != null)
+                {
+                    ServiceRunAsAdminCheck.IsChecked = item.Payload.ServiceRunAsAdmin;
+                }
+                UpdateServiceLiveStatusBadge(item.Payload.ServiceName);
+            }
+
             // Context filter
             AllowedProcessesTagInput.SetTags(item.ContextFilter.AllowedProcesses);
             ExcludedProcessesTagInput.SetTags(item.ContextFilter.ExcludedProcesses);
@@ -1496,7 +1695,7 @@ public partial class SettingsWindow : Window
 
             UpdateFormVisibility(item.ActionType);
             UpdateEditorTypeBadge(item.ActionType);
-            UpdateEditorAdminBadge(item.Payload.RunAsAdmin);
+            UpdateEditorAdminBadge(item.Payload.RunAsAdmin || (item.ActionType == ActionType.Service && item.Payload.ServiceRunAsAdmin));
             UpdateConflictBanner(item);
         }
         finally
@@ -1520,6 +1719,7 @@ public partial class SettingsWindow : Window
                 ActionType.Snippet => "📝 SNIPPET",
                 ActionType.Workflow => "🔀 WORKFLOW",
                 ActionType.Macro => "🔴 MACRO",
+                ActionType.Service => "⚙️ SERVICE",
                 _ => actionType.ToString().ToUpperInvariant()
             };
             string textKey = actionType switch
@@ -1529,6 +1729,7 @@ public partial class SettingsWindow : Window
                 ActionType.Snippet => "SnippetBrush",
                 ActionType.Workflow => "WorkflowBrush",
                 ActionType.Macro => "ErrorBrush",
+                ActionType.Service => "AccentBrush",
                 _ => "TextPrimaryBrush"
             };
             string bgKey = actionType switch
@@ -1538,6 +1739,7 @@ public partial class SettingsWindow : Window
                 ActionType.Snippet => "SnippetSubtleBrush",
                 ActionType.Workflow => "WorkflowSubtleBrush",
                 ActionType.Macro => "ErrorSubtleBrush",
+                ActionType.Service => "AccentSubtleBrush",
                 _ => "BgTertiaryBrush"
             };
             EditorTypeBadgeText.Foreground = Application.Current.TryFindResource(textKey) as Brush ?? Brushes.Gray;
@@ -1643,6 +1845,7 @@ public partial class SettingsWindow : Window
             SnippetSettingsGroup.Visibility = Visibility.Collapsed;
             if (WorkflowSettingsGroup != null) WorkflowSettingsGroup.Visibility = Visibility.Collapsed;
             if (MacroSettingsGroup != null) MacroSettingsGroup.Visibility = Visibility.Collapsed;
+            if (ServiceSettingsGroup != null) ServiceSettingsGroup.Visibility = Visibility.Collapsed;
         }
         else if (actionType == ActionType.Snippet)
         {
@@ -1650,6 +1853,7 @@ public partial class SettingsWindow : Window
             SnippetSettingsGroup.Visibility = Visibility.Visible;
             if (WorkflowSettingsGroup != null) WorkflowSettingsGroup.Visibility = Visibility.Collapsed;
             if (MacroSettingsGroup != null) MacroSettingsGroup.Visibility = Visibility.Collapsed;
+            if (ServiceSettingsGroup != null) ServiceSettingsGroup.Visibility = Visibility.Collapsed;
         }
         else if (actionType == ActionType.Workflow)
         {
@@ -1657,6 +1861,7 @@ public partial class SettingsWindow : Window
             SnippetSettingsGroup.Visibility = Visibility.Collapsed;
             if (WorkflowSettingsGroup != null) WorkflowSettingsGroup.Visibility = Visibility.Visible;
             if (MacroSettingsGroup != null) MacroSettingsGroup.Visibility = Visibility.Collapsed;
+            if (ServiceSettingsGroup != null) ServiceSettingsGroup.Visibility = Visibility.Collapsed;
         }
         else if (actionType == ActionType.Macro)
         {
@@ -1664,6 +1869,15 @@ public partial class SettingsWindow : Window
             SnippetSettingsGroup.Visibility = Visibility.Collapsed;
             if (WorkflowSettingsGroup != null) WorkflowSettingsGroup.Visibility = Visibility.Collapsed;
             if (MacroSettingsGroup != null) MacroSettingsGroup.Visibility = Visibility.Visible;
+            if (ServiceSettingsGroup != null) ServiceSettingsGroup.Visibility = Visibility.Collapsed;
+        }
+        else if (actionType == ActionType.Service)
+        {
+            ShellSettingsGroup.Visibility = Visibility.Collapsed;
+            SnippetSettingsGroup.Visibility = Visibility.Collapsed;
+            if (WorkflowSettingsGroup != null) WorkflowSettingsGroup.Visibility = Visibility.Collapsed;
+            if (MacroSettingsGroup != null) MacroSettingsGroup.Visibility = Visibility.Collapsed;
+            if (ServiceSettingsGroup != null) ServiceSettingsGroup.Visibility = Visibility.Visible;
         }
         else // Folder
         {
@@ -1671,9 +1885,25 @@ public partial class SettingsWindow : Window
             SnippetSettingsGroup.Visibility = Visibility.Collapsed;
             if (WorkflowSettingsGroup != null) WorkflowSettingsGroup.Visibility = Visibility.Collapsed;
             if (MacroSettingsGroup != null) MacroSettingsGroup.Visibility = Visibility.Collapsed;
+            if (ServiceSettingsGroup != null) ServiceSettingsGroup.Visibility = Visibility.Collapsed;
+        }
+
+        if (InheritNameBtn != null)
+        {
+            InheritNameBtn.Visibility = (actionType == ActionType.Service || actionType == ActionType.Shell)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
         }
 
         SyncWorkflowMiniMapVisibility(isWorkflow: actionType == ActionType.Workflow);
+        if (SnippetAbbreviationGroup != null)
+        {
+            SnippetAbbreviationGroup.Visibility = (actionType == ActionType.Snippet) ? Visibility.Visible : Visibility.Collapsed;
+            if (actionType == ActionType.Snippet)
+            {
+                UpdateSnippetAbbreviationGlobalWarning();
+            }
+        }
     }
 
     private void UpdateConflictBanner(TriggerItem item)
@@ -1752,6 +1982,18 @@ public partial class SettingsWindow : Window
                 _selectedItem.Payload.SnippetTemplate = SnippetTemplateBox.Text;
                 _selectedItem.Payload.SnippetRtf = string.Empty;
             }
+
+            if (SnippetAbbreviationBox != null)
+            {
+                string rawAbbr = SnippetAbbreviationBox.Text.Trim();
+                _selectedItem.Abbreviation = string.IsNullOrEmpty(rawAbbr) ? null : rawAbbr;
+            }
+            if (SnippetModeImmediateRadio != null)
+            {
+                _selectedItem.AbbreviationMode = SnippetModeImmediateRadio.IsChecked == true
+                    ? AbbreviationTriggerMode.Immediate
+                    : AbbreviationTriggerMode.Delimiter;
+            }
         }
 
         if (_selectedItem.ActionType == ActionType.Macro && MacroEditor != null)
@@ -1771,6 +2013,23 @@ public partial class SettingsWindow : Window
             {
                 _selectedItem.Payload.ScriptSource = WorkflowScriptEditor.Text;
             }
+        }
+
+        if (_selectedItem.ActionType == ActionType.Service)
+        {
+            _selectedItem.Payload.ServiceName = ServicePicker?.SelectedServiceName?.Trim() ?? string.Empty;
+            _selectedItem.Payload.ServiceOperation = ServiceOperationCombo?.SelectedIndex >= 0
+                ? (ServiceOperation)ServiceOperationCombo.SelectedIndex
+                : ServiceOperation.Toggle;
+            if (int.TryParse(ServiceTimeoutBox?.Text?.Trim(), out int tSec) && tSec > 0)
+            {
+                _selectedItem.Payload.ServiceTimeoutSeconds = tSec;
+            }
+            else
+            {
+                _selectedItem.Payload.ServiceTimeoutSeconds = 30;
+            }
+            _selectedItem.Payload.ServiceRunAsAdmin = ServiceRunAsAdminCheck?.IsChecked == true;
         }
 
         _selectedItem.ContextFilter.AllowedProcesses = AllowedProcessesTagInput.GetTags();
@@ -3072,9 +3331,12 @@ public partial class SettingsWindow : Window
                 ShellWorkDirBox.Text = workDir;
             }
 
-            if (string.IsNullOrWhiteSpace(ItemNameBox.Text))
+            string friendlyName = ResolveFriendlyApplicationName(targetPath);
+            if (string.IsNullOrWhiteSpace(ItemNameBox.Text) ||
+                ItemNameBox.Text.Equals("New Action", StringComparison.OrdinalIgnoreCase) ||
+                ItemNameBox.Text.Equals("New Shell Action", StringComparison.OrdinalIgnoreCase))
             {
-                ItemNameBox.Text = Path.GetFileNameWithoutExtension(dlg.FileName);
+                ItemNameBox.Text = friendlyName;
             }
             OnFormEdited();
         }
@@ -3284,6 +3546,7 @@ public partial class SettingsWindow : Window
             _folderExpansionSaveTimer.Stop();
             await _repository.SaveAsync(_items);
             RegisterShortcuts();
+            _abbreviationExpander?.UpdateSnippets(_items);
             RefreshTreeConflictStates();
             StatusText.Text = $"Saved and registered {_items.Count} items at {DateTime.Now:HH:mm:ss}";
             if (_selectedItem != null)
@@ -3380,6 +3643,7 @@ public partial class SettingsWindow : Window
             TriggerTreeItemViewModel.ShowShortcuts = _appSettings.ShowShortcutsInTree;
             UpdateToggleShortcutsButtonUi();
             RegisterShortcuts();
+            UpdateSnippetAbbreviationGlobalWarning();
             if (Application.Current is App app)
             {
                 _ = app.ReloadApplicationSettingsAndHotkeysAsync();
@@ -3491,6 +3755,7 @@ public partial class SettingsWindow : Window
             ActionType.Snippet => "New Snippet",
             ActionType.Workflow => "New Workflow",
             ActionType.Macro => "New Recorded Macro",
+            ActionType.Service => "New Windows Service",
             ActionType.Folder => "New Folder",
             _ => "New Item"
         };
@@ -3513,6 +3778,13 @@ public partial class SettingsWindow : Window
         else if (actionType == ActionType.Macro)
         {
             newItem.Payload.Macro = new MacroPayload();
+        }
+        else if (actionType == ActionType.Service)
+        {
+            newItem.Payload.ServiceName = string.Empty;
+            newItem.Payload.ServiceOperation = ServiceOperation.Toggle;
+            newItem.Payload.ServiceTimeoutSeconds = 30;
+            newItem.Payload.ServiceRunAsAdmin = true;
         }
 
         _newUnsavedItemId = newItem.Id;
@@ -3635,6 +3907,153 @@ public partial class SettingsWindow : Window
     private void AddMacroActionBtn_Click(object sender, RoutedEventArgs e)
     {
         CreateNewItem(ActionType.Macro, sender == ContextAddMacroItem);
+    }
+
+    private void AddServiceActionBtn_Click(object sender, RoutedEventArgs e)
+    {
+        CreateNewItem(ActionType.Service, sender == ContextAddServiceItem);
+    }
+
+    private IReadOnlyList<WindowsServiceItem>? _availableServicesCache;
+
+    private void PopulateServicePicker(string? currentServiceName)
+    {
+        if (ServicePicker == null) return;
+
+        try
+        {
+            _availableServicesCache ??= _serviceManager.GetServices();
+            ServicePicker.InitializeServices(_availableServicesCache, _serviceManager);
+            ServicePicker.SetSelectedService(currentServiceName);
+        }
+        catch
+        {
+            ServicePicker.SetSelectedService(currentServiceName);
+        }
+    }
+
+    private void RefreshServiceStatusBtn_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _availableServicesCache = _serviceManager.GetServices();
+            ServicePicker.InitializeServices(_availableServicesCache, _serviceManager);
+            ServicePicker.RefreshLiveStatus();
+        }
+        catch { }
+
+        string svcName = ServicePicker?.SelectedServiceName ?? string.Empty;
+        UpdateServiceLiveStatusBadge(svcName);
+    }
+
+    private void InheritNameBtn_Click(object sender, RoutedEventArgs e)
+    {
+        InheritActionName(force: true);
+    }
+
+    private void InheritActionName(bool force)
+    {
+        if (_selectedItem == null || ItemNameBox == null) return;
+
+        string currentText = ItemNameBox.Text?.Trim() ?? string.Empty;
+        bool isDefaultOrEmpty = string.IsNullOrWhiteSpace(currentText) ||
+            currentText.Equals("New Action", StringComparison.OrdinalIgnoreCase) ||
+            currentText.Equals("New Shell Action", StringComparison.OrdinalIgnoreCase) ||
+            currentText.Equals("New Windows Service", StringComparison.OrdinalIgnoreCase) ||
+            currentText.StartsWith("Start ", StringComparison.OrdinalIgnoreCase) ||
+            currentText.StartsWith("Stop ", StringComparison.OrdinalIgnoreCase) ||
+            currentText.StartsWith("Restart ", StringComparison.OrdinalIgnoreCase) ||
+            currentText.StartsWith("Toggle ", StringComparison.OrdinalIgnoreCase);
+
+        if (!force && !isDefaultOrEmpty)
+        {
+            return;
+        }
+
+        if (_selectedItem.ActionType == ActionType.Service)
+        {
+            string? svcName = ServicePicker?.SelectedServiceName;
+            if (!string.IsNullOrWhiteSpace(svcName))
+            {
+                string dispName = ServicePicker?.SelectedServiceDisplayName ?? svcName;
+                ServiceOperation op = ServiceOperationCombo != null && ServiceOperationCombo.SelectedIndex >= 0
+                    ? (ServiceOperation)ServiceOperationCombo.SelectedIndex
+                    : _selectedItem.Payload.ServiceOperation;
+
+                ItemNameBox.Text = $"{op} {dispName}";
+                OnFormEdited();
+            }
+        }
+        else if (_selectedItem.ActionType == ActionType.Shell)
+        {
+            string cmd = ShellCommandBox?.Text?.Trim() ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(cmd))
+            {
+                string suggestedName = ResolveFriendlyApplicationName(cmd);
+                if (!string.IsNullOrWhiteSpace(suggestedName))
+                {
+                    ItemNameBox.Text = suggestedName;
+                    OnFormEdited();
+                }
+            }
+        }
+    }
+
+    private static string ResolveFriendlyApplicationName(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return string.Empty;
+
+        path = path.Trim('\"', '\'').Trim();
+
+        try
+        {
+            if (File.Exists(path))
+            {
+                if (path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Path.GetFileNameWithoutExtension(path);
+                }
+
+                var vi = System.Diagnostics.FileVersionInfo.GetVersionInfo(path);
+                if (!string.IsNullOrWhiteSpace(vi.FileDescription))
+                {
+                    return vi.FileDescription.Trim();
+                }
+                if (!string.IsNullOrWhiteSpace(vi.ProductName))
+                {
+                    return vi.ProductName.Trim();
+                }
+
+                return Path.GetFileNameWithoutExtension(path);
+            }
+        }
+        catch { }
+
+        try
+        {
+            var fileName = Path.GetFileNameWithoutExtension(path);
+            if (!string.IsNullOrWhiteSpace(fileName)) return fileName;
+        }
+        catch { }
+
+        return path;
+    }
+
+    private static string ExtractServiceName(string? rawText)
+    {
+        if (string.IsNullOrWhiteSpace(rawText)) return string.Empty;
+        int openParen = rawText.LastIndexOf('(');
+        int closeParen = rawText.LastIndexOf(')');
+        if (openParen >= 0 && closeParen > openParen)
+        {
+            return rawText.Substring(openParen + 1, closeParen - openParen - 1).Trim();
+        }
+        return rawText.Trim();
+    }
+
+    private void UpdateServiceLiveStatusBadge(string? serviceName)
+    {
+        ServicePicker?.RefreshLiveStatus();
     }
 
     private void AddActionBtn_Click(object sender, RoutedEventArgs e)
@@ -3988,12 +4407,6 @@ public partial class SettingsWindow : Window
             MenuToggleExpandAll.Header = anyExpanded ? "Collapse All Folders" : "Expand All Folders";
         }
 
-        bool hasNonDefaultView = !isCompact || !showBadges || !showDisabled;
-        if (TreeOptionsActiveDot != null)
-        {
-            TreeOptionsActiveDot.Visibility = hasNonDefaultView ? Visibility.Visible : Visibility.Collapsed;
-        }
-
         if (TreeOptionsMenuBtn != null)
         {
             TreeOptionsMenuBtn.ToolTip = $"View Options (Click to configure):\n• Tree Density: {(isCompact ? "Compact" : "Comfortable")}\n• Hotkey Badges: {(showBadges ? "ON" : "OFF")}\n• Show Disabled Items: {(showDisabled ? "ON" : "OFF")}";
@@ -4105,15 +4518,33 @@ public partial class SettingsWindow : Window
 
         targetVm.Item.IsEnabled = !targetVm.Item.IsEnabled;
         targetVm.NotifyUpdated();
-        SetDirty(true);
-        if (_selectedItem?.Id == targetVm.Item.Id && ItemEnabledCheck != null)
+
+        if (_originalItemSnapshot != null && _originalItemSnapshot.Id == targetVm.Item.Id)
         {
-            ItemEnabledCheck.IsChecked = targetVm.Item.IsEnabled;
-            UpdateItemEnabledCheckUi(targetVm.Item.IsEnabled);
+            _originalItemSnapshot.IsEnabled = targetVm.Item.IsEnabled;
+        }
+
+        if (_selectedItem?.Id == targetVm.Item.Id)
+        {
+            _selectedItem.IsEnabled = targetVm.Item.IsEnabled;
+            if (ItemEnabledCheck != null)
+            {
+                _isUpdatingForm = true;
+                try
+                {
+                    ItemEnabledCheck.IsChecked = targetVm.Item.IsEnabled;
+                    UpdateItemEnabledCheckUi(targetVm.Item.IsEnabled);
+                }
+                finally
+                {
+                    _isUpdatingForm = false;
+                }
+            }
         }
         RegisterShortcuts();
         RefreshTreeConflictStates();
         UpdateDisabledFilterChipCount();
+        _ = _repository.SaveAsync(_items);
         StatusText.Text = targetVm.Item.IsEnabled ? $"Enabled '{targetVm.Name}'." : $"Disabled '{targetVm.Name}'.";
 
         if (_appSettings?.ShowDisabledItemsInTree == false && !targetVm.Item.IsEnabled)
@@ -4137,12 +4568,22 @@ public partial class SettingsWindow : Window
         }
 
         _selectedItem.IsEnabled = ItemEnabledCheck.IsChecked == true;
+        if (vm != null)
+        {
+            vm.Item.IsEnabled = _selectedItem.IsEnabled;
+        }
         UpdateItemEnabledCheckUi(_selectedItem.IsEnabled);
-        SetDirty(true);
+
+        if (_originalItemSnapshot != null && _originalItemSnapshot.Id == _selectedItem.Id)
+        {
+            _originalItemSnapshot.IsEnabled = _selectedItem.IsEnabled;
+        }
+
         vm?.NotifyUpdated();
         RegisterShortcuts();
         RefreshTreeConflictStates();
         UpdateDisabledFilterChipCount();
+        _ = _repository.SaveAsync(_items);
         StatusText.Text = _selectedItem.IsEnabled ? $"Enabled '{_selectedItem.Name}'." : $"Disabled '{_selectedItem.Name}'.";
 
         if (_appSettings?.ShowDisabledItemsInTree == false && !_selectedItem.IsEnabled)
@@ -4530,6 +4971,9 @@ public partial class SettingsWindow : Window
             ShellWorkDirBox.Text = string.Empty;
             ShellRunAsAdminCheck.IsChecked = false;
             SnippetTemplateBox.Text = string.Empty;
+            if (SnippetAbbreviationBox != null) SnippetAbbreviationBox.Text = string.Empty;
+            if (SnippetModeDelimiterRadio != null) SnippetModeDelimiterRadio.IsChecked = true;
+            if (SnippetAbbreviationGroup != null) SnippetAbbreviationGroup.Visibility = Visibility.Collapsed;
             AllowedProcessesTagInput.SetTags(new List<string>());
             ExcludedProcessesTagInput.SetTags(new List<string>());
             AllowedUrlsTagInput.SetTags(new List<string>());
@@ -4816,6 +5260,11 @@ public partial class SettingsWindow : Window
         StatusText.Text = $"Testing action '{_selectedItem.Name}'...";
         await _executor.ExecuteAsync(_selectedItem);
         StatusText.Text = $"Action '{_selectedItem.Name}' execution triggered.";
+
+        if (_selectedItem.ActionType == ActionType.Service)
+        {
+            ServicePicker?.RefreshLiveStatus();
+        }
     }
 
     private void SnoozeToggleBtn_Click(object sender, RoutedEventArgs e)

@@ -27,6 +27,12 @@ public sealed class ActionPayload
     // Macro execution properties
     public MacroPayload Macro { get; set; } = new();
 
+    // Windows Service execution properties
+    public string ServiceName { get; set; } = string.Empty;
+    public ServiceOperation ServiceOperation { get; set; } = ServiceOperation.Toggle;
+    public int ServiceTimeoutSeconds { get; set; } = 30;
+    public bool ServiceRunAsAdmin { get; set; } = false;
+
     public ActionPayload Clone()
     {
         return new ActionPayload
@@ -44,7 +50,11 @@ public sealed class ActionPayload
             WorkflowSteps = WorkflowSteps?.ConvertAll(s => s.Clone()) ?? [],
             WorkflowVariables = WorkflowVariables?.ConvertAll(v => v.Clone()) ?? [],
             ScriptSource = ScriptSource,
-            Macro = Macro?.Clone() ?? new MacroPayload()
+            Macro = Macro?.Clone() ?? new MacroPayload(),
+            ServiceName = ServiceName,
+            ServiceOperation = ServiceOperation,
+            ServiceTimeoutSeconds = ServiceTimeoutSeconds,
+            ServiceRunAsAdmin = ServiceRunAsAdmin
         };
     }
 }
@@ -177,6 +187,13 @@ public sealed class WorkflowStep
     // Macro properties
     public MacroPayload Macro { get; set; } = new();
 
+    // Windows Service properties
+    public string ServiceName { get; set; } = string.Empty;
+    public ServiceOperation ServiceOperation { get; set; } = ServiceOperation.Restart;
+    public bool ServiceWaitForCompletion { get; set; } = true;
+    public int ServiceTimeoutSeconds { get; set; } = 30;
+    public bool ServiceRunAsAdmin { get; set; } = false;
+
     public WorkflowStep Clone()
     {
         return new WorkflowStep
@@ -231,7 +248,12 @@ public sealed class WorkflowStep
             HasElseBranch = HasElseBranch,
             ThenSteps = ThenSteps?.ConvertAll(s => s.Clone()) ?? [],
             ElseSteps = ElseSteps?.ConvertAll(s => s.Clone()) ?? [],
-            Macro = Macro?.Clone() ?? new MacroPayload()
+            Macro = Macro?.Clone() ?? new MacroPayload(),
+            ServiceName = ServiceName,
+            ServiceOperation = ServiceOperation,
+            ServiceWaitForCompletion = ServiceWaitForCompletion,
+            ServiceTimeoutSeconds = ServiceTimeoutSeconds,
+            ServiceRunAsAdmin = ServiceRunAsAdmin
         };
     }
 }

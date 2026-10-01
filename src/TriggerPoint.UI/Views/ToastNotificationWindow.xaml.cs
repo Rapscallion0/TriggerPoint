@@ -28,15 +28,21 @@ public partial class ToastNotificationWindow : Window
 
     public bool IsClosing => _isClosing;
 
+    private readonly Action? _onCancel;
+
     public ToastNotificationWindow(
         ToastType type, 
         string title, 
         string message, 
         ToastMonitorPlacement placement = ToastMonitorPlacement.PrimaryMonitor,
-        double verticalOffset = 0.0)
+        double verticalOffset = 0.0,
+        Action? onCancel = null,
+        string cancelButtonText = "Cancel",
+        bool autoClose = true)
     {
         _placement = placement;
         _verticalOffset = verticalOffset;
+        _onCancel = onCancel;
 
         InitializeComponent();
 
@@ -44,8 +50,23 @@ public partial class ToastNotificationWindow : Window
         MessageText.Text = message;
         ApplyToastTypeStyle(type);
 
-        _timer.Interval = type == ToastType.Error ? TimeSpan.FromSeconds(5.0) : TimeSpan.FromSeconds(3.2);
-        _timer.Tick += (s, e) => Dismiss();
+        if (onCancel != null)
+        {
+            CancelActionBtn.Visibility = Visibility.Visible;
+            CancelActionBtn.Content = cancelButtonText;
+        }
+
+        if (autoClose)
+        {
+            _timer.Interval = type == ToastType.Error ? TimeSpan.FromSeconds(5.0) : TimeSpan.FromSeconds(3.2);
+            _timer.Tick += (s, e) => Dismiss();
+        }
+    }
+
+    private void CancelActionBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _onCancel?.Invoke();
+        Dismiss();
     }
 
     private void ApplyToastTypeStyle(ToastType type)
@@ -161,7 +182,7 @@ public partial class ToastNotificationWindow : Window
         BeginAnimation(OpacityProperty, fadeIn);
     }
 
-    private void Dismiss()
+    public void Dismiss()
     {
         if (_isClosing) return;
         _isClosing = true;

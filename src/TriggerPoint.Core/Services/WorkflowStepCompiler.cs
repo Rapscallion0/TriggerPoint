@@ -77,6 +77,10 @@ public static class WorkflowStepCompiler
                 case WorkflowStepType.Macro:
                     CompileMacroStep(step, sb);
                     break;
+
+                case WorkflowStepType.Service:
+                    CompileServiceStep(step, sb);
+                    break;
             }
 
             sb.AppendLine();
@@ -140,9 +144,23 @@ public static class WorkflowStepCompiler
             case WorkflowStepType.Macro:
                 CompileMacroStep(step, sb);
                 break;
+
+            case WorkflowStepType.Service:
+                CompileServiceStep(step, sb);
+                break;
         }
 
         return sb.ToString().TrimEnd();
+    }
+
+    private static void CompileServiceStep(WorkflowStep step, StringBuilder sb)
+    {
+        string svc = EscapeJsString(step.ServiceName ?? string.Empty);
+        string op = step.ServiceOperation.ToString().ToLowerInvariant();
+        int timeout = step.ServiceTimeoutSeconds > 0 ? step.ServiceTimeoutSeconds : 30;
+        bool admin = step.ServiceRunAsAdmin;
+        sb.AppendLine($"// Windows Service: {step.ServiceOperation} '{svc}'");
+        sb.AppendLine($"await tp.shell.executeService('{svc}', '{op}', {timeout}, {(admin ? "true" : "false")});");
     }
 
     private static void CompileExecuteActionStep(WorkflowStep step, StringBuilder sb)

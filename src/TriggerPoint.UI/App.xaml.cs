@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Windows;
@@ -29,12 +30,15 @@ public partial class App : Application
     private TrayIconService? _trayIconService;
     private SettingsWindow? _settingsWindow;
     private IShortcutListener? _shortcutListener;
+    private IAbbreviationExpanderService? _abbreviationExpander;
     private IActionExecutor? _executor;
     private IConfigRepository? _repository;
     public IConfigRepository? Repository => _repository;
     private ILogManagerService? _logManagerService;
     private Serilog.Core.LoggingLevelSwitch _levelSwitch = new();
     private IReadOnlyList<TriggerItem> _cachedItems = [];
+    private AppSettings _cachedSettings = new();
+    public AppSettings CachedSettings => _cachedSettings;
     private ChordHudView? _activeChordHud;
 
     public static UpdateCheckResult? LatestAvailableUpdate { get; set; }
@@ -164,6 +168,38 @@ public partial class App : Application
         Log.Information("TriggerPoint daemon started. Version: {Version}, LogLevel: {LogLevel}, Retention: {Retention}d, Threshold: {SplitThreshold}MB, Args: {Args}", 
             typeof(App).Assembly.GetName().Version, appSettings.LogLevel, appSettings.LogRetentionDays, appSettings.LogSplitThresholdMb, string.Join(" ", e.Args));
 
+        // Self-elevation via Task Scheduler if RunAsAdminAtStartup is configured and currently running un-elevated
+        if (appSettings.RunAsAdminAtStartup && 
+            !TriggerPoint.Infrastructure.Services.WindowsServiceManager.IsRunningElevated() &&
+            !e.Args.Contains("--no-self-elevate", StringComparer.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "schtasks.exe",
+                    Arguments = "/run /tn \"TriggerPoint\"",
+                    CreateNoWindow = true,
+                    UseShellExecute = false
+                };
+                using var proc = Process.Start(psi);
+                if (proc != null)
+                {
+                    proc.WaitForExit(1500);
+                    if (proc.ExitCode == 0)
+                    {
+                        Log.Information("Delegated execution to elevated Task Scheduler instance 'TriggerPoint'. Exiting un-elevated process.");
+                        Shutdown();
+                        return;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Failed to self-elevate via Task Scheduler 'TriggerPoint'. Continuing in standard mode.");
+            }
+        }
+
         // 3. Single-Instance Enforcement
         string? scope = pathsService.IsPortable ? SingleInstanceService.ComputeScopeHash(pathsService.BaseDataDirectory) : null;
         _singleInstanceService = new SingleInstanceService(scope);
@@ -179,7 +215,8 @@ public partial class App : Application
         _singleInstanceService.SecondInstanceSignaled += OnSecondInstanceSignaled;
 
         // 4. Initialize Theme Manager with user's theme preference
-        ThemeManager.Initialize(appSettings.Theme);
+        _cachedSettings = appSettings;
+        ThemeManager.Initialize(appSettings.Theme, appSettings.AccentColor);
 
         // 4.0 First-Run Setup (Portable edition or fresh unconfigured install)
         bool isFirstRun = !appSettings.HasCompletedInitialSetup && 
@@ -261,8 +298,8 @@ public partial class App : Application
             shellExec.OpenSettingsRequested += item => Dispatcher.Invoke(() => ShowSettingsWindow(item));
             shellExec.ExecutionSucceeded += (item, detail) =>
             {
-                // Snippet text expansions are inline and must never display disruptive desktop toasts
-                if (item.ActionType == ActionType.Snippet)
+                // Snippet text expansions and Windows Services provide their own dedicated feedback
+                if (item.ActionType == ActionType.Snippet || item.ActionType == ActionType.Service)
                 {
                     return;
                 }
@@ -274,6 +311,12 @@ public partial class App : Application
             };
             shellExec.ExecutionFailed += (item, error) =>
             {
+                // Service operations render errors directly on their progress HUD
+                if (item.ActionType == ActionType.Service)
+                {
+                    return;
+                }
+
                 toastService.ShowError($"Failed to launch '{item.Name}'", error);
             };
         }
@@ -353,6 +396,10 @@ public partial class App : Application
         var allItems = new List<TriggerItem>(items);
         allItems.AddRange(CreateVirtualApplicationItems(appSettings));
         _shortcutListener.RegisterAll(allItems);
+
+        _abbreviationExpander = _serviceProvider.GetRequiredService<IAbbreviationExpanderService>();
+        _abbreviationExpander.UpdateSnippets(items);
+        _abbreviationExpander.Start();
 
         // Suspend global hotkeys while user records a shortcut so keys pass cleanly to UI
         HotkeyRecorderControl.RecordingStarted += (s, e) => _shortcutListener.Suspend();
@@ -505,6 +552,11 @@ public partial class App : Application
         services.AddSingleton<IToastNotificationService, ToastNotificationService>();
         services.AddSingleton<IWorkflowTemplateService, WorkflowTemplateService>();
         services.AddSingleton<IUpdateService, GitHubUpdateService>();
+        services.AddSingleton<IWindowsServiceManager, WindowsServiceManager>();
+        services.AddSingleton<IAbbreviationExpanderService>(sp => new AbbreviationExpanderService(
+            sp.GetRequiredService<ISnippetService>(),
+            sp.GetRequiredService<IContextFilterService>(),
+            () => (Application.Current as App)?.CachedSettings ?? new AppSettings()));
     }
 
     private void ShortcutListener_HotkeyTriggered(object? sender, TriggerItem item)
@@ -616,7 +668,8 @@ public partial class App : Application
                 {
                     try
                     {
-                        var palette = new CommandPaletteView(allItems, _executor, _repository, scopeId, scopeName, targetHwnd);
+                        var serviceManager = _serviceProvider?.GetService<IWindowsServiceManager>();
+                        var palette = new CommandPaletteView(allItems, _executor, _repository, scopeId, scopeName, targetHwnd, serviceManager);
                         palette.Show();
                         palette.Activate();
                         try
@@ -752,6 +805,8 @@ public partial class App : Application
         var workflowTemplateService = _serviceProvider.GetRequiredService<IWorkflowTemplateService>();
         var updateService = _serviceProvider.GetRequiredService<IUpdateService>();
 
+        var serviceManager = _serviceProvider.GetService<IWindowsServiceManager>();
+
         _settingsWindow = new SettingsWindow(
             _repository,
             _shortcutListener,
@@ -762,7 +817,9 @@ public partial class App : Application
             browserDetectionService,
             macroService,
             workflowTemplateService,
-            updateService);
+            updateService,
+            _abbreviationExpander,
+            serviceManager);
 
         if (LatestAvailableUpdate != null)
         {
@@ -889,10 +946,20 @@ public partial class App : Application
         try
         {
             var settings = await _repository.LoadSettingsAsync();
+            _cachedSettings = settings;
             var items = await _repository.LoadAsync();
             var allItems = new List<TriggerItem>(items);
             allItems.AddRange(CreateVirtualApplicationItems(settings));
             _shortcutListener.RegisterAll(allItems);
+            _abbreviationExpander?.UpdateSnippets(allItems);
+            if (settings.EnableAbbreviationExpander && _abbreviationExpander?.IsRunning == false)
+            {
+                _abbreviationExpander.Start();
+            }
+            else if (!settings.EnableAbbreviationExpander && _abbreviationExpander?.IsRunning == true)
+            {
+                _abbreviationExpander.Stop();
+            }
             _trayIconService?.UpdateCommandPaletteHotkey(settings.CommandPaletteHotkey?.DisplayText);
             _trayIconService?.UpdateOpenSettingsHotkey(settings.OpenSettingsHotkey?.DisplayText);
             _trayIconService?.UpdateCheatSheetHotkey(settings.CheatSheetHotkey?.DisplayText);
@@ -976,6 +1043,7 @@ public partial class App : Application
 
         _trayIconService?.Dispose();
         _shortcutListener?.Dispose();
+        _abbreviationExpander?.Dispose();
         _singleInstanceService?.Dispose();
 
         Log.CloseAndFlush();
@@ -997,6 +1065,7 @@ public partial class App : Application
 
         _trayIconService?.Dispose();
         _shortcutListener?.Dispose();
+        _abbreviationExpander?.Dispose();
         _singleInstanceService?.Dispose();
         Log.CloseAndFlush();
         base.OnExit(e);

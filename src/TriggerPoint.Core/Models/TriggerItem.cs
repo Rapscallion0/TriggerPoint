@@ -23,6 +23,8 @@ public sealed class TriggerItem
     public int OrderIndex { get; set; } = 0;
     public bool IsEnabled { get; set; } = true;
     public bool IsExpanded { get; set; } = true;
+    public string? Abbreviation { get; set; }
+    public AbbreviationTriggerMode AbbreviationMode { get; set; } = AbbreviationTriggerMode.Immediate;
 
     [JsonIgnore]
     public HotkeyConflictStatus ConflictStatus { get; set; } = HotkeyConflictStatus.None;
@@ -45,6 +47,8 @@ public sealed class TriggerItem
             AutoNumberMode = AutoNumberMode,
             ActionType = ActionType,
             IsExpanded = IsExpanded,
+            Abbreviation = Abbreviation,
+            AbbreviationMode = AbbreviationMode,
             Payload = Payload?.Clone() ?? new ActionPayload(),
             ContextFilter = new ContextFilter
             {

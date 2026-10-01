@@ -17,6 +17,8 @@ public class ShellActionExecutor : IActionExecutor
     private readonly IPromptDialogService? _promptDialogService;
     private readonly IWorkflowExecutor? _workflowExecutor;
     private readonly IMacroService? _macroService;
+    private readonly IWindowsServiceManager? _windowsServiceManager;
+    private readonly IToastNotificationService? _toastNotificationService;
 
     public event Action<TriggerItem>? OpenSettingsRequested;
     public event Action<TriggerItem, string>? ExecutionSucceeded;
@@ -28,7 +30,9 @@ public class ShellActionExecutor : IActionExecutor
         IContextFilterService contextFilterService,
         IPromptDialogService? promptDialogService = null,
         IWorkflowExecutor? workflowExecutor = null,
-        IMacroService? macroService = null)
+        IMacroService? macroService = null,
+        IWindowsServiceManager? windowsServiceManager = null,
+        IToastNotificationService? toastNotificationService = null)
     {
         _snippetService = snippetService;
         _telemetryService = telemetryService;
@@ -36,6 +40,8 @@ public class ShellActionExecutor : IActionExecutor
         _promptDialogService = promptDialogService;
         _workflowExecutor = workflowExecutor;
         _macroService = macroService;
+        _windowsServiceManager = windowsServiceManager;
+        _toastNotificationService = toastNotificationService;
     }
 
     public async Task ExecuteAsync(TriggerItem item, ExecutionOverride executionOverride = ExecutionOverride.Standard, IntPtr? targetHwnd = null)
@@ -129,6 +135,100 @@ public class ShellActionExecutor : IActionExecutor
         if (item.ActionType == ActionType.Shell)
         {
             await ExecuteShellActionAsync(item, executionOverride);
+            return;
+        }
+
+        if (item.ActionType == ActionType.Service)
+        {
+            await ExecuteServiceActionAsync(item, executionOverride);
+            return;
+        }
+    }
+
+    private async Task ExecuteServiceActionAsync(TriggerItem item, ExecutionOverride executionOverride)
+    {
+        var rawServiceName = item.Payload.ServiceName?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(rawServiceName))
+        {
+            _logger.Warning("Cannot execute service action '{Name}': service name is empty.", item.Name);
+            ExecutionFailed?.Invoke(item, "Windows Service name is empty.");
+            _toastNotificationService?.ShowError("Service Error", $"Cannot execute '{item.Name}': Service name is not configured.");
+            return;
+        }
+
+        if (_windowsServiceManager == null)
+        {
+            _logger.Warning("Windows service manager is not configured for action '{Name}'", item.Name);
+            ExecutionFailed?.Invoke(item, "Windows service manager service not available.");
+            _toastNotificationService?.ShowError("Service Error", "Windows Service Manager is not available on this system.");
+            return;
+        }
+
+        var serviceName = await Core.Services.PlaceholderParser.EvaluateAsync(rawServiceName).ConfigureAwait(false);
+        var operation = item.Payload.ServiceOperation;
+        int timeoutSeconds = item.Payload.ServiceTimeoutSeconds > 0 ? item.Payload.ServiceTimeoutSeconds : 30;
+        bool runAsAdmin = item.Payload.ServiceRunAsAdmin;
+
+        string opVerb = operation switch
+        {
+            ServiceOperation.Start => "Starting",
+            ServiceOperation.Stop => "Stopping",
+            ServiceOperation.Restart => "Restarting",
+            _ => "Toggling"
+        };
+
+        using var cts = new CancellationTokenSource();
+
+        using var progress = _toastNotificationService?.ShowProgress(
+            "Windows Service",
+            $"⏳ {opVerb} service '{serviceName}'...",
+            onCancel: () => cts.Cancel(),
+            cancelButtonText: "Cancel");
+
+        try
+        {
+            ServiceOperationResult result;
+            switch (operation)
+            {
+                case ServiceOperation.Start:
+                    result = await _windowsServiceManager.StartServiceAsync(serviceName, runAsAdmin, timeoutSeconds, cts.Token);
+                    break;
+                case ServiceOperation.Stop:
+                    result = await _windowsServiceManager.StopServiceAsync(serviceName, runAsAdmin, timeoutSeconds, cts.Token);
+                    break;
+                case ServiceOperation.Restart:
+                    result = await _windowsServiceManager.RestartServiceAsync(serviceName, runAsAdmin, timeoutSeconds, cts.Token);
+                    break;
+                case ServiceOperation.Toggle:
+                default:
+                    result = await _windowsServiceManager.ToggleServiceAsync(serviceName, runAsAdmin, timeoutSeconds, cts.Token);
+                    break;
+            }
+
+            if (result.Success)
+            {
+                _logger.Information("Service action '{Name}' completed: {Message}", item.Name, result.Message);
+                progress?.ReportSuccess(result.Message);
+                ExecutionSucceeded?.Invoke(item, result.Message);
+            }
+            else
+            {
+                _logger.Warning("Service action '{Name}' failed: {Message}", item.Name, result.Message);
+                progress?.ReportError(result.Message);
+                ExecutionFailed?.Invoke(item, result.Message);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            progress?.ReportError($"Operation cancelled for service '{serviceName}'.");
+            _logger.Information("Service action '{Name}' was cancelled by user.", item.Name);
+            ExecutionFailed?.Invoke(item, $"Operation cancelled by user for service '{serviceName}'.");
+        }
+        catch (Exception ex)
+        {
+            progress?.ReportError($"Error: {ex.Message}");
+            _logger.Error(ex, "Unexpected error executing service action '{Name}'", item.Name);
+            ExecutionFailed?.Invoke(item, ex.Message);
         }
     }
 
