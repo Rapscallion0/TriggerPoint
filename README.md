@@ -5,9 +5,9 @@
 
 [![.NET](https://img.shields.io/badge/.NET-9.0--windows-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011%20x64-0078D6?logo=windows)](https://microsoft.com/windows)
-[![Version](https://img.shields.io/badge/Version-v2.1.0-blue.svg)](https://github.com/Rapscallion0/TriggerPoint/releases/tag/v2.1.0)
+[![Version](https://img.shields.io/badge/Version-v2.2.0-blue.svg)](https://github.com/Rapscallion0/TriggerPoint/releases/tag/v2.2.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-526%20Passed%20(100%25)-brightgreen)]()
+[![Tests](https://img.shields.io/badge/Tests-705%20Passed%20(100%25)-brightgreen)]()
 
 ---
 
@@ -16,29 +16,6 @@
 **TriggerPoint** is a fast, lightweight Windows productivity tool that puts your most frequent actions at your fingertips. Launch apps, run scripts, execute multi-step workflows, paste dynamic snippets, and open custom menus anywhere on your screen using simple system-wide shortcuts.
 
 Designed to stay out of your way, TriggerPoint runs quietly in your system tray with near-zero memory footprint, zero telemetry, and lightning-fast response times.
-
----
-
-## What's New in v2.1.0 🚀
-
-- **Standalone Portable Edition**:
-  - Run TriggerPoint anywhere with zero installation, zero host registry pollution, and zero leftover files.
-  - Automatically activates Portable Mode when a local `data/` directory or `portable.dat` sentinel is detected (or via `--portable` / `--data-dir <path>` switches).
-  - **Hardware-Independent Secrets Vault**: Replaces machine-tied DPAPI with a self-contained AES-256-GCM encrypted vault (`vault.key`) stored in `data/`, allowing secrets and API keys to move securely across different PCs.
-  - **Host Integration Reconciliation**: Proactively monitors for USB drive removal and session logoff, automatically scrubbing temporary Explorer context menu registrations. Includes a standalone `cleanup-host-integration.bat` emergency utility for clean ejection.
-- **Interactive First-Run Onboarding & Live Theme Selection**:
-  - **Inno Setup Installer**: Added an **"Initial Preferences"** wizard page allowing users to select their preferred appearance theme (*System Default*, *Dark*, *Light*) and choose whether to install starter content before copying files. Upgrades automatically preserve existing user preferences.
-  - **Portable Edition**: Introduces a borderless **`FirstRunSetupWindow`** on clean launch featuring real-time live theme preview switching and starter content selection before launching background listeners.
-- **Starter Pack & Default Shortcuts Reorganization**:
-  - All sample items are now unified under a single top-level **`Starter Pack & Examples`** folder, allowing new users to explore capabilities or completely wipe all sample content with a single click.
-  - Includes showcase folders:
-    - **`Quick Launcher (Cursor Menu)`** (<kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>Space</kbd>): Windows Calculator (`1`), Notepad Scratchpad (`2`), and Google Web Search (`3`).
-    - **`Text Snippets & Templates`**: Dynamic Timestamp (<kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>D</kbd>), Git Conventional Commit with interactive prompt modal, Meeting Notes template, and Markdown Code Block clipboard wrapper.
-    - **`Automated Workflows`**: Morning Workspace Setup (sequential URL launch, delay, Notepad scratchpad, and toast alert) and Open Temp Directory.
-    - **`Keystroke Automation (Macro)`**: Duplicate Line Down (<kbd>Shift</kbd> + <kbd>Alt</kbd> + <kbd>Down</kbd>).
-  - **Ergonomic Default Hotkey**: Command Palette default global shortcut changed from `Alt+Space` to **`Ctrl+Shift+Space`**, eliminating collision with the standard Windows window menu.
-- **Test Suite Expansion**:
-  - Test suite expanded to **526 unit and UI integration tests** (100% passing) covering portable path routing, AES encryption roundtrips, initial setup persistence, and startup reconciliation.
 
 ---
 
@@ -173,11 +150,11 @@ dotnet run --project src/TriggerPoint.UI
 #### Package Installer & Portable Archive
 To package the app into both the Inno Setup installer and the standalone portable zip:
 ```powershell
-powershell -ExecutionPolicy Bypass -File build/package.ps1 -AppVersion "2.1.0"
+powershell -ExecutionPolicy Bypass -File build/package.ps1 -AppVersion "2.2.0"
 ```
 The output artifacts will be produced in the `artifacts/` directory:
 - `artifacts/TriggerPointSetup.exe`
-- `artifacts/TriggerPoint-v2.1.0-Portable-win-x64.zip`
+- `artifacts/TriggerPoint-v2.2.0-Portable-win-x64.zip`
 
 ---
 
@@ -192,7 +169,7 @@ TriggerPoint/
 │   ├── TriggerPoint.Infrastructure/  # Win32 hooks, atomic JSON persistence, and Serilog logging
 │   └── TriggerPoint.UI/              # Modern WPF UI, Tray daemon, Hotkey recorder, and Themes
 ├── tests/
-│   └── TriggerPoint.Tests/           # Unit & UI test suite (526 tests: xUnit, FluentAssertions)
+│   └── TriggerPoint.Tests/           # Unit & UI test suite (705 tests: xUnit, FluentAssertions)
 ├── installer/
 │   └── TriggerPoint.iss              # Inno Setup dual-scope installer specification
 ├── build/
