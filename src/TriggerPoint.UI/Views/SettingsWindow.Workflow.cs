@@ -1912,6 +1912,7 @@ public partial class SettingsWindow
                 var grid = new Grid();
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
                 var cmdBox = new TextBox
                 {
@@ -1946,13 +1947,53 @@ public partial class SettingsWindow
                         Filter = "Applications & Scripts (*.exe;*.lnk;*.bat;*.cmd;*.ps1)|*.exe;*.lnk;*.bat;*.cmd;*.ps1|All Files (*.*)|*.*",
                         InitialDirectory = GetInitialExecutableDirectory()
                     };
-                    if (dlg.ShowDialog() == true)
+                    if (dlg.ShowDialog(this) == true)
                     {
+                        _lastBrowsedExecutableDirectory = Path.GetDirectoryName(dlg.FileName);
                         cmdBox.Text = dlg.FileName;
                     }
                 };
                 Grid.SetColumn(browseBtn, 1);
                 grid.Children.Add(browseBtn);
+
+                var targetWindowBtn = new Button
+                {
+                    Content = "🎯 Target Window",
+                    Height = 34,
+                    Padding = new Thickness(10, 4, 10, 4),
+                    Margin = new Thickness(6, 0, 0, 0),
+                    ToolTip = "Target running application window to capture its executable path (Esc to cancel)",
+                    Style = Application.Current.TryFindResource("SecondaryButtonStyle") as Style
+                };
+                targetWindowBtn.Click += (s, e) =>
+                {
+                    bool hideWindow = _appSettings?.HideOnTargetWindow ?? true;
+                    if (WindowTargetingOverlay.TryTargetWindow(this, "Click application window to capture executable path (Esc to cancel)", hideWindow, out IntPtr targetHwnd, out var pt))
+                    {
+                        IntPtr rootHwnd = NativeMethods.GetAncestor(targetHwnd, NativeMethods.GA_ROOT);
+                        if (rootHwnd == IntPtr.Zero) rootHwnd = targetHwnd;
+
+                        NativeMethods.GetWindowThreadProcessId(rootHwnd, out uint pid);
+                        if (pid != 0 && pid != (uint)Environment.ProcessId)
+                        {
+                            string? exePath = GetProcessPath(pid);
+                            if (!string.IsNullOrWhiteSpace(exePath))
+                            {
+                                cmdBox.Text = exePath;
+                                if (string.IsNullOrWhiteSpace(step.WorkingDirectory))
+                                {
+                                    string? dir = Path.GetDirectoryName(exePath);
+                                    if (!string.IsNullOrWhiteSpace(dir))
+                                    {
+                                        step.WorkingDirectory = dir;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                };
+                Grid.SetColumn(targetWindowBtn, 2);
+                grid.Children.Add(targetWindowBtn);
                 cmdStack.Children.Add(grid);
                 container.Children.Add(cmdStack);
 
@@ -1982,6 +2023,10 @@ public partial class SettingsWindow
                 // Working Directory Box
                 var workStack = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
                 workStack.Children.Add(new TextBlock { Text = "Working Directory (Optional)", FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 3) });
+                var workGrid = new Grid();
+                workGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                workGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
                 var workBox = new TextBox
                 {
                     Text = step.WorkingDirectory,
@@ -1995,7 +2040,28 @@ public partial class SettingsWindow
                     step.WorkingDirectory = workBox.Text;
                     OnFormEdited();
                 };
-                workStack.Children.Add(workBox);
+                Grid.SetColumn(workBox, 0);
+                workGrid.Children.Add(workBox);
+
+                var browseDirBtn = new Button
+                {
+                    Content = "Browse...",
+                    Height = 34,
+                    Padding = new Thickness(10, 4, 10, 4),
+                    Margin = new Thickness(6, 0, 0, 0),
+                    Style = Application.Current.TryFindResource("SecondaryButtonStyle") as Style
+                };
+                browseDirBtn.Click += (s, e) =>
+                {
+                    var dlg = new OpenFolderDialog { Title = "Select Working Directory" };
+                    if (dlg.ShowDialog(this) == true)
+                    {
+                        workBox.Text = dlg.FolderName;
+                    }
+                };
+                Grid.SetColumn(browseDirBtn, 1);
+                workGrid.Children.Add(browseDirBtn);
+                workStack.Children.Add(workGrid);
                 container.Children.Add(workStack);
 
                 RenderVariableChips(container, workBox, availableVariables, step);
@@ -2027,28 +2093,21 @@ public partial class SettingsWindow
 
             case WorkflowStepType.InjectSnippet:
             {
-                var snipStack = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
-                snipStack.Children.Add(new TextBlock { Text = "Snippet Template (Expanded & Typed into target window)", FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 3) });
-                var snipBox = new TextBox
+                var snippetEditor = new TriggerPoint.UI.Controls.SnippetEditorControl
                 {
-                    Text = step.SnippetTemplate,
-                    Height = 60,
-                    Padding = new Thickness(8, 4, 8, 4),
-                    TextWrapping = TextWrapping.Wrap,
-                    AcceptsReturn = true,
-                    VerticalContentAlignment = VerticalAlignment.Top,
-                    Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style
+                    Margin = new Thickness(0, 0, 0, 8)
                 };
-                snipBox.TextChanged += (s, e) =>
+                snippetEditor.Initialize(step.SnippetContentType, step.SnippetTemplate, step.SnippetRtf, availableVariables);
+                snippetEditor.SnippetChanged += (s, e) =>
                 {
-                    step.SnippetTemplate = snipBox.Text;
+                    step.SnippetContentType = snippetEditor.ContentType;
+                    var (plain, rtf) = snippetEditor.GetSnippetPayload();
+                    step.SnippetTemplate = plain;
+                    step.SnippetRtf = rtf;
                     summaryText.Text = GetStepLiveSummary(step);
                     OnFormEdited();
                 };
-                snipStack.Children.Add(snipBox);
-                container.Children.Add(snipStack);
-
-                RenderVariableChips(container, snipBox, availableVariables, step);
+                container.Children.Add(snippetEditor);
                 break;
             }
 
@@ -2128,18 +2187,46 @@ public partial class SettingsWindow
             {
                 var srvStack = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
 
-                srvStack.Children.Add(new TextBlock 
+                var headerGrid = new Grid { Margin = new Thickness(0, 0, 0, 3) };
+                headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+                var headerText = new TextBlock 
                 { 
                     Text = "Target Windows Service", 
                     FontSize = 11, 
-                    FontWeight = FontWeights.SemiBold, 
-                    Margin = new Thickness(0, 0, 0, 3) 
-                });
+                    FontWeight = FontWeights.SemiBold,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                Grid.SetColumn(headerText, 0);
+                headerGrid.Children.Add(headerText);
 
                 var srvPicker = new TriggerPoint.UI.Controls.SearchableServicePickerControl
                 {
                     Margin = new Thickness(0, 0, 0, 8)
                 };
+
+                var refreshSrvBtn = new Button
+                {
+                    Content = "↻ Refresh Services",
+                    Height = 24,
+                    Padding = new Thickness(8, 2, 8, 2),
+                    FontSize = 11,
+                    Style = Application.Current.TryFindResource("SecondaryButtonStyle") as Style
+                };
+                refreshSrvBtn.Click += (s, e) =>
+                {
+                    try
+                    {
+                        _availableServicesCache = _serviceManager.GetServices();
+                        srvPicker.InitializeServices(_availableServicesCache, _serviceManager);
+                        srvPicker.RefreshLiveStatus();
+                    }
+                    catch { }
+                };
+                Grid.SetColumn(refreshSrvBtn, 1);
+                headerGrid.Children.Add(refreshSrvBtn);
+                srvStack.Children.Add(headerGrid);
 
                 try
                 {
@@ -2977,7 +3064,9 @@ public partial class SettingsWindow
                 : step.Url,
         WorkflowStepType.EnsureDirectory => string.IsNullOrWhiteSpace(step.DirectoryPath) ? "No directory path" : step.DirectoryPath,
         WorkflowStepType.LaunchApp => string.IsNullOrWhiteSpace(step.Command) ? "No command specified" : step.Command,
-        WorkflowStepType.InjectSnippet => string.IsNullOrWhiteSpace(step.SnippetTemplate) ? "Empty snippet" : step.SnippetTemplate,
+        WorkflowStepType.InjectSnippet => step.SnippetContentType == SnippetContentType.RichText
+            ? (string.IsNullOrWhiteSpace(step.SnippetTemplate) ? "Rich text snippet" : $"[Rich Text] {step.SnippetTemplate}")
+            : (string.IsNullOrWhiteSpace(step.SnippetTemplate) ? "Empty snippet" : step.SnippetTemplate),
         WorkflowStepType.Macro => step.Macro != null ? $"{step.Macro.Events.Count} event(s)" : "No recorded events",
         WorkflowStepType.Delay => $"{step.DelayMs}ms",
         WorkflowStepType.ExecuteAction => step.TargetItemId.HasValue

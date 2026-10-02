@@ -5,7 +5,7 @@
 
 [![.NET](https://img.shields.io/badge/.NET-9.0--windows-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011%20x64-0078D6?logo=windows)](https://microsoft.com/windows)
-[![Version](https://img.shields.io/badge/Version-v2.2.0-blue.svg)](https://github.com/Rapscallion0/TriggerPoint/releases/tag/v2.2.0)
+[![Version](https://img.shields.io/badge/Version-v2.2.1-blue.svg)](https://github.com/Rapscallion0/TriggerPoint/releases/tag/v2.2.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/Tests-705%20Passed%20(100%25)-brightgreen)]()
 
@@ -150,7 +150,7 @@ dotnet run --project src/TriggerPoint.UI
 #### Package Installer & Portable Archive
 To package the app into both the Inno Setup installer and the standalone portable zip:
 ```powershell
-powershell -ExecutionPolicy Bypass -File build/package.ps1 -AppVersion "2.2.0"
+powershell -ExecutionPolicy Bypass -File build/package.ps1 -AppVersion "2.2.1"
 ```
 The output artifacts will be produced in the `artifacts/` directory:
 - `artifacts/TriggerPointSetup.exe`
