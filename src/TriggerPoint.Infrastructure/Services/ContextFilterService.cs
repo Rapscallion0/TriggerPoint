@@ -54,14 +54,17 @@ public class ContextFilterService : IContextFilterService
     }
 
     public virtual string? GetActiveBrowserUrl(IntPtr hWnd, string? processName = null)
+        => GetActiveBrowserUrl(hWnd, processName, 45);
+
+    public virtual string? GetActiveBrowserUrl(IntPtr hWnd, string? processName, int timeoutMs)
     {
         if (hWnd == IntPtr.Zero) return null;
 
         processName ??= GetForegroundProcessName();
         if (!ContextFilter.IsKnownBrowser(processName)) return null;
 
-        // Check short-lived cache
-        if (hWnd == _cachedHwnd && DateTime.UtcNow - _cacheTimestamp < CacheDuration && _cachedUrl != null)
+        // Check short-lived cache for fast path (e.g. background hotkey evaluation)
+        if (timeoutMs <= 45 && hWnd == _cachedHwnd && DateTime.UtcNow - _cacheTimestamp < CacheDuration && _cachedUrl != null)
         {
             return _cachedUrl;
         }
@@ -96,13 +99,13 @@ public class ContextFilterService : IContextFilterService
                 return null;
             });
 
-            if (extractionTask.Wait(45))
+            if (extractionTask.Wait(timeoutMs))
             {
                 detectedUrl = extractionTask.Result;
             }
             else
             {
-                _logger.Debug("UI Automation URL extraction timed out (>45ms) for window {HWnd}", hWnd);
+                _logger.Debug("UI Automation URL extraction timed out (>{TimeoutMs}ms) for window {HWnd}", timeoutMs, hWnd);
             }
         }
         catch (Exception ex)

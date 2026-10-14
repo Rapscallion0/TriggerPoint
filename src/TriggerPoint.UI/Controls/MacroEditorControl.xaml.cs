@@ -174,6 +174,7 @@ public partial class MacroEditorControl : UserControl
                 Width = 70,
                 Height = 28,
                 FontSize = 11.5,
+                Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style,
                 VerticalContentAlignment = VerticalAlignment.Center,
                 Padding = new Thickness(6, 2, 6, 2)
             };
@@ -208,6 +209,7 @@ public partial class MacroEditorControl : UserControl
                 Width = 110,
                 Height = 28,
                 FontSize = 11.5,
+                Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style,
                 VerticalContentAlignment = VerticalAlignment.Center,
                 Padding = new Thickness(6, 2, 6, 2)
             };
@@ -248,8 +250,9 @@ public partial class MacroEditorControl : UserControl
                 NotifyChanged();
             };
 
-            var xBox = new TextBox { Text = evt.X.ToString(), Width = 55, Height = 28, FontSize = 11.5, VerticalContentAlignment = VerticalAlignment.Center, Padding = new Thickness(4, 2, 4, 2) };
-            var yBox = new TextBox { Text = evt.Y.ToString(), Width = 55, Height = 28, FontSize = 11.5, VerticalContentAlignment = VerticalAlignment.Center, Padding = new Thickness(4, 2, 4, 2) };
+            var modernTbStyle = Application.Current.TryFindResource("ModernTextBoxStyle") as Style;
+            var xBox = new TextBox { Text = evt.X.ToString(), Width = 55, Height = 28, FontSize = 11.5, Style = modernTbStyle, VerticalContentAlignment = VerticalAlignment.Center, Padding = new Thickness(4, 2, 4, 2) };
+            var yBox = new TextBox { Text = evt.Y.ToString(), Width = 55, Height = 28, FontSize = 11.5, Style = modernTbStyle, VerticalContentAlignment = VerticalAlignment.Center, Padding = new Thickness(4, 2, 4, 2) };
 
             xBox.TextChanged += (s, e) =>
             {

@@ -312,4 +312,80 @@ public class ConfigRepositoryTests : IDisposable
         var items = await repo.LoadAsync();
         Assert.Empty(items);
     }
+
+    [Fact]
+    public async Task InitializeSetupAsync_WhenActionsAlreadyExist_DoesNotOverwriteWithStarterPack()
+    {
+        var customDir = Path.Combine(_testDir, "existing_actions_protect_test");
+        var repo = new JsonConfigRepository(customDir);
+
+        // Save custom user items first
+        var userAction = new TriggerItem
+        {
+            Id = Guid.NewGuid(),
+            Name = "My Custom Work Action",
+            ActionType = ActionType.Shell
+        };
+        await repo.SaveAsync(new[] { userAction });
+
+        // Trigger InitializeSetupAsync with installStarterPack: true
+        await repo.InitializeSetupAsync(ThemePreference.Dark, installStarterPack: true);
+
+        // Verify user items were NOT overwritten by starter pack
+        var loaded = await repo.LoadAsync();
+        Assert.Single(loaded);
+        Assert.Equal("My Custom Work Action", loaded[0].Name);
+    }
+
+    [Fact]
+    public async Task LoadAsync_WhenFileCorrupted_CreatesCorruptedSnapshotAndPreservesOriginalData()
+    {
+        var customDir = Path.Combine(_testDir, "corrupted_protect_test");
+        var repo = new JsonConfigRepository(customDir);
+
+        // Write invalid JSON to triggerpoint.json
+        Directory.CreateDirectory(customDir);
+        await File.WriteAllTextAsync(repo.ConfigFilePath, "{ invalid-json: true [}");
+
+        // Attempt load
+        var loaded = await repo.LoadAsync();
+        Assert.NotNull(loaded);
+
+        // Verify corrupted snapshot was preserved in backups directory
+        var backups = Directory.GetFiles(repo.BackupsDirectory, "triggerpoint_corrupted_*.json");
+        Assert.NotEmpty(backups);
+        var corruptedContent = await File.ReadAllTextAsync(backups[0]);
+        Assert.Contains("invalid-json", corruptedContent);
+    }
+
+    [Fact]
+    public async Task CreatePreUpgradeBackupAsync_CreatesImmutableBackupInPreUpgradeFolder()
+    {
+        var customDir = Path.Combine(_testDir, "pre_upgrade_test");
+        var repo = new JsonConfigRepository(customDir);
+
+        // Pre-create user config and settings
+        var userAction = new TriggerItem
+        {
+            Id = Guid.NewGuid(),
+            Name = "Important Project Shortcut",
+            ActionType = ActionType.Shell
+        };
+        await repo.SaveAsync(new[] { userAction });
+
+        var settings = new AppSettings { Theme = ThemePreference.Dark };
+        await repo.SaveSettingsAsync(settings);
+
+        // Execute pre-upgrade backup
+        var backupPath = await repo.CreatePreUpgradeBackupAsync("2.1.0", "2.2.1");
+        Assert.NotNull(backupPath);
+        Assert.True(File.Exists(backupPath));
+
+        var preUpgradeDir = Path.Combine(repo.BackupsDirectory, "pre-upgrade");
+        Assert.True(Directory.Exists(preUpgradeDir));
+
+        var preUpgradeFiles = Directory.GetFiles(preUpgradeDir, "*pre_upgrade*");
+        Assert.Contains(preUpgradeFiles, f => f.Contains("triggerpoint_pre_upgrade_v2_1_0_to_v2_2_1"));
+        Assert.Contains(preUpgradeFiles, f => f.Contains("appsettings_pre_upgrade_v2_1_0_to_v2_2_1"));
+    }
 }

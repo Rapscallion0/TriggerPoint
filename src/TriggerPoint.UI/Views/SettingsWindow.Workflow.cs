@@ -1973,7 +1973,8 @@ public partial class SettingsWindow
                         IntPtr rootHwnd = NativeMethods.GetAncestor(targetHwnd, NativeMethods.GA_ROOT);
                         if (rootHwnd == IntPtr.Zero) rootHwnd = targetHwnd;
 
-                        NativeMethods.GetWindowThreadProcessId(rootHwnd, out uint pid);
+                        uint pid = NativeMethods.GetRealProcessIdForWindow(rootHwnd);
+                        if (pid == 0) pid = NativeMethods.GetRealProcessIdForWindow(targetHwnd);
                         if (pid != 0 && pid != (uint)Environment.ProcessId)
                         {
                             string? exePath = GetProcessPath(pid);

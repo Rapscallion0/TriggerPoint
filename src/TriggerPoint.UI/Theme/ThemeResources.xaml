@@ -655,6 +655,7 @@
     </Style>
 
     <Style TargetType="ComboBox" BasedOn="{StaticResource ModernComboBoxStyle}"/>
+    <Style TargetType="TextBox" BasedOn="{StaticResource ModernTextBoxStyle}"/>
 
     <!-- ================================================================= -->
     <!-- High-Contrast Modern TreeViewItem Style                          -->

@@ -373,6 +373,7 @@ public partial class SettingsWindow : Window
     private bool _isItemDirty;
     private Guid? _newUnsavedItemId;
     private bool _isRevertingTreeSelection;
+    private bool _isProgrammaticTreeSelection;
     private bool _isRebuildingTree;
     private readonly DispatcherTimer _folderExpansionSaveTimer;
     private readonly DispatcherTimer _appSettingsSaveTimer;
@@ -1204,11 +1205,15 @@ public partial class SettingsWindow : Window
         RebuildTree();
     }
 
-    private void RebuildTree()
+    private void RebuildTree(TriggerItem? itemToSelect = null)
     {
         _isRebuildingTree = true;
         try
         {
+            if (itemToSelect != null)
+            {
+                _selectedItem = itemToSelect;
+            }
             _treeRoots.Clear();
             var folderMap = new Dictionary<Guid, TriggerTreeItemViewModel>();
             bool showDisabled = _appSettings?.ShowDisabledItemsInTree ?? true;
@@ -1242,11 +1247,14 @@ public partial class SettingsWindow : Window
                 var vm = new TriggerTreeItemViewModel(item);
                 if (item.ActionType == ActionType.Shell)
                 {
-                    var validation = ShortcutValidator.Validate(item.Payload.Command);
-                    if (validation.Status != ShortcutValidationStatus.Valid)
+                    if (item.Id != _newUnsavedItemId)
                     {
-                        vm.IsBrokenTarget = true;
-                        vm.BrokenTargetMessage = validation.Message;
+                        var validation = ShortcutValidator.Validate(item.Payload.Command);
+                        if (validation.Status != ShortcutValidationStatus.Valid)
+                        {
+                            vm.IsBrokenTarget = true;
+                            vm.BrokenTargetMessage = validation.Message;
+                        }
                     }
                 }
 
@@ -1297,10 +1305,11 @@ public partial class SettingsWindow : Window
             // Restore selection or select first item if available
             if (_treeRoots.Count > 0)
             {
-                var currentSelectedVm = _selectedItem != null ? FindViewModel(_selectedItem) : null;
+                var targetItem = itemToSelect ?? _selectedItem;
+                var currentSelectedVm = targetItem != null ? FindViewModel(targetItem) : null;
                 if (currentSelectedVm != null)
                 {
-                    SelectTreeItem(_selectedItem!);
+                    SelectTreeItem(targetItem!);
                 }
                 else
                 {
@@ -1323,14 +1332,22 @@ public partial class SettingsWindow : Window
 
     public void SelectTreeItem(TriggerItem item)
     {
-        _selectedItem = item;
-        _originalItemSnapshot = item.Clone();
-        var vm = FindViewModel(item);
-        PopulateForm(item, vm);
-        SetViewModelSelected(_treeRoots, item.Id);
-        if (_newUnsavedItemId != item.Id)
+        _isProgrammaticTreeSelection = true;
+        try
         {
-            SetDirty(false);
+            _selectedItem = item;
+            _originalItemSnapshot = item.Clone();
+            var vm = FindViewModel(item);
+            PopulateForm(item, vm);
+            SetViewModelSelected(_treeRoots, item.Id);
+            if (_newUnsavedItemId != item.Id)
+            {
+                SetDirty(false);
+            }
+        }
+        finally
+        {
+            _isProgrammaticTreeSelection = false;
         }
     }
 
@@ -1362,7 +1379,7 @@ public partial class SettingsWindow : Window
 
     private void ItemsTreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
-        if (_isRevertingTreeSelection) return;
+        if (_isRebuildingTree || _isRevertingTreeSelection || _isProgrammaticTreeSelection) return;
 
         var currentlyEditing = FindCurrentlyEditingViewModel();
         if (currentlyEditing != null && (e.NewValue is not TriggerTreeItemViewModel newVm || newVm.Item.Id != currentlyEditing.Item.Id))
@@ -1969,7 +1986,7 @@ public partial class SettingsWindow : Window
         var targetVm = FindViewModel(_selectedItem);
         if (targetVm != null)
         {
-            if (_selectedItem.ActionType == ActionType.Shell)
+            if (_selectedItem.ActionType == ActionType.Shell && _selectedItem.Id != _newUnsavedItemId)
             {
                 var validation = ShortcutValidator.Validate(_selectedItem.Payload.Command);
                 targetVm.IsBrokenTarget = validation.Status != ShortcutValidationStatus.Valid;
@@ -2165,6 +2182,7 @@ public partial class SettingsWindow : Window
                 _originalItemSnapshot = _selectedItem.Clone();
             }
             _newUnsavedItemId = null;
+            RefreshTreeBrokenStates();
             SetDirty(false);
             return true;
         }
@@ -2401,11 +2419,26 @@ public partial class SettingsWindow : Window
         _newUnsavedItemId = newItem.Id;
         _items.Add(newItem);
         _logger.Information("Created new {Type} '{Name}' ({Id}, ParentId: {ParentId}).", actionType, newItem.Name, newItem.Id, parentId);
-        RebuildTree();
-        SelectTreeItem(newItem);
-        _ = RestoreTreeFocus(newItem);
+        RebuildTree(newItem);
         ResetEditorScroll();
         SetDirty(true);
+        FocusAndSelectNameBox();
+    }
+
+    private void FocusAndSelectNameBox()
+    {
+        ItemNameBox?.Focus();
+        ItemNameBox?.SelectAll();
+
+        Dispatcher.InvokeAsync(() =>
+        {
+            if (ItemNameBox != null)
+            {
+                ItemNameBox.Focus();
+                Keyboard.Focus(ItemNameBox);
+                ItemNameBox.SelectAll();
+            }
+        }, DispatcherPriority.Input);
     }
 
     public void CreateAndEditNewItem(string initialName, ActionType actionType = ActionType.Shell, Guid? parentFolderId = null)
@@ -2437,14 +2470,10 @@ public partial class SettingsWindow : Window
 
         _newUnsavedItemId = newItem.Id;
         _items.Add(newItem);
-        RebuildTree();
-        SelectTreeItem(newItem);
-        _ = RestoreTreeFocus(newItem);
+        RebuildTree(newItem);
         ResetEditorScroll();
         SetDirty(true);
-
-        ItemNameBox.Focus();
-        ItemNameBox.SelectAll();
+        FocusAndSelectNameBox();
     }
 
     public void CreateAndEditShellActionForPath(string path)
@@ -2490,14 +2519,10 @@ public partial class SettingsWindow : Window
 
         _newUnsavedItemId = newItem.Id;
         _items.Add(newItem);
-        RebuildTree();
-        SelectTreeItem(newItem);
-        _ = RestoreTreeFocus(newItem);
+        RebuildTree(newItem);
         ResetEditorScroll();
         SetDirty(true);
-
-        ItemNameBox.Focus();
-        ItemNameBox.SelectAll();
+        FocusAndSelectNameBox();
     }
 
     private void AddShellActionBtn_Click(object sender, RoutedEventArgs e)
@@ -2703,8 +2728,7 @@ public partial class SettingsWindow : Window
 
         await _repository.SaveAsync(_items);
         RegisterShortcuts();
-        RebuildTree();
-        SelectTreeItem(primaryDuplicate);
+        RebuildTree(primaryDuplicate);
         await RestoreTreeFocus(primaryDuplicate);
         ResetEditorScroll();
 
@@ -3914,6 +3938,43 @@ public partial class SettingsWindow : Window
         }
     }
 
+    private void RefreshTreeBrokenStates()
+    {
+        RefreshTreeBrokenStatesRecursive(_treeRoots);
+        UpdateBrokenFilterChipCount();
+    }
+
+    private void RefreshTreeBrokenStatesRecursive(IEnumerable<TriggerTreeItemViewModel> vms)
+    {
+        foreach (var vm in vms)
+        {
+            if (!vm.IsRecycleBinRoot && !vm.IsRecycledItem)
+            {
+                if (vm.Item.ActionType == ActionType.Shell)
+                {
+                    if (vm.Item.Id != _newUnsavedItemId)
+                    {
+                        var validation = ShortcutValidator.Validate(vm.Item.Payload.Command);
+                        vm.IsBrokenTarget = validation.Status != ShortcutValidationStatus.Valid;
+                        vm.BrokenTargetMessage = validation.Message;
+                    }
+                    else
+                    {
+                        vm.IsBrokenTarget = false;
+                        vm.BrokenTargetMessage = null;
+                    }
+                }
+                else
+                {
+                    vm.IsBrokenTarget = false;
+                    vm.BrokenTargetMessage = null;
+                }
+                vm.NotifyUpdated();
+            }
+            RefreshTreeBrokenStatesRecursive(vm.Children);
+        }
+    }
+
     private TriggerTreeItemViewModel? FindViewModel(TriggerItem? item)
     {
         if (item == null) return null;
@@ -4035,7 +4096,7 @@ public partial class SettingsWindow : Window
 
             bool isBroken = false;
             string? brokenMsg = null;
-            if (item.ActionType == ActionType.Shell)
+            if (item.ActionType == ActionType.Shell && item.Id != _newUnsavedItemId)
             {
                 var validation = ShortcutValidator.Validate(item.Payload.Command);
                 if (validation.Status != ShortcutValidationStatus.Valid)
@@ -5174,7 +5235,8 @@ public partial class SettingsWindow : Window
             IntPtr rootHwnd = NativeMethods.GetAncestor(targetHwnd, NativeMethods.GA_ROOT);
             if (rootHwnd == IntPtr.Zero) rootHwnd = targetHwnd;
 
-            NativeMethods.GetWindowThreadProcessId(rootHwnd, out uint pid);
+            uint pid = NativeMethods.GetRealProcessIdForWindow(rootHwnd);
+            if (pid == 0) pid = NativeMethods.GetRealProcessIdForWindow(targetHwnd);
             if (pid == 0)
             {
                 StatusText.Text = "Could not identify window process ID.";
@@ -5217,6 +5279,30 @@ public partial class SettingsWindow : Window
                     ItemNameBox.Text = Path.GetFileNameWithoutExtension(exePath);
                 }
 
+                if (ContextFilter.IsKnownBrowser(exeName) && _contextFilterService != null)
+                {
+                    var activeUrl = _contextFilterService.GetActiveBrowserUrl(rootHwnd, exeName, 1500);
+                    if (!string.IsNullOrWhiteSpace(activeUrl))
+                    {
+                        bool captureTab = ModernMessageDialog.ShowConfirm(
+                            this,
+                            "Browser Tab Detected",
+                            $"Targeted browser '{exeName}'.\n\nActive Tab URL / Page:\n{activeUrl}\n\nWould you like to scope this action to this specific browser tab/URL in Browser Tab & URL Rules as well?",
+                            "Include Tab URL",
+                            "Executable Only");
+
+                        if (captureTab)
+                        {
+                            AllowedProcessesTagInput.AddTag(exeName);
+                            AllowedUrlsTagInput.AddTag(activeUrl);
+                            SetBrowserUrlSectionExpanded(true);
+                            OnFormEdited();
+                            StatusText.Text = $"🎯 Target captured: {exeName} with tab URL '{activeUrl}'.";
+                            return;
+                        }
+                    }
+                }
+
                 OnFormEdited();
                 StatusText.Text = $"🎯 Target captured: {exeName} ({exePath})";
             }
@@ -5225,7 +5311,7 @@ public partial class SettingsWindow : Window
                 AllowedProcessesTagInput.AddTag(exeName);
                 if (ContextFilter.IsKnownBrowser(exeName) && _contextFilterService != null)
                 {
-                    var activeUrl = _contextFilterService.GetActiveBrowserUrl(rootHwnd, exeName);
+                    var activeUrl = _contextFilterService.GetActiveBrowserUrl(rootHwnd, exeName, 1500);
                     if (!string.IsNullOrWhiteSpace(activeUrl))
                     {
                         bool captureTab = ModernMessageDialog.ShowConfirm(
@@ -5238,6 +5324,7 @@ public partial class SettingsWindow : Window
                         if (captureTab)
                         {
                             AllowedUrlsTagInput.AddTag(activeUrl);
+                            SetBrowserUrlSectionExpanded(true);
                             OnFormEdited();
                             StatusText.Text = $"🎯 Added '{exeName}' and tab URL '{activeUrl}'.";
                             return;
@@ -5263,12 +5350,13 @@ public partial class SettingsWindow : Window
                 string? url = null;
                 if (_contextFilterService != null)
                 {
-                    url = _contextFilterService.GetActiveBrowserUrl(rootHwnd, exeName);
+                    url = _contextFilterService.GetActiveBrowserUrl(rootHwnd, exeName, 1500);
                 }
 
                 if (!string.IsNullOrWhiteSpace(url))
                 {
                     targetTagInput.AddTag(url);
+                    SetBrowserUrlSectionExpanded(true);
                     OnFormEdited();
                     StatusText.Text = $"🎯 Captured browser tab URL into {listName} URLs: {url}";
                 }
@@ -5282,6 +5370,7 @@ public partial class SettingsWindow : Window
                         {
                             string t = sbTitle.ToString().Trim();
                             targetTagInput.AddTag("*" + t + "*");
+                            SetBrowserUrlSectionExpanded(true);
                             OnFormEdited();
                             StatusText.Text = $"🎯 Captured window title pattern into {listName} URLs: *{t}*";
                         }

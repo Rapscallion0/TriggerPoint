@@ -73,7 +73,7 @@
                     </ComboBox>
 
                     <TextBlock Text="Repeats:" FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="12,0,5,0"/>
-                    <TextBox x:Name="RepeatsBox" Width="44" Height="28" Text="1" FontSize="11.5" TextAlignment="Center" VerticalContentAlignment="Center" TextChanged="RepeatsBox_TextChanged"/>
+                    <TextBox x:Name="RepeatsBox" Style="{StaticResource ModernTextBoxStyle}" Width="44" Height="28" Text="1" FontSize="11.5" TextAlignment="Center" VerticalContentAlignment="Center" TextChanged="RepeatsBox_TextChanged"/>
                 </StackPanel>
 
                 <!-- Clear Button -->

@@ -20,6 +20,7 @@ public interface IConfigRepository
     Task<AppSettings> LoadSettingsAsync();
     Task SaveSettingsAsync(AppSettings settings);
     Task InitializeSetupAsync(ThemePreference theme, bool installStarterPack);
+    Task<string?> CreatePreUpgradeBackupAsync(string oldVersion, string newVersion);
     Task ExportPackageAsync(string filePath, ConfigurationBackupPackage package);
     Task<ConfigurationBackupPackage> ReadPackageAsync(string filePath);
     Task<IReadOnlyList<RecycleBinItem>> LoadRecycleBinAsync();
@@ -91,6 +92,8 @@ public interface IContextFilterService
     IntPtr GetForegroundWindowHandle();
     string? GetForegroundProcessName();
     string? GetActiveBrowserUrl(IntPtr hWnd, string? processName = null);
+    string? GetActiveBrowserUrl(IntPtr hWnd, string? processName, int timeoutMs)
+        => GetActiveBrowserUrl(hWnd, processName);
     bool ShouldExecute(TriggerItem item);
     bool ShouldExecute(TriggerItem item, IReadOnlyList<TriggerItem>? allItems);
     void SetAllItemsProvider(Func<IReadOnlyList<TriggerItem>>? provider);

@@ -168,6 +168,49 @@ public partial class App : Application
         Log.Information("TriggerPoint daemon started. Version: {Version}, LogLevel: {LogLevel}, Retention: {Retention}d, Threshold: {SplitThreshold}MB, Args: {Args}", 
             typeof(App).Assembly.GetName().Version, appSettings.LogLevel, appSettings.LogRetentionDays, appSettings.LogSplitThresholdMb, string.Join(" ", e.Args));
 
+        // 2.1 Upgrade Detection & Pre-Upgrade Immutable Backup
+        var runningVersion = typeof(App).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
+        var infoAttr = (System.Reflection.AssemblyInformationalVersionAttribute?)
+            Attribute.GetCustomAttribute(typeof(App).Assembly, typeof(System.Reflection.AssemblyInformationalVersionAttribute));
+        if (!string.IsNullOrEmpty(infoAttr?.InformationalVersion))
+        {
+            var v = infoAttr.InformationalVersion;
+            var plusIdx = v.IndexOf('+');
+            if (plusIdx > 0) v = v.Substring(0, plusIdx);
+            runningVersion = v.Trim().TrimStart('v', 'V');
+        }
+
+        if (!string.IsNullOrWhiteSpace(appSettings.LastKnownAppVersion) &&
+            !string.Equals(appSettings.LastKnownAppVersion, runningVersion, StringComparison.OrdinalIgnoreCase))
+        {
+            Log.Information("Version upgrade detected: v{OldVersion} -> v{NewVersion}. Creating pre-upgrade backup.",
+                appSettings.LastKnownAppVersion, runningVersion);
+            try
+            {
+                await tempRepo.CreatePreUpgradeBackupAsync(appSettings.LastKnownAppVersion, runningVersion);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Failed to create pre-upgrade backup.");
+            }
+
+            appSettings.LastKnownAppVersion = runningVersion;
+            try
+            {
+                await tempRepo.SaveSettingsAsync(appSettings);
+            }
+            catch { }
+        }
+        else if (string.IsNullOrWhiteSpace(appSettings.LastKnownAppVersion))
+        {
+            appSettings.LastKnownAppVersion = runningVersion;
+            try
+            {
+                await tempRepo.SaveSettingsAsync(appSettings);
+            }
+            catch { }
+        }
+
         // Self-elevation via Task Scheduler if RunAsAdminAtStartup is configured and currently running un-elevated
         if (appSettings.RunAsAdminAtStartup && 
             !TriggerPoint.Infrastructure.Services.WindowsServiceManager.IsRunningElevated() &&
@@ -219,7 +262,18 @@ public partial class App : Application
         ThemeManager.Initialize(appSettings.Theme, appSettings.AccentColor);
 
         // 4.0 First-Run Setup (Portable edition or fresh unconfigured install)
+        // If triggerpoint.json already exists with valid data or is non-empty, this is NOT a fresh install!
+        bool configAlreadyExists = File.Exists(pathsService.ConfigFilePath) && 
+                                   new FileInfo(pathsService.ConfigFilePath).Length > 10;
+
+        if (configAlreadyExists && !appSettings.HasCompletedInitialSetup)
+        {
+            appSettings.HasCompletedInitialSetup = true;
+            try { await tempRepo.SaveSettingsAsync(appSettings); } catch { }
+        }
+
         bool isFirstRun = !appSettings.HasCompletedInitialSetup && 
+                          !configAlreadyExists &&
                           (!File.Exists(pathsService.AppSettingsFilePath) || !File.Exists(pathsService.ConfigFilePath));
 
         if (isFirstRun && !e.Args.Contains("--minimized", StringComparer.OrdinalIgnoreCase))

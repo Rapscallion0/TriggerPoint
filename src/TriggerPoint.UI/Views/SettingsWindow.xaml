@@ -1179,7 +1179,6 @@
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <TextBox Grid.Column="0" 
                                          x:Name="ShellCommandBox" 
@@ -1192,22 +1191,6 @@
                                         Margin="8,0,0,0" 
                                         ToolTip="Browse local files to select executable or document"
                                         Click="BrowseFileBtn_Click"/>
-                                <Border Grid.Column="2" 
-                                        Background="{DynamicResource BgTertiaryBrush}"
-                                        BorderBrush="{DynamicResource BorderBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="6"
-                                        Padding="10,0"
-                                        Margin="8,0,0,0"
-                                        Cursor="Cross"
-                                        VerticalAlignment="Stretch"
-                                        ToolTip="Click &amp; drag onto any open window to capture application path"
-                                        PreviewMouseLeftButtonDown="CrosshairTarget_PreviewMouseLeftButtonDown">
-                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                        <TextBlock Text="🎯" FontSize="13" Margin="0,0,5,0" VerticalAlignment="Center"/>
-                                        <TextBlock Text="Target" FontSize="12" FontWeight="Medium" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Border>
                             </Grid>
                             <TextBlock x:Name="CommandValidationStatusText"
                                        FontSize="11.5"

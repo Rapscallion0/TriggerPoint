@@ -984,6 +984,157 @@ public class TreeDensityAndDisabledItemTests
         if (caughtEx != null) throw caughtEx;
     }
 
+    [Fact]
+    public void NewShellItem_DoesNotShowBrokenTag_UntilSavedWithoutCommand()
+    {
+        EnsureApplication();
+
+        Exception? caughtEx = null;
+        var thread = new Thread(() =>
+        {
+            var tempDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "TP_BrokenTag_" + Guid.NewGuid());
+            System.IO.Directory.CreateDirectory(tempDir);
+
+            try
+            {
+                var repo = new TriggerPoint.Infrastructure.Persistence.JsonConfigRepository(tempDir);
+                repo.SaveAsync(Array.Empty<TriggerItem>()).GetAwaiter().GetResult();
+
+                using var listener = new TriggerPoint.Infrastructure.Win32.Win32HotkeyListener();
+                var window = new SettingsWindow(repo, listener, new DummyExecutor());
+
+                window.Show();
+
+                while (!(bool)typeof(SettingsWindow).GetField("_isDataLoaded", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(window)!)
+                {
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+                    Thread.Sleep(20);
+                }
+
+                System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+
+                // Create new shell item with empty command
+                window.CreateAndEditNewItem("New App & Command", ActionType.Shell);
+                System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+
+                // Broken chip and item broken status should NOT be broken before save
+                Assert.Equal(Visibility.Collapsed, window.BrokenFilterChip.Visibility);
+                var treeRoots = (System.Collections.ObjectModel.ObservableCollection<TriggerTreeItemViewModel>)window.ItemsTreeView.ItemsSource;
+                var newItemVm = treeRoots.FirstOrDefault(x => x.Name == "New App & Command");
+                Assert.NotNull(newItemVm);
+                Assert.False(newItemVm.IsBrokenTarget, "New unsaved item should not be flagged as broken");
+
+                // Save configuration
+                var saveTask = (System.Threading.Tasks.Task<bool>)typeof(SettingsWindow).GetMethod("SaveConfigurationCoreAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                    .Invoke(window, null)!;
+                saveTask.GetAwaiter().GetResult();
+                System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+
+                // After save with empty command, broken chip should now be visible and item flagged as broken
+                Assert.Equal(Visibility.Visible, window.BrokenFilterChip.Visibility);
+                Assert.Contains("1 Broken", window.BrokenFilterChipText.Text);
+                Assert.True(newItemVm.IsBrokenTarget, "Item should be flagged as broken after save if command is empty");
+
+                window.Close();
+            }
+            catch (Exception ex)
+            {
+                caughtEx = new Exception($"Error in STA thread: {ex}\nStackTrace: {ex.StackTrace}");
+            }
+            finally
+            {
+                if (System.IO.Directory.Exists(tempDir))
+                {
+                    try { System.IO.Directory.Delete(tempDir, true); } catch { }
+                }
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join(10000);
+
+        if (caughtEx != null) throw caughtEx;
+    }
+
+    [Fact]
+    public void CreateNewItem_WhenExistingItemSelected_DoesNotPromptSaveChanges()
+    {
+        EnsureApplication();
+
+        Exception? caughtEx = null;
+        var thread = new Thread(() =>
+        {
+            var tempDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "TP_CreateNewItemPrompt_" + Guid.NewGuid());
+            System.IO.Directory.CreateDirectory(tempDir);
+
+            try
+            {
+                var repo = new TriggerPoint.Infrastructure.Persistence.JsonConfigRepository(tempDir);
+                var existingItem = new TriggerItem
+                {
+                    Id = Guid.NewGuid(),
+                    Name = "Existing Action",
+                    ActionType = ActionType.Shell,
+                    Payload = new ActionPayload { Command = "notepad.exe" }
+                };
+                repo.SaveAsync(new[] { existingItem }).GetAwaiter().GetResult();
+
+                using var listener = new TriggerPoint.Infrastructure.Win32.Win32HotkeyListener();
+                var window = new SettingsWindow(repo, listener, new DummyExecutor());
+
+                window.Show();
+
+                while (!(bool)typeof(SettingsWindow).GetField("_isDataLoaded", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(window)!)
+                {
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+                    Thread.Sleep(20);
+                }
+
+                System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+
+                // Initial selection is existingItem
+                var selectedBefore = (TriggerItem?)typeof(SettingsWindow).GetField("_selectedItem", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(window);
+                Assert.NotNull(selectedBefore);
+                Assert.Equal(existingItem.Id, selectedBefore.Id);
+
+                // Click CreateNewItem via method
+                typeof(SettingsWindow).GetMethod("CreateNewItem", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                    .Invoke(window, new object[] { ActionType.Shell, false });
+
+                System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+
+                // Selected item must now be the new item, not existingItem
+                var selectedAfter = (TriggerItem?)typeof(SettingsWindow).GetField("_selectedItem", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(window);
+                Assert.NotNull(selectedAfter);
+                Assert.NotEqual(existingItem.Id, selectedAfter.Id);
+                Assert.Equal("New App & Command", selectedAfter.Name);
+
+                // Form must be marked dirty for the new item, Save button enabled
+                Assert.True(window.SaveBtn.IsEnabled);
+
+                window.Close();
+            }
+            catch (Exception ex)
+            {
+                caughtEx = new Exception($"Error in STA thread: {ex}\nStackTrace: {ex.StackTrace}");
+            }
+            finally
+            {
+                if (System.IO.Directory.Exists(tempDir))
+                {
+                    try { System.IO.Directory.Delete(tempDir, true); } catch { }
+                }
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join(10000);
+
+        if (caughtEx != null) throw caughtEx;
+    }
+
     private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
     {
         int count = VisualTreeHelper.GetChildrenCount(parent);
@@ -997,3 +1148,4 @@ public class TreeDensityAndDisabledItemTests
         return null;
     }
 }
+

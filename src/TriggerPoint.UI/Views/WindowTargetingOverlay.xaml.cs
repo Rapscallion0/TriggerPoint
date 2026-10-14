@@ -101,20 +101,27 @@ public partial class WindowTargetingOverlay : Window
 
         _currentHoverHwnd = foundHwnd;
 
-        if (foundHwnd != IntPtr.Zero && NativeMethods.GetWindowRect(foundHwnd, out var rect))
+        if (foundHwnd != IntPtr.Zero && NativeMethods.GetWindowExtendedBounds(foundHwnd, out var rect))
         {
             try
             {
                 Point topLeft = PointFromScreen(new Point(rect.Left, rect.Top));
                 Point bottomRight = PointFromScreen(new Point(rect.Right, rect.Bottom));
 
-                double w = Math.Max(0, bottomRight.X - topLeft.X);
-                double h = Math.Max(0, bottomRight.Y - topLeft.Y);
+                double left = Math.Max(0, topLeft.X);
+                double top = Math.Max(0, topLeft.Y);
+                double maxRight = ActualWidth > 0 ? ActualWidth : Width;
+                double maxBottom = ActualHeight > 0 ? ActualHeight : Height;
+                double right = Math.Min(maxRight, Math.Max(left, bottomRight.X));
+                double bottom = Math.Min(maxBottom, Math.Max(top, bottomRight.Y));
+
+                double w = right - left;
+                double h = bottom - top;
 
                 if (w > 10 && h > 10)
                 {
-                    Canvas.SetLeft(HoverHighlightBorder, topLeft.X);
-                    Canvas.SetTop(HoverHighlightBorder, topLeft.Y);
+                    Canvas.SetLeft(HoverHighlightBorder, left);
+                    Canvas.SetTop(HoverHighlightBorder, top);
                     HoverHighlightBorder.Width = w;
                     HoverHighlightBorder.Height = h;
                     HoverHighlightBorder.Visibility = Visibility.Visible;
@@ -152,19 +159,40 @@ public partial class WindowTargetingOverlay : Window
         {
             if (hWnd == _overlayHwnd || hWnd == _ownerHwnd) return true; // skip self and owner
             if (!NativeMethods.IsWindowVisible(hWnd)) return true;
+            if (NativeMethods.IsIconic(hWnd)) return true; // skip minimized windows
+            if (NativeMethods.IsWindowCloaked(hWnd)) return true; // skip cloaked windows (inactive virtual desktops, suspended UWP)
 
             NativeMethods.GetWindowThreadProcessId(hWnd, out uint pid);
             if (pid == currentPid) return true; // skip TriggerPoint application windows
 
-            if (NativeMethods.GetWindowRect(hWnd, out var r))
+            if (!NativeMethods.GetWindowExtendedBounds(hWnd, out var r)) return true;
+            if (pt.X < r.Left || pt.X > r.Right || pt.Y < r.Top || pt.Y > r.Bottom) return true;
+
+            // Skip desktop wallpaper and shell root windows
+            string className = NativeMethods.GetWindowClassName(hWnd);
+            if (string.Equals(className, "Progman", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(className, "WorkerW", StringComparison.OrdinalIgnoreCase))
             {
-                if (pt.X >= r.Left && pt.X <= r.Right && pt.Y >= r.Top && pt.Y <= r.Bottom)
-                {
-                    target = hWnd;
-                    return false; // Found topmost window in Z-order under point
-                }
+                return true;
             }
-            return true;
+
+            // If an owned popup or child tool window was hit, roll up to owner application window if it contains point
+            IntPtr owner = NativeMethods.GetWindow(hWnd, NativeMethods.GW_OWNER);
+            if (owner != IntPtr.Zero &&
+                NativeMethods.IsWindowVisible(owner) &&
+                !NativeMethods.IsIconic(owner) &&
+                !NativeMethods.IsWindowCloaked(owner) &&
+                NativeMethods.GetWindowExtendedBounds(owner, out var ownerRect) &&
+                pt.X >= ownerRect.Left && pt.X <= ownerRect.Right && pt.Y >= ownerRect.Top && pt.Y <= ownerRect.Bottom)
+            {
+                target = owner;
+            }
+            else
+            {
+                target = hWnd;
+            }
+
+            return false; // Found topmost visible, non-cloaked window in Z-order under point
         }, IntPtr.Zero);
 
         return target;
@@ -178,9 +206,17 @@ public partial class WindowTargetingOverlay : Window
             var sb = new StringBuilder(len + 1);
             if (NativeMethods.GetWindowText(hWnd, sb, sb.Capacity) > 0)
             {
-                return sb.ToString().Trim();
+                string t = sb.ToString().Trim();
+                if (!string.IsNullOrWhiteSpace(t)) return t;
             }
         }
+
+        string proc = NativeMethods.GetProcessNameForWindow(hWnd);
+        if (!string.IsNullOrWhiteSpace(proc))
+        {
+            return proc;
+        }
+
         return string.Empty;
     }
 
@@ -199,10 +235,14 @@ public partial class WindowTargetingOverlay : Window
         {
             // Fallback to WindowFromPoint
             IntPtr rawHwnd = NativeMethods.WindowFromPoint(TargetCursorPt);
-            if (rawHwnd != IntPtr.Zero && rawHwnd != _overlayHwnd)
+            if (rawHwnd != IntPtr.Zero && rawHwnd != _overlayHwnd && rawHwnd != _ownerHwnd)
             {
                 IntPtr root = NativeMethods.GetAncestor(rawHwnd, NativeMethods.GA_ROOT);
-                TargetHwnd = root != IntPtr.Zero ? root : rawHwnd;
+                IntPtr candidate = root != IntPtr.Zero ? root : rawHwnd;
+                if (!NativeMethods.IsWindowCloaked(candidate))
+                {
+                    TargetHwnd = candidate;
+                }
             }
         }
 

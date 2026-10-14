@@ -4,7 +4,7 @@
 ; =====================================================================
 
 #ifndef AppVersion
-#define AppVersion "2.2.1"
+#define AppVersion "2.2.2"
 #endif
 
 #ifndef PublishDir
@@ -502,17 +502,23 @@ begin
       SelectedThemeVal := 2;
 
     SettingsPath := AppDataDir + '\appsettings.json';
-    SettingsJson := '{' + #13#10 +
-      '  "theme": ' + IntToStr(SelectedThemeVal) + ',' + #13#10 +
-      '  "hasCompletedInitialSetup": true' + #13#10 +
-      '}';
-    SaveStringToFile(SettingsPath, SettingsJson, False);
+    if not FileExists(SettingsPath) then
+    begin
+      SettingsJson := '{' + #13#10 +
+        '  "theme": ' + IntToStr(SelectedThemeVal) + ',' + #13#10 +
+        '  "hasCompletedInitialSetup": true' + #13#10 +
+        '}';
+      SaveStringToFile(SettingsPath, SettingsJson, False);
+    end;
 
-    // If user unchecked starter pack, write empty list to triggerpoint.json
+    // If user unchecked starter pack, write empty list to triggerpoint.json ONLY IF file does not exist
     if (StarterPackCheckBox <> nil) and (not StarterPackCheckBox.Checked) then
     begin
       TriggersPath := AppDataDir + '\triggerpoint.json';
-      SaveStringToFile(TriggersPath, '[]', False);
+      if not FileExists(TriggersPath) then
+      begin
+        SaveStringToFile(TriggersPath, '[]', False);
+      end;
     end;
   end;
 end;

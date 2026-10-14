@@ -171,10 +171,11 @@ public class JsonConfigRepository : IConfigRepository
             var destPath = Path.Combine(_backupsDir, $"triggerpoint_{timestamp}.json");
             File.Copy(sourceFilePath, destPath, true);
 
-            // Retain the 10 newest snapshots, prune older ones
+            // Retain the 50 newest snapshots, prune older ones (exempting corrupted & pre-upgrade backups)
             var existing = Directory.GetFiles(_backupsDir, "triggerpoint_*.json")
+                .Where(f => !Path.GetFileName(f).StartsWith("triggerpoint_corrupted_", StringComparison.OrdinalIgnoreCase))
                 .OrderByDescending(File.GetLastWriteTimeUtc)
-                .Skip(10);
+                .Skip(50);
 
             foreach (var oldFile in existing)
             {
@@ -221,7 +222,14 @@ public class JsonConfigRepository : IConfigRepository
                 }
                 catch (Exception)
                 {
-                    // Primary file corrupted, 0-bytes, or invalid
+                    // Primary file corrupted or invalid JSON. Preserve copy before attempting backup recovery
+                    try
+                    {
+                        var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
+                        var corruptedPath = Path.Combine(_backupsDir, $"triggerpoint_corrupted_{timestamp}.json");
+                        File.Copy(_configFilePath, corruptedPath, true);
+                    }
+                    catch { }
                 }
 
                 // If primary file was 0-bytes, empty array, or corrupted, attempt recovery
@@ -255,6 +263,21 @@ public class JsonConfigRepository : IConfigRepository
                     }
                     catch { }
                 }
+            }
+
+            // Before generating defaults, ensure any existing non-empty file was backed up as corrupted
+            if (File.Exists(_configFilePath) && new FileInfo(_configFilePath).Length > 0)
+            {
+                try
+                {
+                    var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
+                    var corruptedPath = Path.Combine(_backupsDir, $"triggerpoint_corrupted_{timestamp}.json");
+                    if (!File.Exists(corruptedPath))
+                    {
+                        File.Copy(_configFilePath, corruptedPath, true);
+                    }
+                }
+                catch { }
             }
 
             // Only if primary doesn't exist and no backups exist, generate defaults
@@ -295,16 +318,61 @@ public class JsonConfigRepository : IConfigRepository
             settings.HasCompletedInitialSetup = true;
             await SaveSettingsInternalAsync(settings).ConfigureAwait(false);
 
-            if (installStarterPack)
+            // CRITICAL SAFEGUARD: Never overwrite existing valid user triggers!
+            bool alreadyHasValidItems = IsValidTriggerItemsFile(_configFilePath, out var existingItems) && 
+                                        existingItems != null && 
+                                        existingItems.Count > 0;
+
+            if (!alreadyHasValidItems)
             {
-                var defaults = CreateDefaultItems();
-                await SaveInternalAsync(defaults, isGeneratingDefaults: true).ConfigureAwait(false);
+                if (installStarterPack)
+                {
+                    var defaults = CreateDefaultItems();
+                    await SaveInternalAsync(defaults, isGeneratingDefaults: true).ConfigureAwait(false);
+                }
+                else
+                {
+                    var empty = new List<TriggerItem>();
+                    await SaveInternalAsync(empty, isGeneratingDefaults: true).ConfigureAwait(false);
+                }
             }
-            else
+        }
+        finally
+        {
+            _fileLock.Release();
+        }
+    }
+
+    public async Task<string?> CreatePreUpgradeBackupAsync(string oldVersion, string newVersion)
+    {
+        await _fileLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            var preUpgradeDir = Path.Combine(_backupsDir, "pre-upgrade");
+            Directory.CreateDirectory(preUpgradeDir);
+
+            var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
+            var safeOld = string.IsNullOrWhiteSpace(oldVersion) ? "unknown" : oldVersion.Replace('.', '_');
+            var safeNew = string.IsNullOrWhiteSpace(newVersion) ? "unknown" : newVersion.Replace('.', '_');
+
+            string? triggerBackupPath = null;
+            if (File.Exists(_configFilePath) && new FileInfo(_configFilePath).Length > 0)
             {
-                var empty = new List<TriggerItem>();
-                await SaveInternalAsync(empty, isGeneratingDefaults: true).ConfigureAwait(false);
+                triggerBackupPath = Path.Combine(preUpgradeDir, $"triggerpoint_pre_upgrade_v{safeOld}_to_v{safeNew}_{timestamp}.json");
+                File.Copy(_configFilePath, triggerBackupPath, true);
             }
+
+            if (File.Exists(_appSettingsFilePath) && new FileInfo(_appSettingsFilePath).Length > 0)
+            {
+                var settingsBackupPath = Path.Combine(preUpgradeDir, $"appsettings_pre_upgrade_v{safeOld}_to_v{safeNew}_{timestamp}.json");
+                File.Copy(_appSettingsFilePath, settingsBackupPath, true);
+            }
+
+            return triggerBackupPath;
+        }
+        catch
+        {
+            return null;
         }
         finally
         {

@@ -557,9 +557,105 @@ public static class NativeMethods
     [DllImport("user32.dll")]
     public static extern int GetSystemMetrics(int nIndex);
 
-    public const int GWL_EXSTYLE = -20;
-    public const int WS_EX_NOACTIVATE = 0x08000000;
-    public const int WS_EX_TOOLWINDOW = 0x00000080;
+     public const int GWL_EXSTYLE = -20;
+     public const int WS_EX_TRANSPARENT = 0x00000020;
+     public const int WS_EX_NOACTIVATE = 0x08000000;
+     public const int WS_EX_TOOLWINDOW = 0x00000080;
+
+     public const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+     public const int DWMWA_CLOAKED = 14;
+
+     [DllImport("dwmapi.dll")]
+     public static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out int pvAttribute, int cbAttribute);
+
+     [DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")]
+     public static extern int DwmGetWindowAttributeRect(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
+
+     public static bool GetWindowExtendedBounds(IntPtr hWnd, out RECT rect)
+     {
+         rect = default;
+         if (hWnd == IntPtr.Zero) return false;
+         try
+         {
+             if (DwmGetWindowAttributeRect(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, out rect, Marshal.SizeOf<RECT>()) == 0)
+             {
+                 if (rect.Right > rect.Left && rect.Bottom > rect.Top)
+                 {
+                     return true;
+                 }
+             }
+         }
+         catch
+         {
+             // Fallback on systems without dwmapi
+         }
+
+         return GetWindowRect(hWnd, out rect) && rect.Right > rect.Left && rect.Bottom > rect.Top;
+     }
+
+     public const uint GW_OWNER = 4;
+
+     [DllImport("user32.dll", SetLastError = true)]
+     public static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
+
+     public static bool IsWindowCloaked(IntPtr hWnd)
+     {
+         if (hWnd == IntPtr.Zero) return false;
+         try
+         {
+             if (DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, out int cloaked, sizeof(int)) == 0)
+             {
+                 return cloaked != 0;
+             }
+         }
+         catch
+         {
+             // Graceful fallback on environments without dwmapi
+         }
+         return false;
+     }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsIconic(IntPtr hWnd);
+
+    public delegate bool EnumChildProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool EnumChildWindows(IntPtr hWndParent, EnumChildProc lpEnumFunc, IntPtr lParam);
+
+    public static uint GetRealProcessIdForWindow(IntPtr hWnd)
+    {
+        if (hWnd == IntPtr.Zero) return 0;
+        GetWindowThreadProcessId(hWnd, out uint pid);
+        if (pid == 0) return 0;
+
+        // If the window is hosted by ApplicationFrameHost.exe (UWP Store apps),
+        // query child windows to resolve the actual application process ID (e.g. CalculatorApp.exe).
+        string procName = GetProcessNameForWindow(hWnd);
+        if (string.Equals(procName, "ApplicationFrameHost.exe", StringComparison.OrdinalIgnoreCase))
+        {
+            uint childAppPid = 0;
+            EnumChildWindows(hWnd, (childHwnd, lParam) =>
+            {
+                GetWindowThreadProcessId(childHwnd, out uint cPid);
+                if (cPid != 0 && cPid != pid)
+                {
+                    childAppPid = cPid;
+                    return false; // Found real child app process
+                }
+                return true;
+            }, IntPtr.Zero);
+
+            if (childAppPid != 0)
+            {
+                return childAppPid;
+            }
+        }
+
+        return pid;
+    }
 
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtr", SetLastError = true)]
     private static extern IntPtr GetWindowLongPtr64(IntPtr hWnd, int nIndex);
