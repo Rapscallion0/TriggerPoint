@@ -172,6 +172,7 @@ public enum AccentColorChoice
     EmeraldGreen = 3,
     SunsetOrange = 4,
     RoseCrimson = 5,
-    WindowsSystem = 6
+    WindowsSystem = 6,
+    Custom = 7
 }
 

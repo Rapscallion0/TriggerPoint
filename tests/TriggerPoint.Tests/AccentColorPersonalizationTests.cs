@@ -89,6 +89,51 @@ public class AccentColorPersonalizationTests
     }
 
     [Fact]
+    public void AppSettings_SerializesAndDeserializesCustomAccentColor()
+    {
+        var settings = new AppSettings
+        {
+            AccentColor = AccentColorChoice.Custom,
+            CustomAccentHex = "#D946EF"
+        };
+
+        var json = JsonSerializer.Serialize(settings);
+        var restored = JsonSerializer.Deserialize<AppSettings>(json);
+
+        Assert.NotNull(restored);
+        Assert.Equal(AccentColorChoice.Custom, restored.AccentColor);
+        Assert.Equal("#D946EF", restored.CustomAccentHex);
+    }
+
+    [Fact]
+    public void GetAccentColors_Custom_ParsesValidHex()
+    {
+        // Teal #14B8A6: R=20, G=184, B=166
+        var (darkBase, darkHover, darkSubtle) = ThemeManager.GetAccentColors(AccentColorChoice.Custom, AppTheme.Dark, "#14B8A6");
+        var (lightBase, lightHover, lightSubtle) = ThemeManager.GetAccentColors(AccentColorChoice.Custom, AppTheme.Light, "#14B8A6");
+
+        Assert.Equal(20, darkBase.R);
+        Assert.Equal(184, darkBase.G);
+        Assert.Equal(166, darkBase.B);
+        Assert.Equal(40, darkSubtle.A);
+
+        Assert.Equal(20, lightBase.R);
+        Assert.Equal(184, lightBase.G);
+        Assert.Equal(166, lightBase.B);
+        Assert.Equal(30, lightSubtle.A);
+    }
+
+    [Fact]
+    public void GetAccentColors_Custom_InvalidHex_FallsBackGracefully()
+    {
+        var (fallbackBase, _, _) = ThemeManager.GetAccentColors(AccentColorChoice.Custom, AppTheme.Dark, "invalid_color");
+        // Fallback is Indigo #6366F1: 99, 102, 241
+        Assert.Equal(99, fallbackBase.R);
+        Assert.Equal(102, fallbackBase.G);
+        Assert.Equal(241, fallbackBase.B);
+    }
+
+    [Fact]
     public void ApplyAccentColor_UpdatesDynamicResources()
     {
         Exception? caughtEx = null;
@@ -114,6 +159,14 @@ public class AccentColorPersonalizationTests
                 Assert.Equal(167, accentBrush.Color.R);
                 Assert.Equal(139, accentBrush.Color.G);
                 Assert.Equal(250, accentBrush.Color.B);
+
+                // Switch to Custom (#14B8A6: 20, 184, 166)
+                ThemeManager.ApplyAccentColor(AccentColorChoice.Custom, "#14B8A6");
+                accentBrush = Application.Current.FindResource("AccentBrush") as SolidColorBrush;
+                Assert.NotNull(accentBrush);
+                Assert.Equal(20, accentBrush.Color.R);
+                Assert.Equal(184, accentBrush.Color.G);
+                Assert.Equal(166, accentBrush.Color.B);
 
                 // Revert to Indigo default
                 ThemeManager.ApplyAccentColor(AccentColorChoice.Indigo);

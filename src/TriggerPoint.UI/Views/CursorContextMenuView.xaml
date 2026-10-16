@@ -165,12 +165,13 @@
                         <Grid MouseLeftButtonUp="ItemBorder_MouseLeftButtonUp">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
-                            <!-- Accelerator badge or Item Type Icon -->
-                            <Grid Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center">
+                            <!-- Accelerator Quick-Key Badge (when present) -->
+                            <Grid Grid.Column="0" Margin="0,0,6,0" VerticalAlignment="Center" Visibility="{Binding HasAccelerator, Converter={x:Null}}">
                                 <!-- Explicit Manual Quick-Key Badge -->
                                 <Border Style="{StaticResource AccentKeyBadgeStyle}"
                                         Width="22" Height="22"
@@ -193,18 +194,49 @@
                                                VerticalAlignment="Center"
                                                Foreground="{DynamicResource TextSecondaryBrush}"/>
                                 </Border>
+                            </Grid>
+
+                            <!-- Action Icon (App Icon with Mini Lightning Bolt Badge or Glyph) -->
+                            <Grid Grid.Column="1" Width="24" Height="24" Margin="0,0,8,0" VerticalAlignment="Center">
+                                <!-- Mode 1: App Icon with Mini Lightning Bolt Badge -->
+                                <Grid Visibility="{Binding AppIconVisibility}" Width="24" Height="24">
+                                    <Image Source="{Binding AppIconSource}" 
+                                           Width="20" Height="20" 
+                                           HorizontalAlignment="Center" 
+                                           VerticalAlignment="Center"
+                                           RenderOptions.BitmapScalingMode="HighQuality"
+                                           SnapsToDevicePixels="True"/>
+                                    <Border HorizontalAlignment="Right" 
+                                            VerticalAlignment="Bottom"
+                                            Width="11" Height="11"
+                                            Background="{DynamicResource BgSecondaryBrush}"
+                                            BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="3"
+                                            SnapsToDevicePixels="True">
+                                        <TextBlock Text="⚡" 
+                                                   FontSize="7" 
+                                                   FontWeight="Bold"
+                                                   HorizontalAlignment="Center" 
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource ShellBrush}"
+                                                   Margin="0,-1,0,0"/>
+                                    </Border>
+                                </Grid>
+
+                                <!-- Mode 2: Standalone Glyph / Fallback -->
                                 <TextBlock Text="{Binding IconSymbol}"
                                            FontSize="13"
-                                           Width="22"
+                                           Width="24"
                                            TextAlignment="Center"
                                            HorizontalAlignment="Center"
                                            VerticalAlignment="Center"
                                            Foreground="{DynamicResource TextMutedBrush}"
-                                           Visibility="{Binding HasNoAccelerator, Converter={x:Null}}"/>
+                                           Visibility="{Binding StandaloneIconVisibility}"/>
                             </Grid>
 
                             <!-- Title and Description -->
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center">
                                 <TextBlock local:TextBlockInlines.Segments="{Binding HighlightedNameSegments}" 
                                            FontWeight="Medium" 
                                            FontSize="13" 
@@ -216,7 +248,7 @@
                             </StackPanel>
 
                             <!-- Hotkey or Type Badge -->
-                            <TextBlock Grid.Column="2" 
+                            <TextBlock Grid.Column="3" 
                                        Text="{Binding TypeBadge}" 
                                        FontSize="11" 
                                        Foreground="{DynamicResource TextMutedBrush}"

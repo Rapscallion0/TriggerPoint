@@ -1,0 +1,40 @@
+<Window x:Class="TriggerPoint.UI.Views.WindowTargetTooltipView"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="TriggerPoint Target Tooltip"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Focusable="False"
+        IsHitTestVisible="False"
+        SizeToContent="WidthAndHeight">
+    <Border Background="{DynamicResource BgSecondaryBrush}"
+            BorderBrush="{DynamicResource BorderBrush}"
+            BorderThickness="1.5"
+            CornerRadius="10"
+            Padding="16,10"
+            Margin="8">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="16" ShadowDepth="3" Opacity="0.5" Direction="270"/>
+        </Border.Effect>
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBlock Text="🎯" FontSize="18" Margin="0,0,10,0" VerticalAlignment="Center"/>
+            <StackPanel VerticalAlignment="Center">
+                <TextBlock x:Name="TooltipTitleText"
+                           Text="Click application window to select"
+                           FontSize="14"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextPrimaryBrush}"
+                           TextTrimming="CharacterEllipsis"
+                           MaxWidth="420"/>
+                <TextBlock Text="Press Esc or Right-Click to cancel"
+                           FontSize="11.5"
+                           Margin="0,2,0,0"
+                           Foreground="{DynamicResource TextMutedBrush}"/>
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</Window>

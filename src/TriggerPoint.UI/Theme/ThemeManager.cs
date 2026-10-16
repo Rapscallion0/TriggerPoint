@@ -25,16 +25,18 @@ public static class ThemeManager
     public static AppTheme CurrentTheme { get; private set; } = AppTheme.Dark;
     public static ThemePreference CurrentPreference { get; private set; } = ThemePreference.System;
     public static AccentColorChoice CurrentAccentChoice { get; private set; } = AccentColorChoice.Indigo;
+    public static string? CurrentCustomAccentHex { get; private set; }
 
     public static event EventHandler<AppTheme>? ThemeChanged;
     public static event EventHandler<AccentColorChoice>? AccentChanged;
 
-    public static void Initialize(ThemePreference preference = ThemePreference.System, AccentColorChoice accentColor = AccentColorChoice.Indigo)
+    public static void Initialize(ThemePreference preference = ThemePreference.System, AccentColorChoice accentColor = AccentColorChoice.Indigo, string? customAccentHex = null)
     {
         CurrentPreference = preference;
         CurrentAccentChoice = accentColor;
+        CurrentCustomAccentHex = customAccentHex;
         ApplyPreference(preference);
-        ApplyAccentColor(accentColor);
+        ApplyAccentColor(accentColor, customAccentHex);
         ApplyTreeDensity(true);
 
         SystemEvents.UserPreferenceChanged += (s, e) =>
@@ -247,7 +249,7 @@ public static class ThemeManager
             catch { }
         }
 
-        ApplyAccentColor(CurrentAccentChoice);
+        ApplyAccentColor(CurrentAccentChoice, CurrentCustomAccentHex);
 
         UpdateNativeIcons(theme);
 
@@ -368,13 +370,18 @@ public static class ThemeManager
         }
     }
 
-    public static void ApplyAccentColor(AccentColorChoice choice)
+    public static void ApplyAccentColor(AccentColorChoice choice, string? customHex = null)
     {
         CurrentAccentChoice = choice;
+        if (!string.IsNullOrWhiteSpace(customHex))
+        {
+            CurrentCustomAccentHex = customHex;
+        }
+
         if (Application.Current?.Resources == null) return;
         var res = Application.Current.Resources;
 
-        var (baseColor, hoverColor, subtleColor) = GetAccentColors(choice, CurrentTheme);
+        var (baseColor, hoverColor, subtleColor) = GetAccentColors(choice, CurrentTheme, customHex ?? CurrentCustomAccentHex);
         res["AccentBrush"] = new SolidColorBrush(baseColor);
         res["AccentHoverBrush"] = new SolidColorBrush(hoverColor);
         res["AccentSubtleBrush"] = new SolidColorBrush(subtleColor);
@@ -382,8 +389,25 @@ public static class ThemeManager
         AccentChanged?.Invoke(null, choice);
     }
 
-    public static (Color Base, Color Hover, Color Subtle) GetAccentColors(AccentColorChoice choice, AppTheme theme)
+    public static (Color Base, Color Hover, Color Subtle) GetAccentColors(AccentColorChoice choice, AppTheme theme, string? customHex = null)
     {
+        if (choice == AccentColorChoice.Custom)
+        {
+            var customBase = ParseHexColor(customHex ?? CurrentCustomAccentHex, Color.FromRgb(99, 102, 241));
+            if (theme == AppTheme.Dark)
+            {
+                var baseDark = customBase;
+                var hoverDark = AdjustBrightness(baseDark, 1.15f);
+                return (baseDark, hoverDark, Color.FromArgb(40, baseDark.R, baseDark.G, baseDark.B));
+            }
+            else
+            {
+                var baseLight = customBase;
+                var hoverLight = AdjustBrightness(baseLight, 0.85f);
+                return (baseLight, hoverLight, Color.FromArgb(30, baseLight.R, baseLight.G, baseLight.B));
+            }
+        }
+
         if (choice == AccentColorChoice.WindowsSystem)
         {
             var winBase = GetWindowsAccentColor();
@@ -422,6 +446,29 @@ public static class ThemeManager
             (_, AppTheme.Light) => (Color.FromRgb(79, 70, 229), Color.FromRgb(67, 56, 202), Color.FromArgb(30, 79, 70, 229)),
             _ => (Color.FromRgb(99, 102, 241), Color.FromRgb(129, 132, 245), Color.FromArgb(40, 99, 102, 241))
         };
+    }
+
+    public static Color ParseHexColor(string? hex, Color fallback)
+    {
+        if (string.IsNullOrWhiteSpace(hex)) return fallback;
+        string cleanHex = hex.Trim().TrimStart('#');
+        if (cleanHex.Length == 6 && int.TryParse(cleanHex, System.Globalization.NumberStyles.HexNumber, null, out int rgb))
+        {
+            byte r = (byte)((rgb >> 16) & 0xFF);
+            byte g = (byte)((rgb >> 8) & 0xFF);
+            byte b = (byte)(rgb & 0xFF);
+            return Color.FromRgb(r, g, b);
+        }
+        else if (cleanHex.Length == 8 && uint.TryParse(cleanHex, System.Globalization.NumberStyles.HexNumber, null, out uint argb))
+        {
+            byte a = (byte)((argb >> 24) & 0xFF);
+            byte r = (byte)((argb >> 16) & 0xFF);
+            byte g = (byte)((argb >> 8) & 0xFF);
+            byte b = (byte)(argb & 0xFF);
+            return Color.FromArgb(a, r, g, b);
+        }
+
+        return fallback;
     }
 
     public static Color GetWindowsAccentColor()

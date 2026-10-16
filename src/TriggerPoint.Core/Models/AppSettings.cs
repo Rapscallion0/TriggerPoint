@@ -55,6 +55,8 @@ public class AppSettings
     public ShortcutBinding? CheatSheetHotkey { get; set; } = new(ModifierKeys.Control | ModifierKeys.Shift, 191, "/");
     public ThemePreference Theme { get; set; } = ThemePreference.System;
     public AccentColorChoice AccentColor { get; set; } = AccentColorChoice.Indigo;
+    public string? CustomAccentHex { get; set; }
+    public List<string> CustomPaletteColors { get; set; } = [];
     public bool HasCompletedInitialSetup { get; set; } = false;
     public bool EnableBackdropEffects { get; set; } = true;
     public bool EnableUiAnimations { get; set; } = true;

@@ -11,7 +11,9 @@ using System.Windows.Shapes;
 using TriggerPoint.Core.Contracts;
 using TriggerPoint.Core.Models;
 using TriggerPoint.Core.Services;
+using TriggerPoint.Infrastructure.Services;
 using TriggerPoint.Infrastructure.Win32;
+using System.Windows.Interop;
 
 namespace TriggerPoint.UI.Views;
 
@@ -42,6 +44,11 @@ public class CursorMenuItemViewModel
         _ => "⚡"
     };
 
+    public ImageSource? AppIconSource { get; }
+    public bool HasAppIcon => AppIconSource != null;
+    public Visibility AppIconVisibility => HasAppIcon ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility StandaloneIconVisibility => HasAppIcon ? Visibility.Collapsed : Visibility.Visible;
+
     public IReadOnlyList<HighlightSegment> HighlightedNameSegments { get; }
 
     public CursorMenuItemViewModel(TriggerItem item, string? effectiveKey = null, bool isAutoAssigned = false, IReadOnlyList<int>? matchedIndices = null)
@@ -49,6 +56,7 @@ public class CursorMenuItemViewModel
         Item = item;
         AcceleratorKey = effectiveKey ?? item.AcceleratorKey;
         IsAutoAssigned = isAutoAssigned;
+        AppIconSource = Win32IconService.GetActionIcon(item);
         HighlightedNameSegments = BuildHighlightedSegments(item.Name, matchedIndices);
     }
 
@@ -416,50 +424,54 @@ public partial class CursorContextMenuView : Window
         }
     }
 
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        PositionAtCursor();
+    }
+
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        PositionAtCursor();
+    }
+
     private void PositionAtCursor()
     {
         if (!GetCursorPos(out var pt)) return;
 
         // Find current monitor and work area bounds
         var hMonitor = NativeMethods.MonitorFromPoint(pt, NativeMethods.MONITOR_DEFAULTTONEAREST);
+        if (hMonitor == IntPtr.Zero) return;
+
         var monitorInfo = new NativeMethods.MONITORINFO { cbSize = Marshal.SizeOf<NativeMethods.MONITORINFO>() };
-        NativeMethods.GetMonitorInfo(hMonitor, ref monitorInfo);
+        if (!NativeMethods.GetMonitorInfo(hMonitor, ref monitorInfo)) return;
 
-        // Clamping logic: ensure window fits inside monitor work area
-        double dpiScale = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
-        double targetX = pt.X / dpiScale;
-        double targetY = pt.Y / dpiScale;
+        NativeMethods.GetMonitorDpi(hMonitor, out uint dpiX, out _);
 
-        double workLeft = monitorInfo.rcWork.Left / dpiScale;
-        double workTop = monitorInfo.rcWork.Top / dpiScale;
-        double workRight = monitorInfo.rcWork.Right / dpiScale;
-        double workBottom = monitorInfo.rcWork.Bottom / dpiScale;
+        double winWidthDip = ActualWidth > 0 ? ActualWidth : 280;
+        double winHeightDip = ActualHeight > 0 ? ActualHeight : 250;
 
-        double winWidth = ActualWidth > 0 ? ActualWidth : 280;
-        double winHeight = ActualHeight > 0 ? ActualHeight : 250;
+        var placement = WindowPositioningHelper.CalculateContextMenuPlacement(
+            pt,
+            monitorInfo.rcWork,
+            dpiX,
+            winWidthDip,
+            winHeightDip,
+            shadowMarginDip: 8.0);
 
-        // Clamp horizontally
-        if (targetX + winWidth > workRight)
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd != IntPtr.Zero)
         {
-            targetX = workRight - winWidth - 8;
+            NativeMethods.SetWindowPos(
+                hwnd,
+                IntPtr.Zero,
+                placement.X,
+                placement.Y,
+                0,
+                0,
+                NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
         }
-        if (targetX < workLeft)
-        {
-            targetX = workLeft + 8;
-        }
-
-        // Clamp vertically
-        if (targetY + winHeight > workBottom)
-        {
-            targetY = workBottom - winHeight - 8;
-        }
-        if (targetY < workTop)
-        {
-            targetY = workTop + 8;
-        }
-
-        Left = targetX;
-        Top = targetY;
     }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)

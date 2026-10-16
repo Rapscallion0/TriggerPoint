@@ -1,12 +1,59 @@
 using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
 using TriggerPoint.Infrastructure.Win32;
 
 namespace TriggerPoint.UI.Views;
+
+internal sealed class ScreenCaptureOverlayWindow : Window
+{
+    private readonly WindowTargetingOverlay _controller;
+    private readonly System.Windows.Forms.Screen _screen;
+
+    public ScreenCaptureOverlayWindow(System.Windows.Forms.Screen screen, WindowTargetingOverlay controller)
+    {
+        _screen = screen;
+        _controller = controller;
+
+        Title = "TriggerPoint Screen Target Overlay";
+        WindowStyle = WindowStyle.None;
+        AllowsTransparency = true;
+        Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0)); // #01000000 (hit-testable, transparent)
+        Topmost = true;
+        ShowInTaskbar = false;
+        Cursor = Cursors.Cross;
+
+        PreviewMouseMove += (s, e) => _controller.NotifyMouseMove();
+        PreviewMouseLeftButtonDown += (s, e) => _controller.NotifyLeftClick();
+        PreviewMouseRightButtonDown += (s, e) => _controller.NotifyCancel();
+        PreviewKeyDown += (s, e) =>
+        {
+            if (e.Key == Key.Escape) _controller.NotifyCancel();
+        };
+    }
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd != IntPtr.Zero)
+        {
+            NativeMethods.SetWindowPos(
+                hwnd,
+                NativeMethods.HWND_TOPMOST,
+                _screen.Bounds.Left,
+                _screen.Bounds.Top,
+                _screen.Bounds.Width,
+                _screen.Bounds.Height,
+                NativeMethods.SWP_SHOWWINDOW);
+        }
+    }
+}
 
 public partial class WindowTargetingOverlay : Window
 {
@@ -14,6 +61,15 @@ public partial class WindowTargetingOverlay : Window
     private readonly string _basePrompt;
     private IntPtr _overlayHwnd = IntPtr.Zero;
     private IntPtr _ownerHwnd = IntPtr.Zero;
+    private IntPtr _highlightHwnd = IntPtr.Zero;
+    private IntPtr _tooltipHwnd = IntPtr.Zero;
+
+    private WindowTargetHighlightView? _highlightView;
+    private WindowTargetTooltipView? _tooltipView;
+    private readonly List<ScreenCaptureOverlayWindow> _screenOverlays = [];
+
+    private IntPtr _keyboardHookHandle = IntPtr.Zero;
+    private NativeMethods.HookProc? _keyboardHookProc;
 
     private IntPtr _currentHoverHwnd = IntPtr.Zero;
     private DateTime _lastScanTime = DateTime.MinValue;
@@ -26,72 +82,119 @@ public partial class WindowTargetingOverlay : Window
         InitializeComponent();
         _ownerWindow = owner;
         _basePrompt = string.IsNullOrWhiteSpace(basePrompt) 
-            ? "Click application window to select (Esc to cancel)" 
+            ? "Click application window to select" 
             : basePrompt;
-
-        TooltipPromptText.Text = _basePrompt;
-
-        // Cover the full virtual desktop (multi-monitor support)
-        Left = SystemParameters.VirtualScreenLeft;
-        Top = SystemParameters.VirtualScreenTop;
-        Width = SystemParameters.VirtualScreenWidth;
-        Height = SystemParameters.VirtualScreenHeight;
     }
 
-    private void Window_Loaded(object sender, RoutedEventArgs e)
+    protected override void OnSourceInitialized(EventArgs e)
     {
+        base.OnSourceInitialized(e);
         _overlayHwnd = new WindowInteropHelper(this).Handle;
         if (_ownerWindow != null)
         {
             _ownerHwnd = new WindowInteropHelper(_ownerWindow).Handle;
         }
 
-        Activate();
-        Focus();
+        _highlightView = new WindowTargetHighlightView();
+        _highlightView.Show();
+        _highlightHwnd = new WindowInteropHelper(_highlightView).Handle;
+        _highlightView.HideHighlight();
 
-        // Initial tooltip placement near cursor
+        _tooltipView = new WindowTargetTooltipView();
+        _tooltipView.SetPrompt(_basePrompt);
+        _tooltipView.Show();
+        _tooltipHwnd = new WindowInteropHelper(_tooltipView).Handle;
+
+        // Spawn a dedicated full-coverage transparent overlay window for each monitor
+        var screens = System.Windows.Forms.Screen.AllScreens;
+        foreach (var screen in screens)
+        {
+            var overlay = new ScreenCaptureOverlayWindow(screen, this);
+            overlay.Show();
+            _screenOverlays.Add(overlay);
+        }
+
+        // Install system-wide keyboard hook for Escape key to ensure Esc cancels regardless of which window has focus
+        _keyboardHookProc = KeyboardHookCallback;
+        var moduleHandle = NativeMethods.GetModuleHandle(null);
+        _keyboardHookHandle = NativeMethods.SetWindowsHookEx(NativeMethods.WH_KEYBOARD_LL, _keyboardHookProc, moduleHandle, 0);
+
         if (NativeMethods.GetCursorPos(out var pt))
         {
+            _tooltipView.MoveNearCursor(pt);
             UpdateHoverTarget(pt);
-            UpdateTooltipPosition(PointFromScreen(new Point(pt.X, pt.Y)));
         }
     }
 
-    private void Window_PreviewMouseMove(object sender, MouseEventArgs e)
+    private IntPtr KeyboardHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        var mousePos = e.GetPosition(OverlayCanvas);
-        UpdateTooltipPosition(mousePos);
-
-        // Throttle window scanning to ~30ms intervals to minimize CPU usage while keeping feedback fluid
-        if ((DateTime.UtcNow - _lastScanTime).TotalMilliseconds >= 30)
+        if (nCode >= 0)
         {
-            _lastScanTime = DateTime.UtcNow;
-            if (NativeMethods.GetCursorPos(out var pt))
+            int msg = (int)wParam;
+            if (msg == NativeMethods.WM_KEYDOWN || msg == NativeMethods.WM_SYSKEYDOWN)
             {
+                var kbd = Marshal.PtrToStructure<NativeMethods.KBDLLHOOKSTRUCT>(lParam);
+                if (kbd.vkCode == NativeMethods.VK_ESCAPE)
+                {
+                    Dispatcher.BeginInvoke(() => NotifyCancel());
+                    return (IntPtr)1; // Consume Escape key
+                }
+            }
+        }
+        return NativeMethods.CallNextHookEx(_keyboardHookHandle, nCode, wParam, lParam);
+    }
+
+    public void NotifyMouseMove()
+    {
+        if (NativeMethods.GetCursorPos(out var pt))
+        {
+            _tooltipView?.MoveNearCursor(pt);
+
+            if ((DateTime.UtcNow - _lastScanTime).TotalMilliseconds >= 25)
+            {
+                _lastScanTime = DateTime.UtcNow;
                 UpdateHoverTarget(pt);
             }
         }
     }
 
-    private void UpdateTooltipPosition(Point mousePos)
+    public void NotifyLeftClick()
     {
-        double tipLeft = mousePos.X + 20;
-        double tipTop = mousePos.Y + 20;
-
-        double tooltipWidth = FloatingTooltip.ActualWidth > 0 ? FloatingTooltip.ActualWidth : 260;
-        double tooltipHeight = FloatingTooltip.ActualHeight > 0 ? FloatingTooltip.ActualHeight : 34;
-
-        if (tipLeft + tooltipWidth > ActualWidth - 16)
+        if (NativeMethods.GetCursorPos(out var pt))
         {
-            tipLeft = mousePos.X - tooltipWidth - 20;
-        }
-        if (tipTop + tooltipHeight > ActualHeight - 16)
-        {
-            tipTop = mousePos.Y - tooltipHeight - 20;
+            TargetCursorPt = pt;
         }
 
-        Canvas.SetLeft(FloatingTooltip, Math.Max(8, tipLeft));
-        Canvas.SetTop(FloatingTooltip, Math.Max(8, tipTop));
+        TargetHwnd = _currentHoverHwnd != IntPtr.Zero 
+            ? _currentHoverHwnd 
+            : FindWindowUnderPoint(TargetCursorPt);
+
+        if (TargetHwnd == IntPtr.Zero)
+        {
+            IntPtr rawHwnd = NativeMethods.WindowFromPoint(TargetCursorPt);
+            if (rawHwnd != IntPtr.Zero && rawHwnd != _overlayHwnd && rawHwnd != _ownerHwnd && rawHwnd != _highlightHwnd && rawHwnd != _tooltipHwnd)
+            {
+                IntPtr root = NativeMethods.GetAncestor(rawHwnd, NativeMethods.GA_ROOT);
+                IntPtr candidate = root != IntPtr.Zero ? root : rawHwnd;
+                if (!NativeMethods.IsWindowCloaked(candidate))
+                {
+                    NativeMethods.GetWindowThreadProcessId(candidate, out uint cPid);
+                    if (cPid != (uint)Environment.ProcessId)
+                    {
+                        TargetHwnd = candidate;
+                    }
+                }
+            }
+        }
+
+        DialogResult = TargetHwnd != IntPtr.Zero;
+        Close();
+    }
+
+    public void NotifyCancel()
+    {
+        DialogResult = false;
+        Close();
     }
 
     private void UpdateHoverTarget(NativeMethods.POINT pt)
@@ -105,40 +208,26 @@ public partial class WindowTargetingOverlay : Window
         {
             try
             {
-                Point topLeft = PointFromScreen(new Point(rect.Left, rect.Top));
-                Point bottomRight = PointFromScreen(new Point(rect.Right, rect.Bottom));
-
-                double left = Math.Max(0, topLeft.X);
-                double top = Math.Max(0, topLeft.Y);
-                double maxRight = ActualWidth > 0 ? ActualWidth : Width;
-                double maxBottom = ActualHeight > 0 ? ActualHeight : Height;
-                double right = Math.Min(maxRight, Math.Max(left, bottomRight.X));
-                double bottom = Math.Min(maxBottom, Math.Max(top, bottomRight.Y));
-
-                double w = right - left;
-                double h = bottom - top;
-
-                if (w > 10 && h > 10)
+                var hMon = NativeMethods.MonitorFromWindow(foundHwnd, NativeMethods.MONITOR_DEFAULTTONEAREST);
+                if (hMon == IntPtr.Zero)
                 {
-                    Canvas.SetLeft(HoverHighlightBorder, left);
-                    Canvas.SetTop(HoverHighlightBorder, top);
-                    HoverHighlightBorder.Width = w;
-                    HoverHighlightBorder.Height = h;
-                    HoverHighlightBorder.Visibility = Visibility.Visible;
-
-                    // Display window title in tooltip if available
-                    string title = GetWindowDisplayTitle(foundHwnd);
-                    if (!string.IsNullOrWhiteSpace(title))
-                    {
-                        if (title.Length > 36) title = title[..33] + "...";
-                        TooltipPromptText.Text = $"Click to select: {title} (Esc to cancel)";
-                    }
-                    else
-                    {
-                        TooltipPromptText.Text = _basePrompt;
-                    }
-                    return;
+                    hMon = NativeMethods.MonitorFromPoint(pt, NativeMethods.MONITOR_DEFAULTTONEAREST);
                 }
+
+                NativeMethods.GetMonitorDpi(hMon, out uint dpi, out _);
+                _highlightView?.MoveToPhysicalRect(rect, dpi);
+
+                string title = GetWindowDisplayTitle(foundHwnd);
+                if (!string.IsNullOrWhiteSpace(title))
+                {
+                    if (title.Length > 45) title = title[..42] + "...";
+                    _tooltipView?.SetPrompt($"Click to select: {title}");
+                }
+                else
+                {
+                    _tooltipView?.SetPrompt(_basePrompt);
+                }
+                return;
             }
             catch
             {
@@ -146,8 +235,8 @@ public partial class WindowTargetingOverlay : Window
             }
         }
 
-        HoverHighlightBorder.Visibility = Visibility.Collapsed;
-        TooltipPromptText.Text = _basePrompt;
+        _highlightView?.HideHighlight();
+        _tooltipView?.SetPrompt(_basePrompt);
     }
 
     private IntPtr FindWindowUnderPoint(NativeMethods.POINT pt)
@@ -157,13 +246,13 @@ public partial class WindowTargetingOverlay : Window
 
         NativeMethods.EnumWindows((hWnd, lParam) =>
         {
-            if (hWnd == _overlayHwnd || hWnd == _ownerHwnd) return true; // skip self and owner
+            if (hWnd == _overlayHwnd || hWnd == _ownerHwnd || hWnd == _highlightHwnd || hWnd == _tooltipHwnd) return true;
             if (!NativeMethods.IsWindowVisible(hWnd)) return true;
-            if (NativeMethods.IsIconic(hWnd)) return true; // skip minimized windows
-            if (NativeMethods.IsWindowCloaked(hWnd)) return true; // skip cloaked windows (inactive virtual desktops, suspended UWP)
+            if (NativeMethods.IsIconic(hWnd)) return true;
+            if (NativeMethods.IsWindowCloaked(hWnd)) return true;
 
             NativeMethods.GetWindowThreadProcessId(hWnd, out uint pid);
-            if (pid == currentPid) return true; // skip TriggerPoint application windows
+            if (pid == currentPid) return true; // skip ALL TriggerPoint windows across all monitors
 
             if (!NativeMethods.GetWindowExtendedBounds(hWnd, out var r)) return true;
             if (pt.X < r.Left || pt.X > r.Right || pt.Y < r.Top || pt.Y > r.Bottom) return true;
@@ -220,56 +309,44 @@ public partial class WindowTargetingOverlay : Window
         return string.Empty;
     }
 
-    private void Window_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    protected override void OnClosed(EventArgs e)
     {
-        if (NativeMethods.GetCursorPos(out var pt))
+        if (_keyboardHookHandle != IntPtr.Zero)
         {
-            TargetCursorPt = pt;
+            NativeMethods.UnhookWindowsHookEx(_keyboardHookHandle);
+            _keyboardHookHandle = IntPtr.Zero;
         }
 
-        TargetHwnd = _currentHoverHwnd != IntPtr.Zero 
-            ? _currentHoverHwnd 
-            : FindWindowUnderPoint(TargetCursorPt);
-
-        if (TargetHwnd == IntPtr.Zero)
+        try
         {
-            // Fallback to WindowFromPoint
-            IntPtr rawHwnd = NativeMethods.WindowFromPoint(TargetCursorPt);
-            if (rawHwnd != IntPtr.Zero && rawHwnd != _overlayHwnd && rawHwnd != _ownerHwnd)
+            _highlightView?.Close();
+            _highlightView = null;
+        }
+        catch { }
+
+        try
+        {
+            _tooltipView?.Close();
+            _tooltipView = null;
+        }
+        catch { }
+
+        foreach (var overlay in _screenOverlays)
+        {
+            try
             {
-                IntPtr root = NativeMethods.GetAncestor(rawHwnd, NativeMethods.GA_ROOT);
-                IntPtr candidate = root != IntPtr.Zero ? root : rawHwnd;
-                if (!NativeMethods.IsWindowCloaked(candidate))
-                {
-                    TargetHwnd = candidate;
-                }
+                overlay.Close();
             }
+            catch { }
         }
+        _screenOverlays.Clear();
 
-        DialogResult = TargetHwnd != IntPtr.Zero;
-        Close();
-        e.Handled = true;
-    }
-
-    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Escape)
-        {
-            DialogResult = false;
-            Close();
-            e.Handled = true;
-        }
-    }
-
-    private void Window_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        DialogResult = false;
-        Close();
-        e.Handled = true;
+        base.OnClosed(e);
     }
 
     /// <summary>
-    /// Launches the global targeting overlay, optionally hiding the owner window during selection.
+    /// Helper to show targeting overlay and capture target window and cursor coordinates.
+    /// Returns true if user clicked a valid window, false if cancelled via Esc or right-click.
     /// </summary>
     public static bool TryTargetWindow(
         Window? owner, 

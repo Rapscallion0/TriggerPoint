@@ -84,6 +84,7 @@ public interface ISnippetService
 public interface IIconService
 {
     Task<string?> ResolveIconPathAsync(string? iconPath, string? fallbackCommand);
+    string? ResolveExecutablePath(string? command);
 }
 
 public interface IContextFilterService

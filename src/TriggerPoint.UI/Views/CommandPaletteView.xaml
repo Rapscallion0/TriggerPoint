@@ -857,13 +857,43 @@
                                          <ColumnDefinition Width="Auto"/> <!-- Right Badges & Metadata -->
                                      </Grid.ColumnDefinitions>
 
-                                     <!-- Left Action Icon -->
-                                     <TextBlock Grid.Column="0"
-                                                Text="{Binding IconSymbol}"
-                                                FontSize="14"
-                                                Width="24"
-                                                VerticalAlignment="Center"
-                                                Foreground="{Binding IconBrush}"/>
+                                     <!-- Left Action Icon Container (24x24) -->
+                                     <Grid Grid.Column="0" Width="24" Height="24" VerticalAlignment="Center">
+                                         <!-- Mode 1: App Icon with Mini Lightning Bolt Badge -->
+                                         <Grid Visibility="{Binding AppIconVisibility}" Width="24" Height="24">
+                                             <Image Source="{Binding AppIconSource}" 
+                                                    Width="20" Height="20" 
+                                                    HorizontalAlignment="Center" 
+                                                    VerticalAlignment="Center"
+                                                    RenderOptions.BitmapScalingMode="HighQuality"
+                                                    SnapsToDevicePixels="True"/>
+                                             <Border HorizontalAlignment="Right" 
+                                                     VerticalAlignment="Bottom"
+                                                     Width="11" Height="11"
+                                                     Background="{DynamicResource BgSecondaryBrush}"
+                                                     BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                                     BorderThickness="1"
+                                                     CornerRadius="3"
+                                                     SnapsToDevicePixels="True">
+                                                 <TextBlock Text="⚡" 
+                                                            FontSize="7" 
+                                                            FontWeight="Bold"
+                                                            HorizontalAlignment="Center" 
+                                                            VerticalAlignment="Center"
+                                                            Foreground="{DynamicResource ShellBrush}"
+                                                            Margin="0,-1,0,0"/>
+                                             </Border>
+                                         </Grid>
+
+                                         <!-- Mode 2: Standalone Glyph / Fallback -->
+                                         <TextBlock Text="{Binding IconSymbol}"
+                                                    FontSize="14"
+                                                    Width="24"
+                                                    TextAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    Foreground="{Binding IconBrush}"
+                                                    Visibility="{Binding StandaloneIconVisibility}"/>
+                                     </Grid>
 
                                      <!-- Center: Highlighted Title & Detail -->
                                      <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="6,0,10,0">

@@ -442,10 +442,97 @@
                                                         <GradientStop Color="#881798" Offset="1"/>
                                                     </LinearGradientBrush>
                                                 </Border.Background>
-                                                <TextBlock Text="🪟" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                <Path Data="M 0,0 H 4.5 V 4.5 H 0 Z M 5.5,0 H 10 V 4.5 H 5.5 Z M 0,5.5 H 4.5 V 10 H 0 Z M 5.5,5.5 H 10 V 10 H 5.5 Z"
+                                                      Fill="White"
+                                                      Width="11" Height="11"
+                                                      Stretch="Uniform"
+                                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                        </RadioButton>
+
+                                        <!-- Custom Color -->
+                                        <RadioButton x:Name="AccentRadioCustom" 
+                                                     GroupName="AccentColorGroup" 
+                                                     Style="{StaticResource AccentSwatchRadioButtonStyle}" 
+                                                     Tag="Custom" 
+                                                     ToolTip="Custom Accent Color" 
+                                                     Click="AccentSwatch_Click">
+                                            <Border x:Name="CustomAccentSwatchBorder" Width="28" Height="28" CornerRadius="14" Background="#8B5CF6">
+                                                <Path Data="M 12,3 A 9,9 0 0 0 3,12 C 3,14.5 5,16.5 7.5,16.5 H 8.7 C 9.3,16.5 9.7,17 9.7,17.5 C 9.7,17.7 9.6,18 9.5,18.2 C 8.9,19.3 9.7,21 11,21 H 12 A 9,9 0 0 0 21,12 C 21,7 17,3 12,3 Z M 6.5,12 C 5.7,12 5,11.3 5,10.5 C 5,9.7 5.7,9 6.5,9 C 7.3,9 8,9.7 8,10.5 C 8,11.3 7.3,12 6.5,12 Z M 9.5,8 C 8.7,8 8,7.3 8,6.5 C 8,5.7 8.7,5 9.5,5 C 10.3,5 11,5.7 11,6.5 C 11,7.3 10.3,8 9.5,8 Z M 14.5,8 C 13.7,8 13,7.3 13,6.5 C 13,5.7 13.7,5 14.5,5 C 15.3,5 16,5.7 16,6.5 C 16,7.3 15.3,8 14.5,8 Z M 17.5,12 C 16.7,12 16,11.3 16,10.5 C 16,9.7 16.7,9 17.5,9 C 18.3,9 19,9.7 19,10.5 C 19,11.3 18.3,12 17.5,12 Z"
+                                                      Fill="White"
+                                                      Width="13" Height="13"
+                                                      Stretch="Uniform"
+                                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                             </Border>
                                         </RadioButton>
                                     </WrapPanel>
+
+                                    <!-- Custom Color Configuration Panel -->
+                                    <Border x:Name="CustomColorPanel"
+                                            Margin="0,8,0,0"
+                                            Padding="10,8"
+                                            Background="{DynamicResource BgTertiaryBrush}"
+                                            BorderBrush="{DynamicResource BorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="6"
+                                            Visibility="Collapsed">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Border x:Name="CustomColorPreviewBox"
+                                                    Width="24" Height="24"
+                                                    CornerRadius="4"
+                                                    Background="#8B5CF6"
+                                                    BorderBrush="{DynamicResource BorderBrush}"
+                                                    BorderThickness="1"
+                                                    Margin="0,0,10,0"/>
+
+                                            <TextBlock Text="Hex:"
+                                                       FontSize="12"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                                       VerticalAlignment="Center"
+                                                       Margin="0,0,6,0"/>
+
+                                            <TextBox x:Name="CustomColorHexInput"
+                                                     Width="85"
+                                                     Height="26"
+                                                     FontSize="12"
+                                                     FontFamily="Cascadia Code, Consolas, Courier New, monospace"
+                                                     FontWeight="SemiBold"
+                                                     Text="#8B5CF6"
+                                                     MaxLength="7"
+                                                     VerticalContentAlignment="Center"
+                                                     Padding="4,2"
+                                                     Background="{DynamicResource BgInputBrush}"
+                                                     Foreground="{DynamicResource TextPrimaryBrush}"
+                                                     BorderBrush="{DynamicResource BorderBrush}"
+                                                     TextChanged="CustomColorHexInput_TextChanged"
+                                                     Margin="0,0,10,0"/>
+
+                                            <Button x:Name="PickCustomColorBtn"
+                                                    Content="Choose Color..."
+                                                    Style="{StaticResource SecondaryButtonStyle}"
+                                                    FontSize="11.5"
+                                                    Padding="10,3"
+                                                    Height="26"
+                                                    Cursor="Hand"
+                                                    Click="PickCustomColorBtn_Click"
+                                                    Margin="0,0,14,0"/>
+
+                                            <TextBlock Text="Presets:"
+                                                       FontSize="11"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       VerticalAlignment="Center"
+                                                       Margin="0,0,8,0"/>
+
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <Border Width="18" Height="18" CornerRadius="9" Background="#14B8A6" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Margin="0,0,5,0" Cursor="Hand" ToolTip="Teal (#14B8A6)" Tag="#14B8A6" MouseLeftButtonUp="CustomPresetDot_Click"/>
+                                                <Border Width="18" Height="18" CornerRadius="9" Background="#D946EF" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Margin="0,0,5,0" Cursor="Hand" ToolTip="Fuchsia (#D946EF)" Tag="#D946EF" MouseLeftButtonUp="CustomPresetDot_Click"/>
+                                                <Border Width="18" Height="18" CornerRadius="9" Background="#84CC16" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Margin="0,0,5,0" Cursor="Hand" ToolTip="Lime (#84CC16)" Tag="#84CC16" MouseLeftButtonUp="CustomPresetDot_Click"/>
+                                                <Border Width="18" Height="18" CornerRadius="9" Background="#F59E0B" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Margin="0,0,5,0" Cursor="Hand" ToolTip="Amber (#F59E0B)" Tag="#F59E0B" MouseLeftButtonUp="CustomPresetDot_Click"/>
+                                                <Border Width="18" Height="18" CornerRadius="9" Background="#F43F5E" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Margin="0,0,5,0" Cursor="Hand" ToolTip="Ruby (#F43F5E)" Tag="#F43F5E" MouseLeftButtonUp="CustomPresetDot_Click"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
 
                                     <!-- Backdrop Translucency Checkbox -->
                                     <CheckBox x:Name="EnableBackdropEffectsCheck"

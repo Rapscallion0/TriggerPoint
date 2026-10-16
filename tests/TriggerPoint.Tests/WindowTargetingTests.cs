@@ -53,5 +53,85 @@ public class WindowTargetingTests
         Assert.False(TriggerPoint.Core.Models.ContextFilter.IsKnownBrowser(null));
         Assert.False(TriggerPoint.Core.Models.ContextFilter.IsKnownBrowser(string.Empty));
     }
+
+    [Fact]
+    public void WindowTargetHighlightView_CanInstantiateOnStaThread()
+    {
+        Exception? caught = null;
+        var thread = new System.Threading.Thread(() =>
+        {
+            try
+            {
+                var view = new TriggerPoint.UI.Views.WindowTargetHighlightView();
+                Assert.NotNull(view);
+                Assert.True(view.Topmost);
+                Assert.False(view.IsHitTestVisible);
+            }
+            catch (Exception ex)
+            {
+                caught = ex;
+            }
+        });
+        thread.SetApartmentState(System.Threading.ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        Assert.Null(caught);
+    }
+
+    [Fact]
+    public void WindowTargetTooltipView_CanInstantiateAndSetPromptOnStaThread()
+    {
+        Exception? caught = null;
+        var thread = new System.Threading.Thread(() =>
+        {
+            try
+            {
+                var view = new TriggerPoint.UI.Views.WindowTargetTooltipView();
+                Assert.NotNull(view);
+                Assert.True(view.Topmost);
+                Assert.False(view.IsHitTestVisible);
+
+                view.SetPrompt("Click to select: Notepad");
+                Assert.Equal("Click to select: Notepad", view.TooltipTitleText.Text);
+
+                view.SetPrompt("");
+                Assert.Equal("Click application window to select", view.TooltipTitleText.Text);
+            }
+            catch (Exception ex)
+            {
+                caught = ex;
+            }
+        });
+        thread.SetApartmentState(System.Threading.ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        Assert.Null(caught);
+    }
+
+    [Fact]
+    public void WindowTargetingOverlay_CanInstantiateOnStaThread()
+    {
+        Exception? caught = null;
+        var thread = new System.Threading.Thread(() =>
+        {
+            try
+            {
+                var overlay = new TriggerPoint.UI.Views.WindowTargetingOverlay(null, "Select window test");
+                Assert.NotNull(overlay);
+                Assert.Equal(IntPtr.Zero, overlay.TargetHwnd);
+            }
+            catch (Exception ex)
+            {
+                caught = ex;
+            }
+        });
+        thread.SetApartmentState(System.Threading.ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        Assert.Null(caught);
+    }
 }
 

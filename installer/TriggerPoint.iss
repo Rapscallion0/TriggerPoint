@@ -4,7 +4,7 @@
 ; =====================================================================
 
 #ifndef AppVersion
-#define AppVersion "2.2.2"
+#define AppVersion "2.2.3"
 #endif
 
 #ifndef PublishDir
@@ -77,7 +77,7 @@ Root: HKCU; Subkey: "Software\Classes\Directory\Background\shell\TriggerPoint\co
 
 [Run]
 Filename: "{app}\TriggerPoint.exe"; Description: "{cm:LaunchProgram,TriggerPoint}"; Flags: nowait postinstall skipifsilent
-Filename: "{app}\TriggerPoint.exe"; Flags: nowait runasoriginaluser skipifnotsilent; Check: ShouldLaunchOnSilent
+Filename: "{app}\TriggerPoint.exe"; Parameters: "--post-update"; Flags: nowait skipifnotsilent; Check: CheckAndMarkSilentLaunch
 
 [Code]
 procedure ExitProcess(uExitCode: Integer); external 'ExitProcess@kernel32.dll stdcall';
@@ -99,6 +99,7 @@ var
   ThemeRadioDark: TRadioButton;
   ThemeRadioLight: TRadioButton;
   StarterPackCheckBox: TCheckBox;
+  HasRelaunched: Boolean;
 
 function GetNextVersionPart(var V: string): Integer;
 var
@@ -225,12 +226,18 @@ begin
       Exit;
     end;
   end;
+  if Pos(UpperCase(ParamName), UpperCase(GetCmdTail)) > 0 then
+    Result := True;
 end;
 
 function ShouldLaunchOnSilent(): Boolean;
-var
-  InstallMode: Integer;
 begin
+  if HasRelaunched then
+  begin
+    Result := False;
+    Exit;
+  end;
+
   // Explicit opt-out takes highest precedence
   if HasParam('/NOLAUNCH') or HasParam('/NORELAUNCH') then
   begin
@@ -238,26 +245,17 @@ begin
     Exit;
   end;
 
-  // Explicit opt-in takes precedence
-  if HasParam('/RELAUNCH') or HasParam('/AUTOSTART') or HasParam('/LAUNCH') then
+  // Explicit opt-in or default for silent upgrades
+  Result := True;
+end;
+
+function CheckAndMarkSilentLaunch(): Boolean;
+begin
+  Result := ShouldLaunchOnSilent();
+  if Result then
   begin
-    Result := True;
-    Exit;
+    HasRelaunched := True;
   end;
-
-  // If already detected, use ExistingInstallMode; otherwise detect now
-  InstallMode := ExistingInstallMode;
-  if InstallMode = 0 then
-    InstallMode := DetectExistingInstallation();
-
-  // If updating or repairing an existing installation, automatically relaunch
-  if InstallMode <> 0 then
-  begin
-    Result := True;
-    Exit;
-  end;
-
-  Result := False;
 end;
 
 procedure InitializeWizard();
@@ -484,6 +482,7 @@ procedure CurStepChanged(CurStep: TSetupStep);
 var
   AppDataDir, SettingsPath, TriggersPath, SettingsJson: string;
   SelectedThemeVal: Integer;
+  ResultCode: Integer;
 begin
   if (CurStep = ssPostInstall) and (ExistingInstallMode = 0) and 
      (not FileExists(ExpandConstant('{userappdata}\TriggerPoint\appsettings.json'))) then
@@ -519,6 +518,15 @@ begin
       begin
         SaveStringToFile(TriggersPath, '[]', False);
       end;
+    end;
+  end;
+
+  if CurStep = ssDone then
+  begin
+    if WizardSilent and ShouldLaunchOnSilent() and (not HasRelaunched) then
+    begin
+      HasRelaunched := True;
+      Exec(ExpandConstant('{app}\TriggerPoint.exe'), '--post-update', '', SW_SHOWNORMAL, ewNoWait, ResultCode);
     end;
   end;
 end;

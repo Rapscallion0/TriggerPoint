@@ -358,6 +358,11 @@ public class PaletteItemViewModel
         }
     }
 
+    public ImageSource? AppIconSource { get; }
+    public bool HasAppIcon => AppIconSource != null;
+    public Visibility AppIconVisibility => HasAppIcon ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility StandaloneIconVisibility => HasAppIcon ? Visibility.Collapsed : Visibility.Visible;
+
     public Visibility IsFolder => (Item != null && Item.ActionType == ActionType.Folder && !IsSectionHeader && !IsServiceItem) ? Visibility.Visible : Visibility.Collapsed;
 
     public bool CanRevealInExplorer
@@ -455,6 +460,7 @@ public class PaletteItemViewModel
         IsSectionHeader = false;
         SectionHeaderText = string.Empty;
         HeaderBorderThickness = new Thickness(0);
+        AppIconSource = Win32IconService.GetActionIcon(item);
         HighlightedNameSegments = BuildHighlightedSegments(item?.Name ?? string.Empty, matchResult?.MatchedIndices);
     }
 

@@ -488,9 +488,9 @@ public class GitHubUpdateService : IUpdateService
         scriptContent.AppendLine("@echo off");
         scriptContent.AppendLine("setlocal");
         scriptContent.AppendLine($"set TARGET_PID={pid}");
-        scriptContent.AppendLine($"set APP_DIR=\"{appDir.TrimEnd('\\')}\"");
-        scriptContent.AppendLine($"set STAGED_DIR=\"{stagedDir.TrimEnd('\\')}\"");
-        scriptContent.AppendLine($"set TARGET_EXE=\"{exePath}\"");
+        scriptContent.AppendLine($"set \"APP_DIR={appDir.TrimEnd('\\').Trim('"')}\"");
+        scriptContent.AppendLine($"set \"STAGED_DIR={stagedDir.TrimEnd('\\').Trim('"')}\"");
+        scriptContent.AppendLine($"set \"TARGET_EXE={exePath.Trim('"')}\"");
         scriptContent.AppendLine();
         scriptContent.AppendLine(":wait_loop");
         scriptContent.AppendLine("tasklist /fi \"PID eq %TARGET_PID%\" 2>nul | findstr /i \"%TARGET_PID%\" >nul");
@@ -501,11 +501,11 @@ public class GitHubUpdateService : IUpdateService
         scriptContent.AppendLine();
         scriptContent.AppendLine("timeout /t 1 /nobreak >nul");
         scriptContent.AppendLine();
-        scriptContent.AppendLine("robocopy %STAGED_DIR% %APP_DIR% /E /XD data logs backups update /XF portable.dat /NP /NFL /NDL /NJH /NJS >nul");
+        scriptContent.AppendLine("robocopy \"%STAGED_DIR%\" \"%APP_DIR%\" /E /XD data logs backups update /XF portable.dat /NP /NFL /NDL /NJH /NJS >nul");
         scriptContent.AppendLine();
-        scriptContent.AppendLine("rmdir /s /q %STAGED_DIR% >nul 2>nul");
+        scriptContent.AppendLine("rmdir /s /q \"%STAGED_DIR%\" >nul 2>nul");
         scriptContent.AppendLine();
-        scriptContent.AppendLine("start \"\" %TARGET_EXE%");
+        scriptContent.AppendLine("start \"\" \"%TARGET_EXE%\" --post-update");
         scriptContent.AppendLine();
         scriptContent.AppendLine("(goto) 2>nul & del \"%~f0\" & exit");
 

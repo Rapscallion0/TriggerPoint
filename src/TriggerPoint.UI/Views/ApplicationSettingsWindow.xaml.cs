@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using Microsoft.Win32;
 using Serilog;
 using TriggerPoint.Core.Contracts;
@@ -31,6 +32,8 @@ public partial class ApplicationSettingsWindow : Window
     private bool _savedExplorerMenuEnabled;
     private ThemePreference _initialTheme;
     private AccentColorChoice _initialAccent;
+    private string? _initialCustomHex;
+    private string? _currentCustomHex;
     private bool _isAppearanceLoaded;
     private bool _settingsSaved;
 
@@ -78,7 +81,7 @@ public partial class ApplicationSettingsWindow : Window
             if (!_settingsSaved)
             {
                 ThemeManager.ApplyPreference(_initialTheme);
-                ThemeManager.ApplyAccentColor(_initialAccent);
+                ThemeManager.ApplyAccentColor(_initialAccent, _initialCustomHex);
             }
         };
     }
@@ -229,6 +232,12 @@ public partial class ApplicationSettingsWindow : Window
             // Populate Theme & Visuals
             _initialTheme = _currentSettings.Theme;
             _initialAccent = _currentSettings.AccentColor;
+            _initialCustomHex = _currentSettings.CustomAccentHex;
+            _currentCustomHex = _currentSettings.CustomAccentHex;
+            if (!string.IsNullOrWhiteSpace(_currentCustomHex))
+            {
+                UpdateCustomColorDisplay(_currentCustomHex);
+            }
 
             ThemeCombo.SelectedIndex = _currentSettings.Theme switch
             {
@@ -401,24 +410,39 @@ public partial class ApplicationSettingsWindow : Window
         {
             case AccentColorChoice.ElectricViolet:
                 AccentRadioElectricViolet.IsChecked = true;
+                CustomColorPanel.Visibility = Visibility.Collapsed;
                 break;
             case AccentColorChoice.CyberBlue:
                 AccentRadioCyberBlue.IsChecked = true;
+                CustomColorPanel.Visibility = Visibility.Collapsed;
                 break;
             case AccentColorChoice.EmeraldGreen:
                 AccentRadioEmeraldGreen.IsChecked = true;
+                CustomColorPanel.Visibility = Visibility.Collapsed;
                 break;
             case AccentColorChoice.SunsetOrange:
                 AccentRadioSunsetOrange.IsChecked = true;
+                CustomColorPanel.Visibility = Visibility.Collapsed;
                 break;
             case AccentColorChoice.RoseCrimson:
                 AccentRadioRoseCrimson.IsChecked = true;
+                CustomColorPanel.Visibility = Visibility.Collapsed;
                 break;
             case AccentColorChoice.WindowsSystem:
                 AccentRadioWindowsSystem.IsChecked = true;
+                CustomColorPanel.Visibility = Visibility.Collapsed;
+                break;
+            case AccentColorChoice.Custom:
+                AccentRadioCustom.IsChecked = true;
+                CustomColorPanel.Visibility = Visibility.Visible;
+                if (!string.IsNullOrWhiteSpace(_currentCustomHex))
+                {
+                    UpdateCustomColorDisplay(_currentCustomHex);
+                }
                 break;
             default:
                 AccentRadioIndigo.IsChecked = true;
+                CustomColorPanel.Visibility = Visibility.Collapsed;
                 break;
         }
     }
@@ -427,7 +451,90 @@ public partial class ApplicationSettingsWindow : Window
     {
         if (sender is RadioButton { Tag: string tagStr } && Enum.TryParse<AccentColorChoice>(tagStr, out var choice))
         {
-            ThemeManager.ApplyAccentColor(choice);
+            CustomColorPanel.Visibility = choice == AccentColorChoice.Custom ? Visibility.Visible : Visibility.Collapsed;
+            if (choice == AccentColorChoice.Custom)
+            {
+                if (string.IsNullOrWhiteSpace(_currentCustomHex))
+                {
+                    _currentCustomHex = "#8B5CF6";
+                    UpdateCustomColorDisplay(_currentCustomHex);
+                }
+                ThemeManager.ApplyAccentColor(AccentColorChoice.Custom, _currentCustomHex);
+            }
+            else
+            {
+                ThemeManager.ApplyAccentColor(choice);
+            }
+        }
+    }
+
+    private void CustomColorHexInput_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (!_isAppearanceLoaded) return;
+        string text = CustomColorHexInput.Text.Trim();
+        if (!text.StartsWith('#'))
+        {
+            text = "#" + text;
+        }
+
+        if (text.Length == 7 && int.TryParse(text[1..], System.Globalization.NumberStyles.HexNumber, null, out _))
+        {
+            _currentCustomHex = text.ToUpperInvariant();
+            var col = ThemeManager.ParseHexColor(_currentCustomHex, Color.FromRgb(139, 92, 246));
+            var brush = new SolidColorBrush(col);
+            CustomAccentSwatchBorder.Background = brush;
+            CustomColorPreviewBox.Background = brush;
+
+            if (AccentRadioCustom.IsChecked == true)
+            {
+                ThemeManager.ApplyAccentColor(AccentColorChoice.Custom, _currentCustomHex);
+            }
+        }
+    }
+
+    private void PickCustomColorBtn_Click(object sender, RoutedEventArgs e)
+    {
+        var picker = new ColorPickerDialog(_currentCustomHex ?? "#8B5CF6", _currentSettings.CustomPaletteColors)
+        {
+            Owner = this
+        };
+
+        if (picker.ShowDialog() == true)
+        {
+            _currentSettings.CustomPaletteColors = picker.GetCustomColors();
+            SetCustomHex(picker.SelectedHex);
+        }
+    }
+
+    private void CustomPresetDot_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: string hexTag })
+        {
+            SetCustomHex(hexTag);
+        }
+    }
+
+    private void SetCustomHex(string hex)
+    {
+        _currentCustomHex = hex.ToUpperInvariant();
+        UpdateCustomColorDisplay(_currentCustomHex);
+        if (AccentRadioCustom.IsChecked != true)
+        {
+            AccentRadioCustom.IsChecked = true;
+            CustomColorPanel.Visibility = Visibility.Visible;
+        }
+        ThemeManager.ApplyAccentColor(AccentColorChoice.Custom, _currentCustomHex);
+    }
+
+    private void UpdateCustomColorDisplay(string hex)
+    {
+        var col = ThemeManager.ParseHexColor(hex, Color.FromRgb(139, 92, 246));
+        var brush = new SolidColorBrush(col);
+        CustomAccentSwatchBorder.Background = brush;
+        CustomColorPreviewBox.Background = brush;
+        if (CustomColorHexInput.Text != hex)
+        {
+            CustomColorHexInput.Text = hex;
         }
     }
 
@@ -446,6 +553,7 @@ public partial class ApplicationSettingsWindow : Window
 
     private AccentColorChoice GetSelectedAccentChoice()
     {
+        if (AccentRadioCustom.IsChecked == true) return AccentColorChoice.Custom;
         if (AccentRadioElectricViolet.IsChecked == true) return AccentColorChoice.ElectricViolet;
         if (AccentRadioCyberBlue.IsChecked == true) return AccentColorChoice.CyberBlue;
         if (AccentRadioEmeraldGreen.IsChecked == true) return AccentColorChoice.EmeraldGreen;
@@ -582,6 +690,7 @@ public partial class ApplicationSettingsWindow : Window
             _currentSettings.Theme = themePref;
             var accentChoice = GetSelectedAccentChoice();
             _currentSettings.AccentColor = accentChoice;
+            _currentSettings.CustomAccentHex = _currentCustomHex;
             bool runAsAdmin = RunAsAdminStartupCheck.IsChecked == true;
             _currentSettings.RunAtStartup = runStartup;
             _currentSettings.RunAsAdminAtStartup = runAsAdmin;
@@ -651,7 +760,7 @@ public partial class ApplicationSettingsWindow : Window
 
             // 3. Apply theme and accent preference immediately
             ThemeManager.ApplyPreference(themePref);
-            ThemeManager.ApplyAccentColor(accentChoice);
+            ThemeManager.ApplyAccentColor(accentChoice, _currentCustomHex);
             _settingsSaved = true;
 
             // 4. Configure Windows Startup Registry Key / Task Scheduler
@@ -938,7 +1047,7 @@ public partial class ApplicationSettingsWindow : Window
         if (!_settingsSaved)
         {
             ThemeManager.ApplyPreference(_initialTheme);
-            ThemeManager.ApplyAccentColor(_initialAccent);
+            ThemeManager.ApplyAccentColor(_initialAccent, _initialCustomHex);
         }
         DialogResult = false;
         Close();

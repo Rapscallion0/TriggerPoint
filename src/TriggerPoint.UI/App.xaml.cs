@@ -165,8 +165,10 @@ public partial class App : Application
             .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] ({SourceContext}) {Message:lj}{NewLine}{Exception}")
             .CreateLogger();
 
+        var startupArgs = e.Args ?? [];
+
         Log.Information("TriggerPoint daemon started. Version: {Version}, LogLevel: {LogLevel}, Retention: {Retention}d, Threshold: {SplitThreshold}MB, Args: {Args}", 
-            typeof(App).Assembly.GetName().Version, appSettings.LogLevel, appSettings.LogRetentionDays, appSettings.LogSplitThresholdMb, string.Join(" ", e.Args));
+            typeof(App).Assembly.GetName().Version, appSettings.LogLevel, appSettings.LogRetentionDays, appSettings.LogSplitThresholdMb, string.Join(" ", startupArgs));
 
         // 2.1 Upgrade Detection & Pre-Upgrade Immutable Backup
         var runningVersion = typeof(App).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
@@ -180,9 +182,11 @@ public partial class App : Application
             runningVersion = v.Trim().TrimStart('v', 'V');
         }
 
+        bool isVersionUpgrade = false;
         if (!string.IsNullOrWhiteSpace(appSettings.LastKnownAppVersion) &&
             !string.Equals(appSettings.LastKnownAppVersion, runningVersion, StringComparison.OrdinalIgnoreCase))
         {
+            isVersionUpgrade = true;
             Log.Information("Version upgrade detected: v{OldVersion} -> v{NewVersion}. Creating pre-upgrade backup.",
                 appSettings.LastKnownAppVersion, runningVersion);
             try
@@ -211,10 +215,12 @@ public partial class App : Application
             catch { }
         }
 
+        bool isPostUpdate = isVersionUpgrade || startupArgs.Any(a => string.Equals(a, "--post-update", StringComparison.OrdinalIgnoreCase));
+
         // Self-elevation via Task Scheduler if RunAsAdminAtStartup is configured and currently running un-elevated
         if (appSettings.RunAsAdminAtStartup && 
             !TriggerPoint.Infrastructure.Services.WindowsServiceManager.IsRunningElevated() &&
-            !e.Args.Contains("--no-self-elevate", StringComparer.OrdinalIgnoreCase))
+            !startupArgs.Contains("--no-self-elevate", StringComparer.OrdinalIgnoreCase))
         {
             try
             {
@@ -250,7 +256,7 @@ public partial class App : Application
         {
             Log.Information("Secondary instance detected (Scope: {Scope}). Signaling primary instance and shutting down.", scope ?? "default");
             NativeMethods.AllowSetForegroundWindow(NativeMethods.ASFW_ANY);
-            await SingleInstanceService.SignalPrimaryInstanceAsync(string.Join(" ", e.Args), scope);
+            await SingleInstanceService.SignalPrimaryInstanceAsync(string.Join(" ", startupArgs), scope);
             Shutdown();
             return;
         }
@@ -259,7 +265,7 @@ public partial class App : Application
 
         // 4. Initialize Theme Manager with user's theme preference
         _cachedSettings = appSettings;
-        ThemeManager.Initialize(appSettings.Theme, appSettings.AccentColor);
+        ThemeManager.Initialize(appSettings.Theme, appSettings.AccentColor, appSettings.CustomAccentHex);
 
         // 4.0 First-Run Setup (Portable edition or fresh unconfigured install)
         // If triggerpoint.json already exists with valid data or is non-empty, this is NOT a fresh install!
@@ -276,7 +282,7 @@ public partial class App : Application
                           !configAlreadyExists &&
                           (!File.Exists(pathsService.AppSettingsFilePath) || !File.Exists(pathsService.ConfigFilePath));
 
-        if (isFirstRun && !e.Args.Contains("--minimized", StringComparer.OrdinalIgnoreCase))
+        if (isFirstRun && !startupArgs.Contains("--minimized", StringComparer.OrdinalIgnoreCase))
         {
             var setupWindow = new FirstRunSetupWindow(appSettings.Theme, initialStarterPack: true);
             if (setupWindow.ShowDialog() == true)
@@ -477,18 +483,43 @@ public partial class App : Application
             openCheatSheetAction: () => Dispatcher.Invoke(() => OpenCheatSheetHud()),
             cheatSheetHotkeyText: appSettings.CheatSheetHotkey?.DisplayText ?? "Ctrl+Shift+/");
 
-        if (TryExtractAddActionPath(e.Args, out var addPath))
+        if (TryExtractAddActionPath(startupArgs, out var addPath))
         {
             ShowSettingsWindowAndCreateActionForPath(addPath);
+        }
+        else if (isPostUpdate)
+        {
+            ShowSettingsWindow();
         }
         else
         {
             // Show action settings window if not configured to start minimized or if launched with --settings
-            bool shouldStartMinimized = appSettings.StartMinimized || e.Args.Contains("--minimized", StringComparer.OrdinalIgnoreCase);
-            if (!shouldStartMinimized || e.Args.Contains("--settings", StringComparer.OrdinalIgnoreCase))
+            bool shouldStartMinimized = appSettings.StartMinimized || startupArgs.Contains("--minimized", StringComparer.OrdinalIgnoreCase);
+            if (!shouldStartMinimized || startupArgs.Contains("--settings", StringComparer.OrdinalIgnoreCase))
             {
                 ShowSettingsWindow();
             }
+        }
+
+        if (isPostUpdate)
+        {
+            _ = Dispatcher.InvokeAsync(async () =>
+            {
+                await Task.Delay(250);
+                ShowSettingsWindow();
+                if (_settingsWindow != null)
+                {
+                    string msg = $"TriggerPoint has been successfully updated to v{runningVersion}!\n\nAll custom shortcuts, actions, and settings have been safely preserved.";
+                    ModernMessageDialog.ShowAlert(
+                        _settingsWindow,
+                        "🎉 Update Installed Successfully",
+                        msg,
+                        ModernDialogType.Info);
+                }
+                toastService.ShowSuccess(
+                    "TriggerPoint Updated",
+                    $"Successfully updated to v{runningVersion}!");
+            }, System.Windows.Threading.DispatcherPriority.Loaded);
         }
 
         // 10. Defer background maintenance (recycle bin purge & shortcut health check) by 3 seconds for instant cold startup
@@ -519,7 +550,7 @@ public partial class App : Application
             }
         });
 
-        // 11. Optional delayed startup update check and "What's New" notification
+        // 11. Optional delayed startup update check
         _ = Task.Run(async () =>
         {
             try
@@ -529,26 +560,6 @@ public partial class App : Application
 
                 var updateService = _serviceProvider?.GetService<IUpdateService>();
                 if (updateService == null) return;
-
-                // Check for "What's New" on first run after update
-                var currentVer = updateService.GetCurrentVersion();
-                if (!string.IsNullOrEmpty(appSettings.LastKnownAppVersion) &&
-                    GitHubUpdateService.CompareVersions(currentVer, appSettings.LastKnownAppVersion) > 0)
-                {
-                    Dispatcher.Invoke(() =>
-                    {
-                        toastService.ShowSuccess(
-                            "TriggerPoint Updated",
-                            $"Successfully updated to v{currentVer}! Zero bloat, maximum speed.");
-                    });
-                    appSettings.LastKnownAppVersion = currentVer;
-                    try { await _repository.SaveSettingsAsync(appSettings); } catch { }
-                }
-                else if (string.IsNullOrEmpty(appSettings.LastKnownAppVersion))
-                {
-                    appSettings.LastKnownAppVersion = currentVer;
-                    try { await _repository.SaveSettingsAsync(appSettings); } catch { }
-                }
 
                 // Check if update check is scheduled
                 if (updateService.ShouldPerformScheduledCheck(appSettings))
