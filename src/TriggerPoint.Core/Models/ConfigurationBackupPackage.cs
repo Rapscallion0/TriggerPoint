@@ -17,6 +17,8 @@ public class ConfigurationBackupPackage
     public DateTime ExportedAt { get; set; } = DateTime.UtcNow;
     public BackupContentType ContentType { get; set; } = BackupContentType.FullBackup;
     public string? ScopeName { get; set; }
+    public string? AuthorNotes { get; set; }
+    public bool IsSanitized { get; set; } = false;
     public int FolderCount { get; set; }
     public int ActionCount { get; set; }
     public AppSettings? Settings { get; set; }

@@ -1,0 +1,234 @@
+<Window x:Class="TriggerPoint.UI.Views.ImportPackageDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Import TriggerPoint Package"
+        Width="820" Height="660"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        KeyDown="Window_KeyDown">
+
+    <Border Background="{DynamicResource BgSecondaryBrush}"
+            BorderBrush="{DynamicResource BorderBrush}"
+            BorderThickness="1"
+            CornerRadius="10"
+            Margin="10">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="24" ShadowDepth="4" Opacity="0.4" Direction="270"/>
+        </Border.Effect>
+
+        <Grid Margin="20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/> <!-- Title Bar -->
+                <RowDefinition Height="Auto"/> <!-- Metadata & Destination -->
+                <RowDefinition Height="Auto"/> <!-- Quick Action Toolbar -->
+                <RowDefinition Height="*"/>    <!-- Items Review List -->
+                <RowDefinition Height="Auto"/> <!-- Footer -->
+            </Grid.RowDefinitions>
+
+            <!-- Title Bar -->
+            <Grid Grid.Row="0" Margin="0,0,0,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="📥" FontSize="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="Import Package &amp; Conflict Resolver" 
+                                   FontSize="15" 
+                                   FontWeight="Bold" 
+                                   Foreground="{DynamicResource TextPrimaryBrush}"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock Text="Review incoming actions, resolve collisions, and specify destination folder." 
+                               FontSize="11.5" 
+                               Foreground="{DynamicResource TextSecondaryBrush}" 
+                               Margin="0,3,0,0"/>
+                </StackPanel>
+                <Button Grid.Column="1" 
+                        Content="✕" 
+                        Style="{StaticResource WindowControlButtonStyle}" 
+                        Width="28" Height="28" 
+                        Click="CancelBtn_Click"/>
+            </Grid>
+
+            <!-- Metadata & Destination Card -->
+            <Border Grid.Row="1"
+                    Background="{DynamicResource CardBgBrush}"
+                    BorderBrush="{DynamicResource CardBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    Padding="12"
+                    Margin="0,0,0,10">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="280"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Left: Package Info -->
+                    <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,16,0">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <TextBlock x:Name="PackageScopeText" Text="Package: Custom Actions" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                            <Border x:Name="SanitizedBadge" Background="{DynamicResource AccentSubtleBrush}" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1" CornerRadius="4" Padding="4,1" Margin="8,0,0,0" Visibility="Collapsed">
+                                <TextBlock Text="🔒 Sanitized" FontSize="9.5" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}"/>
+                            </Border>
+                        </StackPanel>
+                        <TextBlock x:Name="PackageMetaText" Text="Created: Oct 17, 2026 • 5 items" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        <TextBlock x:Name="PackageNotesText" Text="" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,4,0,0" Visibility="Collapsed"/>
+                    </StackPanel>
+
+                    <!-- Right: Destination Folder -->
+                    <StackPanel Grid.Row="0" Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="Import Into Folder:" FontSize="11" FontWeight="Medium" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4"/>
+                        <ComboBox x:Name="DestinationFolderCombo" Style="{StaticResource ModernComboBoxStyle}" FontSize="12"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Quick Action Toolbar -->
+            <Grid Grid.Row="2" Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Bulk Conflict Actions:" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <Button Content="Keep Both All" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="8,3" Margin="0,0,6,0" Click="ResolveKeepBothAll_Click"/>
+                    <Button Content="Overwrite All" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="8,3" Margin="0,0,6,0" Click="ResolveOverwriteAll_Click"/>
+                    <Button Content="Skip Conflicts" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="8,3" Click="ResolveSkipAll_Click"/>
+                </StackPanel>
+                <TextBlock x:Name="ConflictSummaryBadge"
+                           Grid.Column="2"
+                           Text="No conflicts detected"
+                           FontSize="11"
+                           FontWeight="Medium"
+                           Foreground="{DynamicResource SuccessBrush}"
+                           VerticalAlignment="Center"/>
+            </Grid>
+
+            <!-- Items Review Table -->
+            <Border Grid.Row="3"
+                    Background="{DynamicResource CardBgBrush}"
+                    BorderBrush="{DynamicResource CardBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    Margin="0,0,0,12">
+                <ListView x:Name="ReviewListView"
+                          Background="Transparent"
+                          BorderThickness="0"
+                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Setter Property="Padding" Value="6,4"/>
+                            <Setter Property="Margin" Value="0,1"/>
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header="Status" Width="170">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Border Background="{Binding StatusBackgroundBrush}" 
+                                                BorderBrush="{Binding StatusBorderBrush}" 
+                                                BorderThickness="1" 
+                                                CornerRadius="4" 
+                                                Padding="6,2" 
+                                                HorizontalAlignment="Left"
+                                                ToolTip="{Binding ConflictDescription}">
+                                            <TextBlock Text="{Binding StatusText}" 
+                                                       FontSize="10.5" 
+                                                       FontWeight="SemiBold" 
+                                                       Foreground="{Binding StatusForegroundBrush}"/>
+                                        </Border>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+
+                            <GridViewColumn Header="Item Name" Width="210">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding IconSymbol}" FontSize="12" Margin="0,0,6,0" Foreground="{Binding IconBrush}"/>
+                                            <TextBlock Text="{Binding Name}" FontSize="11.5" Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="Medium" TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+
+                            <GridViewColumn Header="Type" Width="90">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding ActionTypeText}" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+
+                            <GridViewColumn Header="Trigger" Width="130">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding TriggerText}" FontSize="11" FontFamily="{StaticResource CodeFont}" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+
+                            <GridViewColumn Header="Resolution" Width="170">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <ComboBox SelectedIndex="{Binding SelectedResolutionIndex, Mode=TwoWay}"
+                                                  Style="{StaticResource ModernComboBoxStyle}"
+                                                  FontSize="11"
+                                                  Height="24"
+                                                  VerticalAlignment="Center"
+                                                  SelectionChanged="ResolutionCombo_SelectionChanged">
+                                            <ComboBoxItem Content="Keep Both (Rename)" Tag="KeepBoth"/>
+                                            <ComboBoxItem Content="Overwrite Existing" Tag="Overwrite"/>
+                                            <ComboBoxItem Content="Skip (Do Not Import)" Tag="Skip"/>
+                                        </ComboBox>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+            </Border>
+
+            <!-- Footer -->
+            <Grid Grid.Row="4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="ImportSummaryFooterText"
+                           Grid.Column="0"
+                           Text="Will import 0 item(s)."
+                           FontSize="11.5"
+                           Foreground="{DynamicResource TextSecondaryBrush}"
+                           VerticalAlignment="Center"/>
+                <Button Grid.Column="1"
+                        Content="Cancel"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        Width="88" Height="30"
+                        Margin="0,0,8,0"
+                        Click="CancelBtn_Click"/>
+                <Button x:Name="ConfirmImportBtn"
+                        Grid.Column="2"
+                        Content="Import Items"
+                        Style="{StaticResource PrimaryAccentButtonStyle}"
+                        Height="30" Padding="14,0"
+                        Click="ConfirmImportBtn_Click"/>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

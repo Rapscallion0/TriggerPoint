@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -79,6 +81,9 @@ public class PaletteItemViewModel
     public bool IsServiceItem { get; init; }
     public WindowsServiceItem? ServiceItem { get; init; }
     public WindowsServiceStatus? ServiceActionStatus { get; init; }
+    public bool IsClipboardItem { get; init; }
+    public ClipboardHistoryItem? ClipboardItem { get; init; }
+    public Visibility PinBadgeVisibility => (IsClipboardItem && ClipboardItem?.IsPinned == true) ? Visibility.Visible : Visibility.Collapsed;
 
     public IReadOnlyList<AlternativeMeasurement> CommonAlternatives =>
         CalcResult?.Alternatives?.Where(a => a.IsCommon).Take(4).ToList() ?? (IReadOnlyList<AlternativeMeasurement>)Array.Empty<AlternativeMeasurement>();
@@ -114,6 +119,18 @@ public class PaletteItemViewModel
         get
         {
             if (IsSectionHeader) return string.Empty;
+            if (IsClipboardItem && ClipboardItem != null)
+            {
+                string rel = FormatRelativeTime(ClipboardItem.CapturedAt);
+                string proc = !string.IsNullOrEmpty(ClipboardItem.SourceProcessName) ? $" from {ClipboardItem.SourceProcessName}" : "";
+                return ClipboardItem.Type switch
+                {
+                    ClipboardItemType.Image => $"Image • {ClipboardItem.ImageWidth}×{ClipboardItem.ImageHeight} • {ClipboardItem.FormattedSize} • Captured {rel}{proc}",
+                    ClipboardItemType.FileList => $"{ClipboardItem.FilePaths?.Count ?? 0} file(s) • {ClipboardItem.FormattedSize} • Captured {rel}{proc}",
+                    ClipboardItemType.RichText => $"Rich Formatted Text • {ClipboardItem.FormattedSize} • Captured {rel}{proc}",
+                    _ => $"{ClipboardItem.FormattedSize} • Captured {rel}{proc}"
+                };
+            }
             if (IsServiceItem && ServiceItem != null)
             {
                 return $"{ServiceItem.ServiceName} • {ServiceItem.StartType} • {ServiceItem.StatusText}";
@@ -158,6 +175,36 @@ public class PaletteItemViewModel
     public string HotkeyText => Item?.Hotkey?.DisplayText ?? string.Empty;
     public Visibility HasHotkey => (!IsSectionHeader && !string.IsNullOrWhiteSpace(HotkeyText)) ? Visibility.Visible : Visibility.Collapsed;
 
+    public bool ShowSnippetKeyword { get; set; } = true;
+    public string KeywordText => (!IsSectionHeader && Item?.ActionType == ActionType.Snippet && !string.IsNullOrWhiteSpace(Item?.Abbreviation))
+        ? Item.Abbreviation
+        : string.Empty;
+    public bool HasKeyword => ShowSnippetKeyword && !string.IsNullOrWhiteSpace(KeywordText);
+    public Visibility KeywordVisibility => HasKeyword ? Visibility.Visible : Visibility.Collapsed;
+
+    public static bool DefaultAbbreviationCaseSensitive { get; set; } = true;
+
+    public string KeywordTooltip
+    {
+        get
+        {
+            if (!HasKeyword || Item == null) return string.Empty;
+            string modeDesc = Item.AbbreviationMode switch
+            {
+                AbbreviationTriggerMode.Delimiter => "Delimiter (expands after space or punctuation)",
+                _ => "Immediate (expands instantly)"
+            };
+            string defaultSettingDesc = DefaultAbbreviationCaseSensitive ? "Case-sensitive" : "Case-insensitive";
+            string caseDesc = Item.AbbreviationCaseSensitive switch
+            {
+                true => "Case-sensitive (Exact match)",
+                false => "Case-insensitive",
+                _ => $"Default: {defaultSettingDesc} (Global setting)"
+            };
+            return $"Trigger Keyword: {KeywordText}\nExpansion Mode: {modeDesc}\nCasing: {caseDesc}";
+        }
+    }
+
     public string FolderBreadcrumb => (!IsSectionHeader && !string.IsNullOrWhiteSpace(ParentPath)) ? $"📁 {ParentPath}" : string.Empty;
     public Visibility HasFolderBreadcrumb => !string.IsNullOrWhiteSpace(FolderBreadcrumb) ? Visibility.Visible : Visibility.Collapsed;
 
@@ -185,6 +232,16 @@ public class PaletteItemViewModel
         get
         {
             if (IsSectionHeader) return string.Empty;
+            if (IsClipboardItem && ClipboardItem != null)
+            {
+                return ClipboardItem.Type switch
+                {
+                    ClipboardItemType.Image => "IMAGE",
+                    ClipboardItemType.FileList => "FILES",
+                    ClipboardItemType.RichText => "RICH TEXT",
+                    _ => "TEXT"
+                };
+            }
             if (IsCalculatorResult) return "CALC";
             if (IsSystemAction) return "SYSTEM";
             if (IsServiceItem && ServiceItem != null) return ServiceItem.Status.ToString().ToUpperInvariant();
@@ -207,12 +264,13 @@ public class PaletteItemViewModel
         }
     }
 
-    public Visibility AdminBadgeVisibility => (!IsSectionHeader && !IsSystemAction && !IsServiceItem && (Item?.Payload?.RunAsAdmin == true || (Item?.ActionType == ActionType.Service && Item?.Payload?.ServiceRunAsAdmin == true))) ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility AdminBadgeVisibility => (!IsSectionHeader && !IsSystemAction && !IsServiceItem && !IsClipboardItem && (Item?.Payload?.RunAsAdmin == true || (Item?.ActionType == ActionType.Service && Item?.Payload?.ServiceRunAsAdmin == true))) ? Visibility.Visible : Visibility.Collapsed;
 
     public Brush TypeForegroundBrush
     {
         get
         {
+            if (IsClipboardItem) return Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.CornflowerBlue;
             if (IsCalculatorResult || IsSystemAction) return Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.CornflowerBlue;
             if (IsServiceItem && ServiceItem != null)
             {
@@ -250,6 +308,7 @@ public class PaletteItemViewModel
     {
         get
         {
+            if (IsClipboardItem) return Application.Current.TryFindResource("AccentSubtleBrush") as Brush ?? new SolidColorBrush(Color.FromArgb(0x18, 0x00, 0x7A, 0xCC));
             if (IsCalculatorResult || IsSystemAction) return Application.Current.TryFindResource("AccentSubtleBrush") as Brush ?? new SolidColorBrush(Color.FromArgb(0x18, 0x00, 0x7A, 0xCC));
             if (IsServiceItem && ServiceItem != null)
             {
@@ -287,6 +346,7 @@ public class PaletteItemViewModel
     {
         get
         {
+            if (IsClipboardItem) return Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.CornflowerBlue;
             if (IsSystemAction) return Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.CornflowerBlue;
             if (IsServiceItem && ServiceItem != null) return TypeForegroundBrush;
             if (Item?.ActionType == ActionType.Service && ServiceActionStatus.HasValue && ServiceActionStatus.Value != WindowsServiceStatus.Unknown)
@@ -310,6 +370,16 @@ public class PaletteItemViewModel
         get
         {
             if (IsSectionHeader) return string.Empty;
+            if (IsClipboardItem && ClipboardItem != null)
+            {
+                return ClipboardItem.Type switch
+                {
+                    ClipboardItemType.Image => "🖼️",
+                    ClipboardItemType.FileList => "📁",
+                    ClipboardItemType.RichText => "🎨",
+                    _ => "📝"
+                };
+            }
             if (IsCalculatorResult) return "🧮";
             if (IsServiceItem && ServiceItem != null) return ServiceItem.StatusBadgeEmoji;
             if (Item?.ActionType == ActionType.Service && ServiceActionStatus.HasValue && ServiceActionStatus.Value != WindowsServiceStatus.Unknown)
@@ -343,6 +413,7 @@ public class PaletteItemViewModel
     {
         get
         {
+            if (IsClipboardItem) return Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.CornflowerBlue;
             if (IsSystemAction) return Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.CornflowerBlue;
             if (IsServiceItem && ServiceItem != null) return TypeForegroundBrush;
             string key = Item?.ActionType switch
@@ -363,13 +434,21 @@ public class PaletteItemViewModel
     public Visibility AppIconVisibility => HasAppIcon ? Visibility.Visible : Visibility.Collapsed;
     public Visibility StandaloneIconVisibility => HasAppIcon ? Visibility.Collapsed : Visibility.Visible;
 
-    public Visibility IsFolder => (Item != null && Item.ActionType == ActionType.Folder && !IsSectionHeader && !IsServiceItem) ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility IsFolder => (Item != null && Item.ActionType == ActionType.Folder && !IsSectionHeader && !IsServiceItem && !IsClipboardItem) ? Visibility.Visible : Visibility.Collapsed;
 
     public bool CanRevealInExplorer
     {
         get
         {
             if (IsSectionHeader || IsSystemAction || Item == null) return false;
+            if (IsClipboardItem && ClipboardItem != null)
+            {
+                if (ClipboardItem.Type == ClipboardItemType.FileList && ClipboardItem.FilePaths != null && ClipboardItem.FilePaths.Count > 0)
+                    return File.Exists(ClipboardItem.FilePaths[0]) || Directory.Exists(ClipboardItem.FilePaths[0]);
+                if (ClipboardItem.Type == ClipboardItemType.Image && !string.IsNullOrEmpty(ClipboardItem.ImagePath))
+                    return File.Exists(ClipboardItem.ImagePath);
+                return false;
+            }
             return ActionShortcutRelevanceHelper.CanRevealInExplorer(Item);
         }
     }
@@ -379,6 +458,14 @@ public class PaletteItemViewModel
         get
         {
             if (IsSectionHeader) return string.Empty;
+            if (IsClipboardItem && ClipboardItem != null)
+            {
+                if (ClipboardItem.Type == ClipboardItemType.FileList && ClipboardItem.FilePaths != null)
+                {
+                    return string.Join(" • ", ClipboardItem.FilePaths.Take(3).Select(Path.GetFileName));
+                }
+                return ClipboardItem.PreviewText;
+            }
             if (IsServiceItem && ServiceItem != null)
             {
                 return $"Service: {ServiceItem.DisplayName} ({ServiceItem.ServiceName}) • Status: {ServiceItem.StatusText} • Startup: {ServiceItem.StartType}";
@@ -436,11 +523,12 @@ public class PaletteItemViewModel
 
     public IReadOnlyList<HighlightSegment> HighlightedNameSegments { get; }
 
-    public PaletteItemViewModel(TriggerItem item, FuzzyMatchResult? matchResult, string? parentPath = null, WindowsServiceStatus? serviceActionStatus = null)
+    public PaletteItemViewModel(TriggerItem item, FuzzyMatchResult? matchResult, string? parentPath = null, WindowsServiceStatus? serviceActionStatus = null, bool showSnippetKeywords = true)
     {
         Item = item;
         MatchResult = matchResult;
         ParentPath = parentPath;
+        ShowSnippetKeyword = showSnippetKeywords;
         if (serviceActionStatus.HasValue)
         {
             ServiceActionStatus = serviceActionStatus;
@@ -482,6 +570,26 @@ public class PaletteItemViewModel
         SectionHeaderText = string.Empty;
         HeaderBorderThickness = new Thickness(0);
         HighlightedNameSegments = BuildHighlightedSegments(serviceItem.DisplayName, matchedIndices);
+    }
+
+    public PaletteItemViewModel(ClipboardHistoryItem clipItem, IReadOnlyList<int>? matchedIndices = null, double score = 0)
+    {
+        ClipboardItem = clipItem;
+        IsClipboardItem = true;
+        Item = new TriggerItem
+        {
+            Id = clipItem.Id,
+            Name = clipItem.DisplayTitle,
+            Description = clipItem.PlainText ?? clipItem.PreviewText,
+            ActionType = ActionType.Snippet,
+            Payload = new ActionPayload { SnippetTemplate = clipItem.PlainText ?? string.Empty }
+        };
+        MatchResult = matchedIndices != null ? new FuzzyMatchResult(Item, score, matchedIndices) : null;
+        ParentPath = null;
+        IsSectionHeader = false;
+        SectionHeaderText = string.Empty;
+        HeaderBorderThickness = new Thickness(0);
+        HighlightedNameSegments = BuildHighlightedSegments(clipItem.DisplayTitle, matchedIndices);
     }
 
     private PaletteItemViewModel(string sectionHeader, bool hasTopDivider)
@@ -586,6 +694,7 @@ public partial class CommandPaletteView : Window
     private readonly IConfigRepository? _repository;
     private readonly IntPtr _targetHwnd;
     private readonly IWindowsServiceManager _serviceManager;
+    private readonly IClipboardHistoryService? _clipboardService;
     private IReadOnlyList<WindowsServiceItem>? _cachedServices;
 
     private Guid? _currentScopeFolderId;
@@ -598,9 +707,15 @@ public partial class CommandPaletteView : Window
     private readonly DispatcherTimer _feedbackTimer;
     private bool _isLoaded;
     private bool _isCalcPromoted;
+    private bool _showSnippetKeywords = true;
 
     private TriggerItem? _folderConfirmTargetFolder;
     private List<TriggerItem> _folderConfirmResolvedActions = [];
+
+    internal const double DefaultPaletteWidth = 780;
+    internal const double DefaultPaletteHeight = 520;
+    internal const double MinPaletteWidth = 640;
+    internal const double MinPaletteHeight = 360;
 
     private readonly TriggerItem _virtualActionManagerItem;
     private readonly TriggerItem _virtualAppSettingsItem;
@@ -614,6 +729,8 @@ public partial class CommandPaletteView : Window
         new("@folder", "Folders", "Ctrl+5", "📁", CommandPaletteFilterType.Folder),
         new("@service", "Windows Services", "Ctrl+6", "⚙️", CommandPaletteFilterType.Service),
         new("@svc", "Services (Shorthand)", "", "⚙️", CommandPaletteFilterType.Service),
+        new("@clip", "Clipboard History", "Ctrl+7", "📋", CommandPaletteFilterType.Clipboard),
+        new("@c", "Clipboard (Shorthand)", "", "📋", CommandPaletteFilterType.Clipboard),
         new("@calc", "Calculator & Math", "=", "🧮", CommandPaletteFilterType.All),
         new("@current", "Current App Context", "", "🎯", CommandPaletteFilterType.All),
     ];
@@ -624,8 +741,10 @@ public partial class CommandPaletteView : Window
         Guid? scopedFolderId = null,
         string? scopedFolderName = null,
         IntPtr targetHwnd = default,
-        IWindowsServiceManager? serviceManager = null)
-        : this(items, executor, (Application.Current as App)?.Repository, scopedFolderId, scopedFolderName, targetHwnd, serviceManager)
+        IWindowsServiceManager? serviceManager = null,
+        IClipboardHistoryService? clipboardService = null,
+        CommandPaletteFilterType initialFilter = CommandPaletteFilterType.All)
+        : this(items, executor, (Application.Current as App)?.Repository, scopedFolderId, scopedFolderName, targetHwnd, serviceManager, clipboardService, initialFilter)
     {
     }
 
@@ -636,13 +755,18 @@ public partial class CommandPaletteView : Window
         Guid? scopedFolderId = null,
         string? scopedFolderName = null,
         IntPtr targetHwnd = default,
-        IWindowsServiceManager? serviceManager = null)
+        IWindowsServiceManager? serviceManager = null,
+        IClipboardHistoryService? clipboardService = null,
+        CommandPaletteFilterType initialFilter = CommandPaletteFilterType.All)
     {
         InitializeComponent();
         _executor = executor;
         _repository = repository;
+        LoadSavedDimensions();
         _targetHwnd = targetHwnd;
         _serviceManager = serviceManager ?? new WindowsServiceManager();
+        _clipboardService = clipboardService ?? (Application.Current as App)?.ClipboardHistoryService;
+        _activeFilter = initialFilter;
         _currentScopeFolderId = scopedFolderId;
         _currentScopeFolderName = scopedFolderName;
 
@@ -710,6 +834,7 @@ public partial class CommandPaletteView : Window
             {
                 var settings = await _repository.LoadSettingsAsync();
                 _currentSortMode = settings.CommandPaletteSortMode;
+                _showSnippetKeywords = settings.ShowSnippetKeywordsInCommandPalette;
                 UpdateSortButtonText();
                 UpdateSortMenuCheckmarks();
 
@@ -724,6 +849,9 @@ public partial class CommandPaletteView : Window
             catch { }
         }
     }
+
+    private PaletteItemViewModel CreateActionViewModel(TriggerItem item, FuzzyMatchResult? matchResult, string? parentPath = null) =>
+        new(item, matchResult, parentPath, null, _showSnippetKeywords);
 
     private static Dictionary<Guid, string> BuildFolderPaths(IEnumerable<TriggerItem> allItems)
     {
@@ -938,6 +1066,12 @@ public partial class CommandPaletteView : Window
             int spaceIdx = rawQuery.IndexOf(' ');
             effectiveQuery = spaceIdx >= 0 ? rawQuery.Substring(spaceIdx).Trim() : string.Empty;
         }
+        else if (rawQuery.StartsWith("@clip", StringComparison.OrdinalIgnoreCase) || rawQuery.StartsWith("@c ", StringComparison.OrdinalIgnoreCase) || rawQuery.Equals("@c", StringComparison.OrdinalIgnoreCase))
+        {
+            _activeFilter = CommandPaletteFilterType.Clipboard;
+            int spaceIdx = rawQuery.IndexOf(' ');
+            effectiveQuery = spaceIdx >= 0 ? rawQuery.Substring(spaceIdx).Trim() : string.Empty;
+        }
         else if (rawQuery.StartsWith("@all", StringComparison.OrdinalIgnoreCase))
         {
             _activeFilter = CommandPaletteFilterType.All;
@@ -1009,14 +1143,60 @@ public partial class CommandPaletteView : Window
         // 4. Build results list
         var vms = new List<PaletteItemViewModel>();
 
-        if (_activeFilter == CommandPaletteFilterType.Service)
+        if (_activeFilter == CommandPaletteFilterType.Clipboard)
+        {
+            var history = _clipboardService?.GetHistory() ?? [];
+            var clipVms = new List<PaletteItemViewModel>();
+
+            foreach (var clip in history)
+            {
+                if (string.IsNullOrWhiteSpace(effectiveQuery))
+                {
+                    clipVms.Add(new PaletteItemViewModel(clip));
+                }
+                else
+                {
+                    var titleMatch = FuzzyMatcher.MatchText(clip.DisplayTitle, effectiveQuery);
+                    var textMatch = !string.IsNullOrWhiteSpace(clip.PlainText)
+                        ? FuzzyMatcher.MatchText(clip.PlainText, effectiveQuery)
+                        : null;
+
+                    var best = (titleMatch != null && textMatch != null)
+                        ? (titleMatch.Value.Score >= textMatch.Value.Score ? titleMatch : textMatch)
+                        : (titleMatch ?? textMatch);
+
+                    if (best != null)
+                    {
+                        clipVms.Add(new PaletteItemViewModel(clip, best.Value.MatchedIndices, best.Value.Score));
+                    }
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(effectiveQuery))
+            {
+                clipVms = clipVms
+                    .OrderByDescending(x => x.ClipboardItem?.IsPinned == true)
+                    .ThenByDescending(x => x.MatchResult?.Score ?? 0)
+                    .ToList();
+            }
+            else
+            {
+                clipVms = clipVms
+                    .OrderByDescending(x => x.ClipboardItem?.IsPinned == true)
+                    .ThenByDescending(x => x.ClipboardItem?.CapturedAt ?? DateTime.MinValue)
+                    .ToList();
+            }
+
+            vms.AddRange(clipVms);
+        }
+        else if (_activeFilter == CommandPaletteFilterType.Service)
         {
             // Dedicated user-configured service actions are prioritized ABOVE all raw system services
             var dedicatedActions = scopeCandidates.Where(x => x.ActionType == ActionType.Service).ToList();
             var dedicatedVms = new List<PaletteItemViewModel>();
             if (string.IsNullOrWhiteSpace(effectiveQuery))
             {
-                dedicatedVms.AddRange(dedicatedActions.Select(item => new PaletteItemViewModel(
+                dedicatedVms.AddRange(dedicatedActions.Select(item => CreateActionViewModel(
                     item,
                     null,
                     item.ParentId.HasValue && _folderPaths.TryGetValue(item.ParentId.Value, out var path) ? path : null)));
@@ -1024,7 +1204,7 @@ public partial class CommandPaletteView : Window
             else
             {
                 var rankedDedicated = FuzzyMatcher.FilterAndRank(dedicatedActions, effectiveQuery, _currentSortMode);
-                dedicatedVms.AddRange(rankedDedicated.Select(r => new PaletteItemViewModel(
+                dedicatedVms.AddRange(rankedDedicated.Select(r => CreateActionViewModel(
                     r.Item,
                     r,
                     r.Item.ParentId.HasValue && _folderPaths.TryGetValue(r.Item.ParentId.Value, out var path) ? path : null)));
@@ -1066,7 +1246,7 @@ public partial class CommandPaletteView : Window
             var treeOrdered = OrderByActionTree(filteredCandidates, _currentScopeFolderId);
             if (string.IsNullOrWhiteSpace(effectiveQuery))
             {
-                vms.AddRange(treeOrdered.Select(item => new PaletteItemViewModel(
+                vms.AddRange(treeOrdered.Select(item => CreateActionViewModel(
                     item,
                     null,
                     item.ParentId.HasValue && _folderPaths.TryGetValue(item.ParentId.Value, out var path) ? path : null)));
@@ -1074,7 +1254,7 @@ public partial class CommandPaletteView : Window
             else
             {
                 var ranked = FuzzyMatcher.FilterAndRank(treeOrdered, effectiveQuery, _currentSortMode);
-                vms.AddRange(ranked.Select(r => new PaletteItemViewModel(
+                vms.AddRange(ranked.Select(r => CreateActionViewModel(
                     r.Item,
                     r,
                     r.Item.ParentId.HasValue && _folderPaths.TryGetValue(r.Item.ParentId.Value, out var path) ? path : null)));
@@ -1088,20 +1268,20 @@ public partial class CommandPaletteView : Window
             if (recent.Count > 0)
             {
                 vms.Add(PaletteItemViewModel.CreateSectionHeader("RECENT", hasTopDivider: false));
-                vms.AddRange(recent.Select(r => new PaletteItemViewModel(
+                vms.AddRange(recent.Select(r => CreateActionViewModel(
                     r.Item,
                     r,
                     r.Item.ParentId.HasValue && _folderPaths.TryGetValue(r.Item.ParentId.Value, out var path) ? path : null)));
 
                 vms.Add(PaletteItemViewModel.CreateSectionHeader("ALL ACTIONS", hasTopDivider: true));
-                vms.AddRange(alphabetical.Select(r => new PaletteItemViewModel(
+                vms.AddRange(alphabetical.Select(r => CreateActionViewModel(
                     r.Item,
                     r,
                     r.Item.ParentId.HasValue && _folderPaths.TryGetValue(r.Item.ParentId.Value, out var path) ? path : null)));
             }
             else
             {
-                vms.AddRange(alphabetical.Select(r => new PaletteItemViewModel(
+                vms.AddRange(alphabetical.Select(r => CreateActionViewModel(
                     r.Item,
                     r,
                     r.Item.ParentId.HasValue && _folderPaths.TryGetValue(r.Item.ParentId.Value, out var path) ? path : null)));
@@ -1110,7 +1290,7 @@ public partial class CommandPaletteView : Window
         else
         {
             var ranked = FuzzyMatcher.FilterAndRank(filteredCandidates, effectiveQuery, _currentSortMode);
-            vms.AddRange(ranked.Select(r => new PaletteItemViewModel(
+            vms.AddRange(ranked.Select(r => CreateActionViewModel(
                 r.Item,
                 r,
                 r.Item.ParentId.HasValue && _folderPaths.TryGetValue(r.Item.ParentId.Value, out var path) ? path : null)));
@@ -1252,8 +1432,20 @@ public partial class CommandPaletteView : Window
             if (!hasSelectable)
             {
                 EmptyStateCard.Visibility = Visibility.Visible;
-                if (_currentScopeFolderId.HasValue)
+                if (_activeFilter == CommandPaletteFilterType.Clipboard)
                 {
+                    EmptyStateIconText.Text = "📋";
+                    EmptyStateTitleText.Text = string.IsNullOrWhiteSpace(effectiveQuery)
+                        ? "Clipboard history is empty"
+                        : $"No clips matching \"{effectiveQuery}\"";
+                    EmptyStatePromptText.Text = string.IsNullOrWhiteSpace(effectiveQuery)
+                        ? "Copied text, images, and file lists will appear here automatically."
+                        : "Try a different search term or clear the filter.";
+                    CreateActionEmptyBtn.Visibility = Visibility.Collapsed;
+                }
+                else if (_currentScopeFolderId.HasValue)
+                {
+                    CreateActionEmptyBtn.Visibility = Visibility.Visible;
                     if (string.IsNullOrWhiteSpace(effectiveQuery))
                     {
                         EmptyStateIconText.Text = "📁";
@@ -1271,6 +1463,7 @@ public partial class CommandPaletteView : Window
                 }
                 else
                 {
+                    CreateActionEmptyBtn.Visibility = Visibility.Visible;
                     EmptyStateIconText.Text = "🔍";
                     EmptyStateTitleText.Text = "No matching actions found.";
                     EmptyStatePromptText.Text = !string.IsNullOrWhiteSpace(effectiveQuery)
@@ -1501,6 +1694,12 @@ public partial class CommandPaletteView : Window
         }
     }
 
+    internal static string FormatPillCount(string label, int count)
+    {
+        string countStr = count >= 1000 ? "999+" : count.ToString();
+        return $"{label} ({countStr})";
+    }
+
     private void UpdatePillCounts(IEnumerable<TriggerItem> scopeItems)
     {
         var list = scopeItems.ToList();
@@ -1511,16 +1710,23 @@ public partial class CommandPaletteView : Window
         int folderCount = list.Count(x => x.ActionType == ActionType.Folder);
         int dedicatedServiceCount = list.Count(x => x.ActionType == ActionType.Service);
 
-        FilterCountAll.Text = $"All ({allCount})";
-        FilterCountApp.Text = $"Apps ({appCount})";
-        FilterCountSnippet.Text = $"Snippets ({snipCount})";
-        FilterCountWorkflow.Text = $"Workflows ({wfCount})";
-        FilterCountFolder.Text = $"Folders ({folderCount})";
+        FilterCountAll.Text = FormatPillCount("All", allCount);
+        FilterCountApp.Text = FormatPillCount("Apps", appCount);
+        FilterCountSnippet.Text = FormatPillCount("Snippets", snipCount);
+        FilterCountWorkflow.Text = FormatPillCount("Workflows", wfCount);
+        FilterCountFolder.Text = FormatPillCount("Folders", folderCount);
         if (FilterCountService != null)
         {
             int totalServices = (_cachedServices?.Count ?? 0) + dedicatedServiceCount;
-            FilterCountService.Text = $"Services ({totalServices})";
+            FilterCountService.Text = FormatPillCount("Services", totalServices);
         }
+        if (FilterCountClipboard != null)
+        {
+            int clipCount = _clipboardService?.GetHistory()?.Count ?? 0;
+            FilterCountClipboard.Text = FormatPillCount("Clipboard", clipCount);
+        }
+
+        UpdateFilterPillScrollButtons();
     }
 
     private void FilterPillsScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
@@ -1530,6 +1736,42 @@ public partial class CommandPaletteView : Window
             FilterPillsScrollViewer.ScrollToHorizontalOffset(FilterPillsScrollViewer.HorizontalOffset - e.Delta);
             e.Handled = true;
         }
+    }
+
+    private void FilterPillsScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        UpdateFilterPillScrollButtons();
+    }
+
+    internal void UpdateFilterPillScrollButtons()
+    {
+        if (FilterPillsScrollViewer == null) return;
+
+        if (FilterPillScrollLeftBtn != null)
+        {
+            FilterPillScrollLeftBtn.Visibility = FilterPillsScrollViewer.HorizontalOffset > 1
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
+
+        if (FilterPillScrollRightBtn != null)
+        {
+            FilterPillScrollRightBtn.Visibility = (FilterPillsScrollViewer.ScrollableWidth - FilterPillsScrollViewer.HorizontalOffset) > 1
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
+    }
+
+    private void FilterPillScrollLeftBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (FilterPillsScrollViewer == null) return;
+        FilterPillsScrollViewer.ScrollToHorizontalOffset(Math.Max(0, FilterPillsScrollViewer.HorizontalOffset - 120));
+    }
+
+    private void FilterPillScrollRightBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (FilterPillsScrollViewer == null) return;
+        FilterPillsScrollViewer.ScrollToHorizontalOffset(Math.Min(FilterPillsScrollViewer.ScrollableWidth, FilterPillsScrollViewer.HorizontalOffset + 120));
     }
 
     private void UpdateFilterPillsUi()
@@ -1543,6 +1785,23 @@ public partial class CommandPaletteView : Window
         {
             FilterPillService.Tag = _activeFilter == CommandPaletteFilterType.Service ? "Selected" : "";
         }
+        if (FilterPillClipboard != null)
+        {
+            FilterPillClipboard.Tag = _activeFilter == CommandPaletteFilterType.Clipboard ? "Selected" : "";
+        }
+
+        Button? activePill = _activeFilter switch
+        {
+            CommandPaletteFilterType.App => FilterPillApp,
+            CommandPaletteFilterType.Snippet => FilterPillSnippet,
+            CommandPaletteFilterType.Workflow => FilterPillWorkflow,
+            CommandPaletteFilterType.Folder => FilterPillFolder,
+            CommandPaletteFilterType.Service => FilterPillService,
+            CommandPaletteFilterType.Clipboard => FilterPillClipboard,
+            _ => FilterPillAll
+        };
+        activePill?.BringIntoView();
+        UpdateFilterPillScrollButtons();
     }
 
     private void FilterPill_Click(object sender, RoutedEventArgs e)
@@ -1566,6 +1825,10 @@ public partial class CommandPaletteView : Window
         else if (sender == FilterPillService)
         {
             _activeFilter = _activeFilter == CommandPaletteFilterType.Service ? CommandPaletteFilterType.All : CommandPaletteFilterType.Service;
+        }
+        else if (sender == FilterPillClipboard)
+        {
+            _activeFilter = _activeFilter == CommandPaletteFilterType.Clipboard ? CommandPaletteFilterType.All : CommandPaletteFilterType.Clipboard;
         }
         else
         {
@@ -1612,7 +1875,12 @@ public partial class CommandPaletteView : Window
             PreviewDetailText.ToolTip = !string.IsNullOrWhiteSpace(vm.DetailPreviewText) ? vm.DetailPreviewText : null;
 
             // Contextual footer hints
-            if (vm.IsServiceItem && vm.ServiceItem != null)
+            if (vm.IsClipboardItem && vm.ClipboardItem != null)
+            {
+                string pinAction = vm.ClipboardItem.IsPinned ? "Unpin" : "Pin";
+                FooterHintsText.Text = $"Enter Paste   •   Shift+Enter Paste Plain Text   •   Ctrl+P {pinAction}   •   Del Remove";
+            }
+            else if (vm.IsServiceItem && vm.ServiceItem != null)
             {
                 FooterHintsText.Text = "↵ Toggle (Start/Stop)   •   Ctrl+S Start   •   Ctrl+T Stop   •   Ctrl+R Restart   •   Ctrl+↵ Run as Admin";
             }
@@ -1711,6 +1979,7 @@ public partial class CommandPaletteView : Window
         if (PillShortcutWorkflow != null) PillShortcutWorkflow.Visibility = visibility;
         if (PillShortcutFolder != null) PillShortcutFolder.Visibility = visibility;
         if (PillShortcutService != null) PillShortcutService.Visibility = visibility;
+        if (PillShortcutClipboard != null) PillShortcutClipboard.Visibility = visibility;
     }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -1919,7 +2188,18 @@ public partial class CommandPaletteView : Window
                 }
             }
 
-            if (key >= Key.D1 && key <= Key.D6)
+            if (key == Key.P)
+            {
+                if (ResultsListBox.SelectedItem is PaletteItemViewModel selClip && selClip.IsClipboardItem && selClip.ClipboardItem != null)
+                {
+                    _clipboardService?.TogglePin(selClip.ClipboardItem.Id);
+                    FilterResults();
+                    e.Handled = true;
+                    return;
+                }
+            }
+
+            if (key >= Key.D1 && key <= Key.D7)
             {
                 _activeFilter = key switch
                 {
@@ -1928,6 +2208,7 @@ public partial class CommandPaletteView : Window
                     Key.D4 => CommandPaletteFilterType.Workflow,
                     Key.D5 => CommandPaletteFilterType.Folder,
                     Key.D6 => CommandPaletteFilterType.Service,
+                    Key.D7 => CommandPaletteFilterType.Clipboard,
                     _ => CommandPaletteFilterType.All
                 };
                 FilterResults();
@@ -1948,6 +2229,17 @@ public partial class CommandPaletteView : Window
             }
             e.Handled = true;
             return;
+        }
+
+        if (key == Key.Delete)
+        {
+            if (ResultsListBox.SelectedItem is PaletteItemViewModel selClip && selClip.IsClipboardItem && selClip.ClipboardItem != null)
+            {
+                _clipboardService?.DeleteItem(selClip.ClipboardItem.Id);
+                FilterResults();
+                e.Handled = true;
+                return;
+            }
         }
 
         if (key == Key.Escape)
@@ -2027,6 +2319,7 @@ public partial class CommandPaletteView : Window
                     CommandPaletteFilterType.Snippet => CommandPaletteFilterType.Workflow,
                     CommandPaletteFilterType.Workflow => CommandPaletteFilterType.Folder,
                     CommandPaletteFilterType.Folder => CommandPaletteFilterType.Service,
+                    CommandPaletteFilterType.Service => CommandPaletteFilterType.Clipboard,
                     _ => CommandPaletteFilterType.All
                 };
                 FilterResults();
@@ -2078,6 +2371,12 @@ public partial class CommandPaletteView : Window
 
             if (EmptyStateCard.Visibility == Visibility.Visible)
             {
+                if (_activeFilter == CommandPaletteFilterType.Clipboard)
+                {
+                    e.Handled = true;
+                    return;
+                }
+
                 if ((Keyboard.Modifiers & ModifierKeys.Control) != 0 && _currentScopeFolderId.HasValue)
                 {
                     var scopedFolder = _allItems.FirstOrDefault(x => x.Id == _currentScopeFolderId.Value && x.ActionType == ActionType.Folder);
@@ -2129,7 +2428,12 @@ public partial class CommandPaletteView : Window
             string copyText = string.Empty;
             string feedbackMsg = "Copied to clipboard! 📋";
 
-            if (vm.IsCalculatorResult && vm.CalcResult != null)
+            if (vm.IsClipboardItem && vm.ClipboardItem != null)
+            {
+                copyText = vm.ClipboardItem.PlainText ?? string.Empty;
+                feedbackMsg = "Copied to clipboard! 📋";
+            }
+            else if (vm.IsCalculatorResult && vm.CalcResult != null)
             {
                 copyText = vm.CalcResult.FormattedResult;
                 feedbackMsg = $"Copied answer ({vm.CalcResult.FormattedResult})! 📋";
@@ -2273,6 +2577,12 @@ public partial class CommandPaletteView : Window
         (Application.Current as App)?.ShowApplicationSettingsWindow(initialCategory);
     }
 
+    private void ProductivityStatsBtn_Click(object sender, RoutedEventArgs e)
+    {
+        SafeClose();
+        (Application.Current as App)?.ShowApplicationSettingsWindow(ApplicationSettingsWindow.SettingsCategory.Productivity);
+    }
+
     private void HelpOverlayBtn_Click(object sender, RoutedEventArgs e)
     {
         ToggleHelpOverlay();
@@ -2381,6 +2691,7 @@ public partial class CommandPaletteView : Window
         _isCalcPromoted = false;
         try
         {
+            SaveCurrentDimensions();
             if (PrefixAutoCompletePopup != null)
             {
                 PrefixAutoCompletePopup.IsOpen = false;
@@ -2403,6 +2714,101 @@ public partial class CommandPaletteView : Window
         catch { }
     }
 
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        SaveCurrentDimensions();
+        base.OnClosing(e);
+    }
+
+    internal void LoadSavedDimensions()
+    {
+        try
+        {
+            AppSettings? settings = (Application.Current as App)?.CachedSettings;
+            if (settings == null && _repository != null)
+            {
+                settings = _repository.LoadSettingsAsync().GetAwaiter().GetResult();
+            }
+
+            double workWidth = SystemParameters.WorkArea.Width > 0 ? SystemParameters.WorkArea.Width : 1920;
+            double workHeight = SystemParameters.WorkArea.Height > 0 ? SystemParameters.WorkArea.Height : 1080;
+            double maxW = workWidth * 0.95;
+            double maxH = workHeight * 0.95;
+
+            if (settings?.CommandPaletteWidth is double w && w >= MinPaletteWidth)
+            {
+                Width = Math.Clamp(w, MinPaletteWidth, maxW);
+            }
+            if (settings?.CommandPaletteHeight is double h && h >= MinPaletteHeight)
+            {
+                Height = Math.Clamp(h, MinPaletteHeight, maxH);
+            }
+        }
+        catch { }
+    }
+
+    internal void SaveCurrentDimensions()
+    {
+        try
+        {
+            AppSettings? settings = (Application.Current as App)?.CachedSettings;
+            if (settings == null && _repository != null)
+            {
+                settings = _repository.LoadSettingsAsync().GetAwaiter().GetResult();
+            }
+
+            if (settings != null && Width >= MinPaletteWidth && Height >= MinPaletteHeight)
+            {
+                if (settings.CommandPaletteWidth != Width || settings.CommandPaletteHeight != Height)
+                {
+                    settings.CommandPaletteWidth = Width;
+                    settings.CommandPaletteHeight = Height;
+                    if (_repository != null)
+                    {
+                        _ = _repository.SaveSettingsAsync(settings);
+                    }
+                }
+            }
+        }
+        catch { }
+    }
+
+    private void ResizeThumb_DragDelta(object sender, DragDeltaEventArgs e)
+    {
+        var thumb = sender as FrameworkElement;
+        string direction = thumb?.Tag as string ?? "BottomRight";
+
+        double minW = MinWidth > 0 ? MinWidth : MinPaletteWidth;
+        double minH = MinHeight > 0 ? MinHeight : MinPaletteHeight;
+        double workWidth = SystemParameters.WorkArea.Width > 0 ? SystemParameters.WorkArea.Width : 2560;
+        double workHeight = SystemParameters.WorkArea.Height > 0 ? SystemParameters.WorkArea.Height : 1440;
+        double maxW = workWidth * 0.95;
+        double maxH = workHeight * 0.95;
+
+        if (direction is "Right" or "BottomRight")
+        {
+            Width = Math.Clamp(Width + e.HorizontalChange, minW, maxW);
+        }
+        if (direction is "Bottom" or "BottomRight" or "BottomLeft")
+        {
+            Height = Math.Clamp(Height + e.VerticalChange, minH, maxH);
+        }
+        if (direction is "Left" or "BottomLeft")
+        {
+            double newWidth = Math.Clamp(Width - e.HorizontalChange, minW, maxW);
+            double delta = Width - newWidth;
+            Width = newWidth;
+            Left += delta;
+        }
+    }
+
+    private void ResizeGrip_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        Width = DefaultPaletteWidth;
+        Height = DefaultPaletteHeight;
+        e.Handled = true;
+    }
+
     private void ResultsListBox_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
         ExecuteCurrentSelection(DetermineOverride());
@@ -2413,6 +2819,18 @@ public partial class CommandPaletteView : Window
         var vm = ResultsListBox.SelectedItem as PaletteItemViewModel ?? _activeCalcVm;
         if (vm != null && vm.IsSelectable)
         {
+            // Clipboard history item
+            if (vm.IsClipboardItem && vm.ClipboardItem != null)
+            {
+                bool pasteAsPlainText = executionOverride == ExecutionOverride.RevealInExplorer || executionOverride == ExecutionOverride.RunAsAdmin;
+                SafeClose();
+                if (_clipboardService != null)
+                {
+                    _ = _clipboardService.PasteItemAsync(vm.ClipboardItem, pasteAsPlainText, _targetHwnd);
+                }
+                return;
+            }
+
             // Calculator result
             if (vm.IsCalculatorResult)
             {

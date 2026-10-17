@@ -65,27 +65,130 @@
             </StackPanel>
         </Border>
 
-        <!-- Quick Insert Token Chips -->
-        <WrapPanel Margin="0,0,0,8">
-            <!-- Split Token Chip: {date} -->
-            <Border Style="{StaticResource TokenChipSplitCapsuleDateStyle}" ToolTip="Click to insert {date}. Click ▾ or right-click for presets.">
+        <!-- Smart Token Upgrade Banner for legacy {date} tokens -->
+        <Border x:Name="SnippetTokenUpgradeBanner"
+                Background="{DynamicResource AccentSubtleBrush}"
+                BorderBrush="{DynamicResource AccentBrush}"
+                BorderThickness="1"
+                CornerRadius="6"
+                Padding="10,6"
+                Margin="0,0,0,8"
+                Visibility="Collapsed">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0" Text="💡" FontSize="13" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" 
+                           x:Name="SnippetTokenUpgradeMessageText"
+                           Text="This snippet contains legacy {date} tokens. We recommend converting them to unified {datetime} tokens."
+                           FontSize="11.5" 
+                           Foreground="{DynamicResource TextPrimaryBrush}" 
+                           VerticalAlignment="Center"/>
+
+                <Button Grid.Column="2"
+                        x:Name="ConvertDateTokensBtn"
+                        Content="⚡ Convert to {datetime}"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        FontSize="11"
+                        FontWeight="SemiBold"
+                        Padding="8,3"
+                        Margin="8,0,4,0"
+                        Click="ConvertDateTokensBtn_Click"
+                        ToolTip="Automatically upgrade all {date} tokens in this snippet to {datetime}"/>
+
+                <Button Grid.Column="3"
+                        x:Name="DismissDateUpgradeBtn"
+                        Content="✕"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        FontSize="11"
+                        Padding="5,3"
+                        Click="DismissDateUpgradeBtn_Click"
+                        ToolTip="Dismiss notification"/>
+            </Grid>
+        </Border>
+
+        <!-- Token Library Collapsible Header & Hint -->
+        <Grid Margin="0,0,0,6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Button x:Name="TokenLibraryToggleBtn"
+                    Style="{StaticResource TokenLibraryToggleButtonStyle}"
+                    ToolTip="Expand or collapse token library chips"
+                    Click="TokenLibraryToggleBtn_Click">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock x:Name="TokenLibraryChevron" Text="▸" FontSize="11" FontWeight="Bold" Margin="0,0,5,0" Foreground="{DynamicResource AccentBrush}"/>
+                    <TextBlock Text="Token Library" FontSize="11.5" FontWeight="SemiBold">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Button}}" Value="True">
+                                        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </StackPanel>
+            </Button>
+            <TextBlock Grid.Column="1" 
+                       Text="Tip: Type '@' anywhere in the editor to search &amp; insert tokens" 
+                       FontSize="11" 
+                       FontStyle="Italic"
+                       Foreground="{DynamicResource TextMutedBrush}" 
+                       VerticalAlignment="Center" 
+                       HorizontalAlignment="Right"
+                       Margin="8,0,0,0"/>
+        </Grid>
+
+        <!-- Quick Insert Token Chips (Collapsed by default to keep editor clean) -->
+        <WrapPanel x:Name="StaticTokenLibraryPanel" Margin="0,0,0,8" Visibility="Collapsed">
+            <!-- Split Token Chip: {datetime} -->
+            <Border Style="{StaticResource TokenChipSplitCapsuleDateStyle}" ToolTip="Click to insert {datetime}. Click ▾ or right-click for presets.">
                 <Border.ContextMenu>
                     <ContextMenu>
-                        <MenuItem Header="Standard: {date} (2026-09-09)" Click="InsertTokenPreset_Click" Tag="{}{date}"/>
-                        <MenuItem Header="US Format: {date:MM/dd/yyyy}" Click="InsertTokenPreset_Click" Tag="{}{date:MM/dd/yyyy}"/>
-                        <MenuItem Header="European: {date:dd/MM/yyyy}" Click="InsertTokenPreset_Click" Tag="{}{date:dd/MM/yyyy}"/>
-                        <MenuItem Header="Full Day &amp; Date: {date:dddd, MMMM d, yyyy}" Click="InsertTokenPreset_Click" Tag="{}{date:dddd, MMMM d, yyyy}"/>
+                        <!-- Section 1: Date & Time (Combined) -->
+                        <MenuItem Header="🗓️ DATE &amp; TIME (COMBINED)" IsEnabled="False" FontWeight="Bold"/>
+                        <MenuItem Header="Standard: {datetime:yyyy-MM-dd HH:mm}" Click="InsertTokenPreset_Click" Tag="{}{datetime:yyyy-MM-dd HH:mm}"/>
+                        <MenuItem Header="With Seconds: {datetime:yyyy-MM-dd HH:mm:ss}" Click="InsertTokenPreset_Click" Tag="{}{datetime:yyyy-MM-dd HH:mm:ss}"/>
+                        <MenuItem Header="US Full: {datetime:MM/dd/yyyy hh:mm tt}" Click="InsertTokenPreset_Click" Tag="{}{datetime:MM/dd/yyyy hh:mm tt}"/>
+                        <MenuItem Header="ISO 8601: {datetime:s}" Click="InsertTokenPreset_Click" Tag="{}{datetime:s}"/>
+                        <MenuItem Header="Compact Timestamp: {datetime:yyyyMMdd_HHmmss}" Click="InsertTokenPreset_Click" Tag="{}{datetime:yyyyMMdd_HHmmss}"/>
                         <Separator/>
-                        <MenuItem Header="Tomorrow: {date:+1d}" Click="InsertTokenPreset_Click" Tag="{}{date:+1d}"/>
-                        <MenuItem Header="Yesterday: {date:-1d}" Click="InsertTokenPreset_Click" Tag="{}{date:-1d}"/>
-                        <MenuItem Header="Next Week: {date:+7d}" Click="InsertTokenPreset_Click" Tag="{}{date:+7d}"/>
-                        <MenuItem Header="Next Month: {date:+1m}" Click="InsertTokenPreset_Click" Tag="{}{date:+1m}"/>
+                        <!-- Section 2: Date Only -->
+                        <MenuItem Header="📅 DATE ONLY" IsEnabled="False" FontWeight="Bold"/>
+                        <MenuItem Header="Standard ISO: {datetime:yyyy-MM-dd}" Click="InsertTokenPreset_Click" Tag="{}{datetime:yyyy-MM-dd}"/>
+                        <MenuItem Header="US Date: {datetime:MM/dd/yyyy}" Click="InsertTokenPreset_Click" Tag="{}{datetime:MM/dd/yyyy}"/>
+                        <MenuItem Header="European: {datetime:dd/MM/yyyy}" Click="InsertTokenPreset_Click" Tag="{}{datetime:dd/MM/yyyy}"/>
+                        <MenuItem Header="Full Date: {datetime:dddd, MMMM d, yyyy}" Click="InsertTokenPreset_Click" Tag="{}{datetime:dddd, MMMM d, yyyy}"/>
+                        <MenuItem Header="Compact Date: {datetime:yyyyMMdd}" Click="InsertTokenPreset_Click" Tag="{}{datetime:yyyyMMdd}"/>
+                        <Separator/>
+                        <!-- Section 3: Time Only -->
+                        <MenuItem Header="⏰ TIME ONLY" IsEnabled="False" FontWeight="Bold"/>
+                        <MenuItem Header="24-Hour (HH:mm:ss): {datetime:HH:mm:ss}" Click="InsertTokenPreset_Click" Tag="{}{datetime:HH:mm:ss}"/>
+                        <MenuItem Header="12-Hour AM/PM: {datetime:hh:mm tt}" Click="InsertTokenPreset_Click" Tag="{}{datetime:hh:mm tt}"/>
+                        <MenuItem Header="Short 24-Hour: {datetime:HH:mm}" Click="InsertTokenPreset_Click" Tag="{}{datetime:HH:mm}"/>
+                        <Separator/>
+                        <!-- Section 4: Relative Offsets (Calculations) -->
+                        <MenuItem Header="⚡ CALCULATIONS (OFFSETS)" IsEnabled="False" FontWeight="Bold"/>
+                        <MenuItem Header="Tomorrow: {datetime:+1d}" Click="InsertTokenPreset_Click" Tag="{}{datetime:+1d}"/>
+                        <MenuItem Header="Yesterday: {datetime:-1d}" Click="InsertTokenPreset_Click" Tag="{}{datetime:-1d}"/>
+                        <MenuItem Header="Next Week: {datetime:+7d}" Click="InsertTokenPreset_Click" Tag="{}{datetime:+7d}"/>
+                        <MenuItem Header="Next Month: {datetime:+1m}" Click="InsertTokenPreset_Click" Tag="{}{datetime:+1m}"/>
+                        <MenuItem Header="One Hour Later: {datetime:+1h}" Click="InsertTokenPreset_Click" Tag="{}{datetime:+1h}"/>
                     </ContextMenu>
                 </Border.ContextMenu>
                 <StackPanel Orientation="Horizontal">
-                    <Button Content="+ {date}" Style="{StaticResource TokenChipSplitDateMainBtnStyle}" Click="InsertTokenChip_Click" Tag="{}{date}"/>
+                    <Button Content="+ {datetime}" Style="{StaticResource TokenChipSplitDateMainBtnStyle}" Click="InsertTokenChip_Click" Tag="{}{datetime:yyyy-MM-dd HH:mm}"/>
                     <Border Width="1" Background="{DynamicResource TokenDateBrush}" Opacity="0.35" Margin="0,3"/>
-                    <Button Content="▾" Style="{StaticResource TokenChipSplitDateArrowBtnStyle}" Click="TokenDropdownArrow_Click" ToolTip="Preset formats"/>
+                    <Button Content="▾" Style="{StaticResource TokenChipSplitDateArrowBtnStyle}" Click="TokenDropdownArrow_Click" ToolTip="Preset formats &amp; offsets"/>
                 </StackPanel>
             </Border>
 
@@ -107,8 +210,6 @@
                 </StackPanel>
             </Border>
 
-            <Button Content="+ {datetime}" Style="{StaticResource TokenChipDateStyle}" Margin="0,0,5,5" ToolTip="Inserts current date and time (yyyy-MM-dd HH:mm:ss). Custom formats: {datetime:yyyy-MM-ddTHH:mm:ss}" Click="InsertTokenChip_Click" Tag="{}{datetime}"/>
-            
             <!-- Split Token Chip: {guid} -->
             <Border Style="{StaticResource TokenChipSplitCapsuleClipStyle}" ToolTip="Click to insert {guid}. Click ▾ or right-click for presets.">
                 <Border.ContextMenu>
@@ -239,66 +340,31 @@
 
         <!-- Plain Text Snippet Editor Container -->
         <StackPanel x:Name="SnippetPlainTextContainer">
-            <Grid x:Name="SnippetTemplateHostGrid">
-                <TextBox x:Name="SnippetTemplateBox" 
-                         Style="{StaticResource ModernTextBoxStyle}" 
-                         FontFamily="{StaticResource CodeFont}" 
-                         FontSize="13" 
-                         Height="110" 
-                         AcceptsReturn="True" 
-                         TextWrapping="Wrap" 
-                         VerticalContentAlignment="Top"
-                         VerticalScrollBarVisibility="Auto" 
-                         ToolTip="Enter the text template to expand. Click token chips above to insert dynamic tokens"
-                         SelectionChanged="SnippetTemplateBox_SelectionChanged"
-                         TextChanged="SnippetTemplateBox_TextChanged"/>
-                <Canvas x:Name="SnippetFloatingOverlayCanvas" IsHitTestVisible="False" ClipToBounds="False"/>
-            </Grid>
-
-            <!-- Contextual Token Assistant Bar -->
-            <Border x:Name="TokenAssistantBorder" 
-                    Background="{DynamicResource BgTertiaryBrush}"
-                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+            <Border x:Name="SnippetPlainEditorBorder"
+                    Background="{DynamicResource BgInputBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="1"
                     CornerRadius="6"
-                    Padding="10,8"
-                    Margin="0,8,0,0">
-                <StackPanel>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-
-                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="💡" FontSize="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                            <Border x:Name="AssistantBadgeBorder" 
-                                    Background="{DynamicResource AccentSubtleBrush}" 
-                                    CornerRadius="4" 
-                                    Padding="6,2" 
-                                    Margin="0,0,8,0"
-                                    Visibility="Collapsed">
-                                <TextBlock x:Name="AssistantTokenBadge" 
-                                           Text="{}{date:format}" 
-                                           FontSize="11" 
-                                           FontFamily="{StaticResource CodeFont}" 
-                                           FontWeight="SemiBold" 
-                                           Foreground="{DynamicResource AccentBrush}"/>
-                            </Border>
-                        </StackPanel>
-
-                        <TextBlock Grid.Column="1" 
-                                   x:Name="AssistantDescriptionText" 
-                                   Text="Type '{' or move caret inside a token to see parameters and quick format options."
-                                   FontSize="11.5" 
-                                   Foreground="{DynamicResource TextSecondaryBrush}" 
-                                   VerticalAlignment="Center"
-                                   TextTrimming="CharacterEllipsis"/>
-                    </Grid>
-
-                    <!-- Clickable Format & Parameter Pills -->
-                    <WrapPanel x:Name="AssistantOptionsPillsPanel" Margin="0,8,0,0" Visibility="Collapsed"/>
-                </StackPanel>
+                    Padding="6,4">
+                <Grid x:Name="SnippetTemplateHostGrid">
+                    <RichTextBox x:Name="SnippetPlainTextBox" 
+                                 Background="Transparent"
+                                 Foreground="{DynamicResource TextPrimaryBrush}"
+                                 CaretBrush="{DynamicResource AccentBrush}"
+                                 BorderThickness="0"
+                                 FontFamily="{StaticResource CodeFont}" 
+                                 FontSize="13" 
+                                 Height="110" 
+                                 AcceptsReturn="True" 
+                                 AcceptsTab="True"
+                                 VerticalScrollBarVisibility="Auto" 
+                                 IsDocumentEnabled="True"
+                                 ToolTip="Enter the text template to expand. Click token chips above to insert dynamic tokens"
+                                 SelectionChanged="SnippetPlainTextBox_SelectionChanged"
+                                 TextChanged="SnippetPlainTextBox_TextChanged"
+                                 PreviewKeyDown="SnippetPlainTextBox_PreviewKeyDown"/>
+                    <Canvas x:Name="SnippetFloatingOverlayCanvas" IsHitTestVisible="False" ClipToBounds="False"/>
+                </Grid>
             </Border>
         </StackPanel>
 
@@ -448,6 +514,7 @@
                              AcceptsTab="True"
                              AcceptsReturn="True"
                              VerticalScrollBarVisibility="Auto"
+                             IsDocumentEnabled="True"
                              SelectionChanged="SnippetRichTextBox_SelectionChanged"
                              TextChanged="SnippetRichTextBox_TextChanged"
                              PreviewKeyDown="SnippetRichTextBox_PreviewKeyDown"/>
@@ -532,5 +599,91 @@
                 </Border>
             </StackPanel>
         </Border>
+
+        <!-- Inline @ Trigger Autocomplete Popup -->
+        <Popup x:Name="TokenAutocompletePopup"
+               StaysOpen="False"
+               AllowsTransparency="True"
+               Placement="Custom"
+               Focusable="False">
+            <Border Background="{DynamicResource BgSecondaryBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="4"
+                    MinWidth="300"
+                    MaxHeight="260">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="16" ShadowDepth="3" Opacity="0.4" Direction="270"/>
+                </Border.Effect>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Popup Header -->
+                    <Border Grid.Row="0" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource BorderSubtleBrush}" Padding="8,4,8,6">
+                        <Grid>
+                            <TextBlock Text="Insert Token or Variable" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            <TextBlock Text="↑↓ Navigate • ↵ Insert • Esc" FontSize="10" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Right"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- Filtered List -->
+                    <ListBox Grid.Row="1"
+                             x:Name="TokenAutocompleteListBox"
+                             MaxHeight="200"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             PreviewKeyDown="TokenAutocompleteListBox_PreviewKeyDown"
+                             PreviewMouseLeftButtonUp="TokenAutocompleteListBox_PreviewMouseLeftButtonUp"
+                             MouseDoubleClick="TokenAutocompleteListBox_MouseDoubleClick">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Padding" Value="6,4"/>
+                                <Setter Property="Margin" Value="0,1"/>
+                                <Setter Property="Cursor" Value="Hand"/>
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <Border x:Name="ItemBorder" Background="Transparent" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsSelected" Value="True">
+                                                    <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource AccentSubtleBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="2,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding Icon}" FontSize="13" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding DisplayText}" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                        <TextBlock Text="{Binding Description}" FontSize="10.5" Foreground="{DynamicResource TextMutedBrush}" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+        </Popup>
     </StackPanel>
 </UserControl>

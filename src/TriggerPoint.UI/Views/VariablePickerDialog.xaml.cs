@@ -68,8 +68,8 @@ public partial class VariablePickerDialog : Window
         // 2. System & Dynamic Tokens
         var sysTokens = new (string Token, string Description)[]
         {
-            ("{date:yyyy-MM-dd}", "Current date in ISO format (e.g. 2026-09-16)"),
-            ("{date:MM/dd/yyyy}", "Current date in US format (e.g. 09/16/2026)"),
+            ("{datetime:yyyy-MM-dd}", "Current date in ISO format (e.g. 2026-09-16)"),
+            ("{datetime:MM/dd/yyyy}", "Current date in US format (e.g. 09/16/2026)"),
             ("{time:HH:mm:ss}", "Current time in 24-hour format (e.g. 17:30:00)"),
             ("{datetime:yyyyMMdd_HHmmss}", "Timestamp for unique file names & backups"),
             ("{clipboard}", "Current text content from Windows Clipboard"),
@@ -83,8 +83,8 @@ public partial class VariablePickerDialog : Window
         {
             string sampleVal = tok switch
             {
-                "{date:yyyy-MM-dd}" => DateTime.Now.ToString("yyyy-MM-dd"),
-                "{date:MM/dd/yyyy}" => DateTime.Now.ToString("MM/dd/yyyy"),
+                "{datetime:yyyy-MM-dd}" => DateTime.Now.ToString("yyyy-MM-dd"),
+                "{datetime:MM/dd/yyyy}" => DateTime.Now.ToString("MM/dd/yyyy"),
                 "{time:HH:mm:ss}" => DateTime.Now.ToString("HH:mm:ss"),
                 "{datetime:yyyyMMdd_HHmmss}" => DateTime.Now.ToString("yyyyMMdd_HHmmss"),
                 "{guid}" => Guid.NewGuid().ToString(),

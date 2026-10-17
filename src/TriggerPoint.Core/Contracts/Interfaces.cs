@@ -106,6 +106,18 @@ public interface ITelemetryService
     Task RecordExecutionAsync(Guid itemId);
 }
 
+public interface IProductivityService
+{
+    void RecordSnippetExpansion(Guid actionId, string actionName, int expandedCharCount, int abbreviationLength);
+    void RecordHotkeyTrigger(Guid actionId, string actionName);
+    void RecordActionExecution(Guid actionId, string actionName, ActionType actionType);
+    ProductivityDashboardMetrics GetMetrics(ProductivityTimeWindow window, int? typingSpeedWpm = null);
+    int GetTypingSpeedWpm();
+    void SetTypingSpeedWpm(int wpm);
+    Task ResetMetricsAsync();
+    Task SaveAsync();
+}
+
 public interface IPromptDialogService
 {
     Task<Dictionary<string, string>?> ShowPromptDialogAsync(
@@ -225,6 +237,26 @@ public interface IAbbreviationExpanderService : IDisposable
     void Stop();
     bool IsRunning { get; }
     void UpdateSnippets(IEnumerable<TriggerItem> items);
+}
+
+public interface IClipboardHistoryService : IDisposable
+{
+    void Start(IntPtr windowHandle);
+    void Stop();
+    bool IsRunning { get; }
+    void ReloadSettings();
+    IReadOnlyList<ClipboardHistoryItem> GetHistory();
+    Task AddItemAsync(ClipboardHistoryItem item);
+    void PinItem(Guid id, bool isPinned);
+    void TogglePin(Guid id);
+    void DeleteItem(Guid id);
+    void ClearHistory();
+    int PurgeHistory(int? olderThanDays = null, int? keepCount = null, bool keepPinned = true);
+    long GetStorageUsageBytes();
+    long GetTotalStorageBytes();
+    void HandleClipboardUpdateMessage();
+    Task<bool> PasteItemAsync(ClipboardHistoryItem item, bool pasteAsPlainText, IntPtr? targetHwnd = null);
+    event EventHandler? HistoryChanged;
 }
 
 

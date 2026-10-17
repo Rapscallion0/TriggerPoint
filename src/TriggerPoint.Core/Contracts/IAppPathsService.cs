@@ -14,5 +14,8 @@ public interface IAppPathsService
     string LogsDirectory { get; }
     string UpdateDirectory { get; }
     string VaultKeyFilePath { get; }
+    string ProductivityFilePath { get; }
+    string ClipboardHistoryFilePath { get; }
+    string ClipboardClipsDirectory { get; }
     void EnsureDirectoriesCreated();
 }

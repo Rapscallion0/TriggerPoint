@@ -20,13 +20,30 @@ public class AbbreviationTrie
         public TriggerItem? Item;
     }
 
-    private readonly Node _root = new();
+    private readonly Node _caseSensitiveRoot = new();
+    private readonly Node _caseInsensitiveRoot = new();
 
-    public void Insert(string abbreviation, TriggerItem item)
+    public void Insert(string abbreviation, TriggerItem item) =>
+        Insert(abbreviation, item, isCaseSensitive: true);
+
+    public void Insert(string abbreviation, TriggerItem item, bool isCaseSensitive)
     {
         if (string.IsNullOrEmpty(abbreviation)) return;
-        var current = _root;
-        foreach (char c in abbreviation)
+
+        if (isCaseSensitive)
+        {
+            InsertInto(_caseSensitiveRoot, abbreviation, item);
+        }
+        else
+        {
+            InsertInto(_caseInsensitiveRoot, abbreviation.ToLowerInvariant(), item);
+        }
+    }
+
+    private static void InsertInto(Node root, string text, TriggerItem item)
+    {
+        var current = root;
+        foreach (char c in text)
         {
             if (!current.Children.TryGetValue(c, out var next))
             {
@@ -42,10 +59,20 @@ public class AbbreviationTrie
     {
         if (string.IsNullOrEmpty(text)) return null;
 
+        // 1. Check exact case-sensitive matches first
+        var exactMatch = MatchInternal(_caseSensitiveRoot, text, mode);
+        if (exactMatch != null) return exactMatch;
+
+        // 2. Fall back to case-insensitive matches
+        return MatchInternal(_caseInsensitiveRoot, text.ToLowerInvariant(), mode);
+    }
+
+    private static TriggerItem? MatchInternal(Node root, string text, AbbreviationTriggerMode mode)
+    {
         for (int i = 0; i < text.Length; i++)
         {
             var suffix = text[i..];
-            var current = _root;
+            var current = root;
             bool match = true;
             foreach (char c in suffix)
             {
@@ -68,8 +95,10 @@ public class AbbreviationTrie
 
     public void Clear()
     {
-        _root.Children.Clear();
-        _root.Item = null;
+        _caseSensitiveRoot.Children.Clear();
+        _caseSensitiveRoot.Item = null;
+        _caseInsensitiveRoot.Children.Clear();
+        _caseInsensitiveRoot.Item = null;
     }
 }
 
@@ -79,6 +108,9 @@ public class AbbreviationExpanderService : IAbbreviationExpanderService
     private readonly ISnippetService _snippetService;
     private readonly IContextFilterService _contextFilterService;
     private readonly Func<AppSettings> _settingsProvider;
+    private readonly IProductivityService? _productivityService;
+    private readonly ITelemetryService? _telemetryService;
+    private readonly IToastNotificationService? _toastService;
 
     private readonly AbbreviationTrie _trie = new();
     private readonly object _lock = new();
@@ -95,15 +127,24 @@ public class AbbreviationExpanderService : IAbbreviationExpanderService
     public AbbreviationExpanderService(
         ISnippetService snippetService,
         IContextFilterService contextFilterService,
-        Func<AppSettings> settingsProvider)
+        Func<AppSettings> settingsProvider,
+        IProductivityService? productivityService = null,
+        ITelemetryService? telemetryService = null,
+        IToastNotificationService? toastService = null)
     {
         _snippetService = snippetService;
         _contextFilterService = contextFilterService;
         _settingsProvider = settingsProvider;
+        _productivityService = productivityService;
+        _telemetryService = telemetryService;
+        _toastService = toastService;
     }
 
     public void UpdateSnippets(IEnumerable<TriggerItem> items)
     {
+        var settings = _settingsProvider?.Invoke();
+        bool globalDefaultCaseSensitive = settings?.AbbreviationCaseSensitive ?? true;
+
         lock (_lock)
         {
             _trie.Clear();
@@ -115,13 +156,13 @@ public class AbbreviationExpanderService : IAbbreviationExpanderService
                         item.ActionType == ActionType.Snippet &&
                         !string.IsNullOrWhiteSpace(item.Abbreviation))
                     {
-                        _trie.Insert(item.Abbreviation.Trim(), item);
+                        bool isCaseSensitive = item.AbbreviationCaseSensitive ?? globalDefaultCaseSensitive;
+                        _trie.Insert(item.Abbreviation.Trim(), item, isCaseSensitive);
                     }
                 }
             }
         }
 
-        var settings = _settingsProvider?.Invoke();
         if (settings != null && settings.EnableAbbreviationExpander && !IsRunning)
         {
             Start();
@@ -354,6 +395,30 @@ public class AbbreviationExpanderService : IAbbreviationExpanderService
                     foregroundHwnd,
                     item.Payload.SnippetContentType,
                     item.Payload.SnippetRtf);
+
+                int templateLen = item.Payload.SnippetTemplate?.Length ?? 0;
+                int abbrLen = item.Abbreviation?.Length ?? 0;
+                _productivityService?.RecordSnippetExpansion(item.Id, item.Name, templateLen, abbrLen);
+                if (_telemetryService != null)
+                {
+                    _ = _telemetryService.RecordExecutionAsync(item.Id);
+                }
+
+                // Auditory feedback
+                if (settings.EnableAbbreviationSoundFeedback && settings.AbbreviationSound != AbbreviationSoundProfile.None)
+                {
+                    PlayFeedbackSound(settings.AbbreviationSound);
+                }
+
+                // Visual feedback
+                if (settings.EnableAbbreviationVisualFeedback && _toastService != null)
+                {
+                    int saved = Math.Max(0, templateLen - abbrLen);
+                    string detail = saved > 0
+                        ? $"Expanded '{item.Abbreviation}' ({saved} keystrokes saved)"
+                        : $"Expanded '{item.Abbreviation}'";
+                    _toastService.ShowInfo(item.Name, detail);
+                }
             }
             catch (Exception ex)
             {
@@ -407,6 +472,36 @@ public class AbbreviationExpanderService : IAbbreviationExpanderService
         }
 
         NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
+    }
+
+    public static void PlayFeedbackSound(AbbreviationSoundProfile profile)
+    {
+        Task.Run(() =>
+        {
+            try
+            {
+                switch (profile)
+                {
+                    case AbbreviationSoundProfile.SubtleClick:
+                        Console.Beep(1200, 20);
+                        break;
+                    case AbbreviationSoundProfile.SoftChime:
+                        Console.Beep(880, 30);
+                        Console.Beep(1320, 40);
+                        break;
+                    case AbbreviationSoundProfile.ModernBlip:
+                        Console.Beep(1760, 25);
+                        break;
+                    case AbbreviationSoundProfile.None:
+                    default:
+                        break;
+                }
+            }
+            catch
+            {
+                try { System.Media.SystemSounds.Asterisk.Play(); } catch { }
+            }
+        });
     }
 
     public void Dispose()

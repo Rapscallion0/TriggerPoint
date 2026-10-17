@@ -14,6 +14,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Win32;
 using Serilog;
 using TriggerPoint.Core.Contracts;
@@ -171,6 +172,16 @@ public class TriggerTreeItemViewModel : INotifyPropertyChanged
         (!IsRecycledItem && !IsRecycleBinRoot && Item.Hotkey != null && !Item.Hotkey.IsEmpty && Item.ConflictStatus.HasConflict) 
         ? Visibility.Visible 
         : Visibility.Collapsed;
+
+    public Visibility HasAbbreviationConflictVisibility =>
+        (!IsRecycledItem && !IsRecycleBinRoot && Item.ActionType == ActionType.Snippet && Item.HasAbbreviationConflict)
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    public string AbbreviationConflictTooltip =>
+        Item.AbbreviationConflicts.Count > 0
+            ? string.Join(Environment.NewLine, Item.AbbreviationConflicts.Select(c => c.Message))
+            : "Abbreviation Conflict";
 
     public bool IsBrokenTarget { get; set; }
     public string? BrokenTargetMessage { get; set; }
@@ -332,6 +343,8 @@ public class TriggerTreeItemViewModel : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasHotkey)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasConflictVisibility)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ConflictTooltip)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasAbbreviationConflictVisibility)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(AbbreviationConflictTooltip)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(BrokenTargetVisibility)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(BrokenTargetTooltip)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(NameDisplayVisibility)));
@@ -599,15 +612,35 @@ public partial class SettingsWindow : Window
         SnippetEditor.SnippetChanged += (s, e) => OnFormEdited();
         if (SnippetAbbreviationBox != null)
         {
-            SnippetAbbreviationBox.TextChanged += (s, e) => OnFormEdited();
+            SnippetAbbreviationBox.TextChanged += (s, e) =>
+            {
+                OnFormEdited();
+                UpdateSnippetAbbreviationConflictDiagnostics();
+            };
         }
         if (SnippetModeImmediateRadio != null)
         {
-            SnippetModeImmediateRadio.Checked += (s, e) => OnFormEdited();
+            SnippetModeImmediateRadio.Checked += (s, e) =>
+            {
+                OnFormEdited();
+                UpdateSnippetAbbreviationConflictDiagnostics();
+            };
         }
         if (SnippetModeDelimiterRadio != null)
         {
-            SnippetModeDelimiterRadio.Checked += (s, e) => OnFormEdited();
+            SnippetModeDelimiterRadio.Checked += (s, e) =>
+            {
+                OnFormEdited();
+                UpdateSnippetAbbreviationConflictDiagnostics();
+            };
+        }
+        if (SnippetAbbreviationCaseSensitiveCombo != null)
+        {
+            SnippetAbbreviationCaseSensitiveCombo.SelectionChanged += (s, e) =>
+            {
+                OnFormEdited();
+                UpdateSnippetAbbreviationConflictDiagnostics();
+            };
         }
         PresentationModeCombo.SelectionChanged += (s, e) =>
         {
@@ -816,10 +849,23 @@ public partial class SettingsWindow : Window
         }
     }
 
+    private void UpdateSnippetAbbreviationCaseSensitiveLabel()
+    {
+        if (SnippetAbbreviationCaseSensitiveCombo?.Items.Count > 0 &&
+            SnippetAbbreviationCaseSensitiveCombo.Items[0] is ComboBoxItem defaultItem)
+        {
+            bool defaultCase = _appSettings?.AbbreviationCaseSensitive ?? true;
+            defaultItem.Content = defaultCase ? "Default: Case-sensitive" : "Default: Case-insensitive";
+        }
+    }
+
     private async void EnableAbbreviationInSettings_Click(object sender, RoutedEventArgs e)
     {
         if (_logManagerService == null) return;
-        var dlg = new ApplicationSettingsWindow(_repository, _logManagerService, _updateService, ApplicationSettingsWindow.SettingsCategory.Shortcuts)
+        var pathsService = (Application.Current as App)?.ServiceProvider?.GetService<IAppPathsService>();
+        var prodService = (Application.Current as App)?.ServiceProvider?.GetService<IProductivityService>();
+        var clipService = (Application.Current as App)?.ClipboardHistoryService;
+        var dlg = new ApplicationSettingsWindow(_repository, _logManagerService, _updateService, ApplicationSettingsWindow.SettingsCategory.Shortcuts, pathsService, prodService, clipService)
         {
             Owner = this
         };
@@ -828,6 +874,7 @@ public partial class SettingsWindow : Window
         {
             _appSettings = await _repository.LoadSettingsAsync();
             UpdateSnippetAbbreviationGlobalWarning();
+            UpdateSnippetAbbreviationCaseSensitiveLabel();
             if (Application.Current is App app)
             {
                 _ = app.ReloadApplicationSettingsAndHotkeysAsync();
@@ -1096,6 +1143,7 @@ public partial class SettingsWindow : Window
         target.ConflictStatus = snapshot.ConflictStatus;
         target.Abbreviation = snapshot.Abbreviation;
         target.AbbreviationMode = snapshot.AbbreviationMode;
+        target.AbbreviationCaseSensitive = snapshot.AbbreviationCaseSensitive;
     }
 
     private bool PromptSaveIfDirty()
@@ -1172,6 +1220,7 @@ public partial class SettingsWindow : Window
         UpdateToggleShortcutsButtonUi();
         UpdateToggleDensityButtonUi();
         UpdateToggleShowDisabledButtonUi();
+        UpdateSnippetAbbreviationCaseSensitiveLabel();
         ThemeManager.ApplyTreeDensity(_appSettings.CompactTreeDensity);
         ApplyWindowPlacement();
         _isDataLoaded = true;
@@ -1583,7 +1632,18 @@ public partial class SettingsWindow : Window
                     SnippetModeDelimiterRadio.IsChecked = true;
                 }
             }
+            if (SnippetAbbreviationCaseSensitiveCombo != null)
+            {
+                UpdateSnippetAbbreviationCaseSensitiveLabel();
+                SnippetAbbreviationCaseSensitiveCombo.SelectedIndex = item.AbbreviationCaseSensitive switch
+                {
+                    true => 1,
+                    false => 2,
+                    _ => 0
+                };
+            }
             UpdateSnippetAbbreviationGlobalWarning();
+            UpdateSnippetAbbreviationConflictDiagnostics();
 
             // Workflow payload
             if (WorkflowVisualContainer != null && WorkflowScriptContainer != null)
@@ -1875,6 +1935,90 @@ public partial class SettingsWindow : Window
         }
     }
 
+    private void UpdateSnippetAbbreviationConflictDiagnostics()
+    {
+        if (SnippetAbbreviationConflictBanner == null || _selectedItem == null || _selectedItem.ActionType != ActionType.Snippet)
+        {
+            if (SnippetAbbreviationConflictBanner != null)
+            {
+                SnippetAbbreviationConflictBanner.Visibility = Visibility.Collapsed;
+            }
+            return;
+        }
+
+        string candidateAbbr = SnippetAbbreviationBox?.Text?.Trim() ?? string.Empty;
+        if (string.IsNullOrEmpty(candidateAbbr))
+        {
+            SnippetAbbreviationConflictBanner.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var candidate = _selectedItem.Clone();
+        candidate.Abbreviation = candidateAbbr;
+        candidate.AbbreviationMode = SnippetModeImmediateRadio?.IsChecked == true
+            ? AbbreviationTriggerMode.Immediate
+            : AbbreviationTriggerMode.Delimiter;
+
+        if (SnippetAbbreviationCaseSensitiveCombo?.SelectedItem is ComboBoxItem cbi)
+        {
+            candidate.AbbreviationCaseSensitive = cbi.Tag?.ToString() switch
+            {
+                "sensitive" => true,
+                "insensitive" => false,
+                _ => null
+            };
+        }
+
+        bool defaultCase = _appSettings?.AbbreviationCaseSensitive ?? true;
+        var diagnostics = AbbreviationCollisionValidator.ValidateSingle(candidate, _items, defaultCase);
+
+        if (diagnostics.Count == 0)
+        {
+            SnippetAbbreviationConflictBanner.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        SnippetAbbreviationConflictBanner.Visibility = Visibility.Visible;
+        var primary = diagnostics[0];
+        SnippetAbbreviationConflictTitle.Text = primary.Type == AbbreviationConflictType.ExactDuplicate
+            ? "⚠ Duplicate Abbreviation Collision"
+            : "⚠ Abbreviation Prefix Shadowing Detected";
+
+        SnippetAbbreviationConflictMessage.Text = string.Join(Environment.NewLine, diagnostics.Select(d => d.Message));
+
+        SnippetAbbreviationConflictLinksPanel.Children.Clear();
+        var seenIds = new HashSet<Guid>();
+        foreach (var diag in diagnostics)
+        {
+            if (diag.ConflictingItemId != Guid.Empty && seenIds.Add(diag.ConflictingItemId))
+            {
+                var jumpBtn = new Button
+                {
+                    Content = $"⚡ Open '{diag.ConflictingItemName}' ({diag.ConflictingAbbreviation})",
+                    Style = TryFindResource("SecondaryButtonStyle") as Style,
+                    FontSize = 11,
+                    Padding = new Thickness(8, 3, 8, 3),
+                    Margin = new Thickness(0, 4, 8, 0),
+                    Tag = diag.ConflictingItemId
+                };
+                jumpBtn.Click += (s, e) =>
+                {
+                    if (s is Button b && b.Tag is Guid targetId)
+                    {
+                        var target = _items.FirstOrDefault(x => x.Id == targetId);
+                        if (target != null)
+                        {
+                            if (!PromptSaveIfDirty()) return;
+                            SelectTreeItem(target);
+                            _ = RestoreTreeFocus(target);
+                        }
+                    }
+                };
+                SnippetAbbreviationConflictLinksPanel.Children.Add(jumpBtn);
+            }
+        }
+    }
+
     private void CommitCurrentFormChanges()
     {
         if (_selectedItem == null || _isUpdatingForm) return;
@@ -1928,6 +2072,15 @@ public partial class SettingsWindow : Window
                 _selectedItem.AbbreviationMode = SnippetModeImmediateRadio.IsChecked == true
                     ? AbbreviationTriggerMode.Immediate
                     : AbbreviationTriggerMode.Delimiter;
+            }
+            if (SnippetAbbreviationCaseSensitiveCombo != null)
+            {
+                _selectedItem.AbbreviationCaseSensitive = SnippetAbbreviationCaseSensitiveCombo.SelectedIndex switch
+                {
+                    1 => true,
+                    2 => false,
+                    _ => null
+                };
             }
         }
 
@@ -2252,16 +2405,15 @@ public partial class SettingsWindow : Window
         StatusText.Text = $"Reverted unsaved changes to '{_selectedItem.Name}'.";
     }
 
-    private async void AppSettingsBtn_Click(object sender, RoutedEventArgs e)
+    private async void ProductivityBtn_Click(object sender, RoutedEventArgs e)
     {
         if (_logManagerService == null) return;
         if (!PromptSaveIfDirty()) return;
 
-        var initialCategory = (_latestAvailableUpdate?.IsUpdateAvailable == true && _latestAvailableUpdate.LatestUpdate != null)
-            ? ApplicationSettingsWindow.SettingsCategory.Updates
-            : ApplicationSettingsWindow.SettingsCategory.Appearance;
-
-        var dlg = new ApplicationSettingsWindow(_repository, _logManagerService, _updateService, initialCategory)
+        var pathsService = (Application.Current as App)?.ServiceProvider?.GetService<IAppPathsService>();
+        var prodService = (Application.Current as App)?.ServiceProvider?.GetService<IProductivityService>();
+        var clipService = (Application.Current as App)?.ClipboardHistoryService;
+        var dlg = new ApplicationSettingsWindow(_repository, _logManagerService, _updateService, ApplicationSettingsWindow.SettingsCategory.Productivity, pathsService, prodService, clipService)
         {
             Owner = this
         };
@@ -2273,6 +2425,48 @@ public partial class SettingsWindow : Window
             UpdateToggleShortcutsButtonUi();
             RegisterShortcuts();
             UpdateSnippetAbbreviationGlobalWarning();
+            UpdateSnippetAbbreviationCaseSensitiveLabel();
+            if (Application.Current is App app)
+            {
+                _ = app.ReloadApplicationSettingsAndHotkeysAsync();
+            }
+        }
+        catch { }
+        if (dlg.TreeDataChanged)
+        {
+            _items = (await _repository.LoadAsync()).ToList();
+            RegisterShortcuts();
+            RebuildTree();
+            RefreshTreeConflictStates();
+            StatusText.Text = $"Reloaded {_items.Count} items following data import.";
+        }
+    }
+
+    private async void AppSettingsBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_logManagerService == null) return;
+        if (!PromptSaveIfDirty()) return;
+
+        var initialCategory = (_latestAvailableUpdate?.IsUpdateAvailable == true && _latestAvailableUpdate.LatestUpdate != null)
+            ? ApplicationSettingsWindow.SettingsCategory.Updates
+            : ApplicationSettingsWindow.SettingsCategory.Appearance;
+
+        var pathsService = (Application.Current as App)?.ServiceProvider?.GetService<IAppPathsService>();
+        var prodService = (Application.Current as App)?.ServiceProvider?.GetService<IProductivityService>();
+        var clipService = (Application.Current as App)?.ClipboardHistoryService;
+        var dlg = new ApplicationSettingsWindow(_repository, _logManagerService, _updateService, initialCategory, pathsService, prodService, clipService)
+        {
+            Owner = this
+        };
+        dlg.ShowDialog();
+        try
+        {
+            _appSettings = await _repository.LoadSettingsAsync();
+            TriggerTreeItemViewModel.ShowShortcuts = _appSettings.ShowShortcutsInTree;
+            UpdateToggleShortcutsButtonUi();
+            RegisterShortcuts();
+            UpdateSnippetAbbreviationGlobalWarning();
+            UpdateSnippetAbbreviationCaseSensitiveLabel();
             if (Application.Current is App app)
             {
                 _ = app.ReloadApplicationSettingsAndHotkeysAsync();
@@ -2843,6 +3037,7 @@ public partial class SettingsWindow : Window
                 if (ContextSaveAsWorkflowTemplateItem != null) ContextSaveAsWorkflowTemplateItem.Visibility = Visibility.Collapsed;
                 ContextRestoreItem.Visibility = Visibility.Collapsed;
                 ContextPermanentDeleteItem.Visibility = Visibility.Collapsed;
+                if (ContextJumpToAbbreviationConflictItem != null) ContextJumpToAbbreviationConflictItem.Visibility = Visibility.Collapsed;
                 ContextEmptyRecycleBinItem.Visibility = Visibility.Visible;
                 ContextEmptyRecycleBinItem.IsEnabled = _recycledItems.Count > 0;
                 return;
@@ -2860,6 +3055,7 @@ public partial class SettingsWindow : Window
                 ContextImportItem.Visibility = Visibility.Collapsed;
                 if (ContextExportSeparator != null) ContextExportSeparator.Visibility = Visibility.Collapsed;
                 if (ContextSaveAsWorkflowTemplateItem != null) ContextSaveAsWorkflowTemplateItem.Visibility = Visibility.Collapsed;
+                if (ContextJumpToAbbreviationConflictItem != null) ContextJumpToAbbreviationConflictItem.Visibility = Visibility.Collapsed;
                 ContextEmptyRecycleBinItem.Visibility = Visibility.Collapsed;
                 ContextRestoreItem.Visibility = Visibility.Visible;
                 ContextRestoreItem.Header = $"Restore '{_rightClickedTreeVm.Name}'";
@@ -2939,6 +3135,21 @@ public partial class SettingsWindow : Window
             ContextRenameItem.IsEnabled = true;
             ContextRenameItem.Header = $"Rename '{_rightClickedTreeVm.Name}'";
 
+            if (ContextJumpToAbbreviationConflictItem != null)
+            {
+                if (_rightClickedTreeVm.Item.HasAbbreviationConflict && _rightClickedTreeVm.Item.AbbreviationConflicts.Count > 0)
+                {
+                    var firstConflict = _rightClickedTreeVm.Item.AbbreviationConflicts[0];
+                    ContextJumpToAbbreviationConflictItem.Visibility = Visibility.Visible;
+                    ContextJumpToAbbreviationConflictItem.Header = $"Jump to '{firstConflict.ConflictingItemName}' ({firstConflict.ConflictingAbbreviation})...";
+                    ContextJumpToAbbreviationConflictItem.Tag = firstConflict.ConflictingItemId;
+                }
+                else
+                {
+                    ContextJumpToAbbreviationConflictItem.Visibility = Visibility.Collapsed;
+                }
+            }
+
             if (_rightClickedTreeVm.Item.ActionType == ActionType.Folder)
             {
                 var descendants = GetAllDescendants(_rightClickedTreeVm.Item.Id);
@@ -2957,6 +3168,7 @@ public partial class SettingsWindow : Window
         else
         {
             if (ContextToggleEnabledItem != null) ContextToggleEnabledItem.Visibility = Visibility.Collapsed;
+            if (ContextJumpToAbbreviationConflictItem != null) ContextJumpToAbbreviationConflictItem.Visibility = Visibility.Collapsed;
             ContextAddMenu.Visibility = Visibility.Visible;
             ContextExportItem.Visibility = Visibility.Visible;
             ContextImportItem.Visibility = Visibility.Visible;
@@ -3272,6 +3484,20 @@ public partial class SettingsWindow : Window
         }
     }
 
+    private void ContextJumpToAbbreviationConflictItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement fe && fe.Tag is Guid targetId)
+        {
+            var target = _items.FirstOrDefault(x => x.Id == targetId);
+            if (target != null)
+            {
+                if (!PromptSaveIfDirty()) return;
+                SelectTreeItem(target);
+                _ = RestoreTreeFocus(target);
+            }
+        }
+    }
+
     private void ContextSaveAsWorkflowTemplateItem_Click(object sender, RoutedEventArgs e)
     {
         var item = _rightClickedTreeVm?.Item ?? _selectedItem;
@@ -3294,63 +3520,24 @@ public partial class SettingsWindow : Window
         }
     }
 
-    private async void ContextExportItem_Click(object sender, RoutedEventArgs e)
+    private void ContextExportItem_Click(object sender, RoutedEventArgs e)
     {
         try
         {
             CommitCurrentFormChanges();
 
-            List<TriggerItem> itemsToExport;
-            string defaultFileName;
-            string scopeName;
+            var scopeItem = (sender == ContextExportItem && _rightClickedTreeVm != null)
+                ? _rightClickedTreeVm.Item
+                : _selectedItem;
 
-            if (_rightClickedTreeVm != null)
+            var dlg = new ExportPackageDialog(_repository, _items, scopeItem)
             {
-                if (_rightClickedTreeVm.Item.ActionType == ActionType.Folder)
-                {
-                    var descendants = GetAllDescendants(_rightClickedTreeVm.Item.Id);
-                    var rootFolderClone = _rightClickedTreeVm.Item.Clone();
-                    rootFolderClone.ParentId = null;
-
-                    itemsToExport = [rootFolderClone];
-                    foreach (var d in descendants)
-                    {
-                        itemsToExport.Add(d.Clone());
-                    }
-
-                    scopeName = _rightClickedTreeVm.Name;
-                    defaultFileName = $"triggerpoint-folder-{SanitizeFileName(_rightClickedTreeVm.Name)}.json";
-                }
-                else
-                {
-                    var actionClone = _rightClickedTreeVm.Item.Clone();
-                    actionClone.ParentId = null;
-                    itemsToExport = [actionClone];
-
-                    scopeName = _rightClickedTreeVm.Name;
-                    defaultFileName = $"triggerpoint-action-{SanitizeFileName(_rightClickedTreeVm.Name)}.json";
-                }
-            }
-            else
-            {
-                itemsToExport = _items.Select(x => x.Clone()).ToList();
-                scopeName = "All Items";
-                defaultFileName = "triggerpoint-actions-export.json";
-            }
-
-            var package = ConfigurationBackupPackage.CreateTreeItems(itemsToExport, scopeName);
-
-            var dlg = new SaveFileDialog
-            {
-                Title = $"Export {scopeName}",
-                Filter = "JSON Backup File (*.json)|*.json|All Files (*.*)|*.*",
-                FileName = defaultFileName
+                Owner = this
             };
 
-            if (dlg.ShowDialog(this) == true)
+            if (dlg.ShowDialog() == true && dlg.ExportedFilePath != null)
             {
-                await _repository.ExportPackageAsync(dlg.FileName, package);
-                StatusText.Text = $"📤 Exported {package.FolderCount} folder(s) and {package.ActionCount} action(s) to '{Path.GetFileName(dlg.FileName)}'.";
+                StatusText.Text = $"📤 Exported {dlg.ExportedFolderCount} folder(s) and {dlg.ExportedActionCount} action(s) to '{Path.GetFileName(dlg.ExportedFilePath)}'.";
             }
         }
         catch (Exception ex)
@@ -3364,15 +3551,16 @@ public partial class SettingsWindow : Window
     {
         try
         {
-            var dlg = new OpenFileDialog
+            var ofd = new OpenFileDialog
             {
-                Title = "Import Actions or Folders",
-                Filter = "JSON Backup File (*.json)|*.json|All Files (*.*)|*.*"
+                Title = "Import TriggerPoint Package or Backup",
+                Filter = "TriggerPoint Package (*.tppack;*.json)|*.tppack;*.json|TriggerPoint Package (*.tppack)|*.tppack|JSON Backup File (*.json)|*.json|All Files (*.*)|*.*",
+                DefaultExt = ".tppack"
             };
 
-            if (dlg.ShowDialog(this) != true) return;
+            if (ofd.ShowDialog(this) != true) return;
 
-            var package = await _repository.ReadPackageAsync(dlg.FileName);
+            var package = await _repository.ReadPackageAsync(ofd.FileName);
             if (package == null)
             {
                 ModernMessageDialog.ShowAlert(this, "Import Error", "Failed to read backup package from the selected file.", ModernDialogType.Error);
@@ -3384,101 +3572,54 @@ public partial class SettingsWindow : Window
                 if (package.ContentType == BackupContentType.AppSettings)
                 {
                     ModernMessageDialog.ShowAlert(this, "Settings Backup Detected",
-                        "The selected file contains Application Settings, not actions or folders.\n\nTo import or restore application settings, please open the Application Settings window (gear icon in header).",
+                        "The selected file contains Application Settings, not actions or folders.\n\nTo import application settings, please open Preferences.",
                         ModernDialogType.Info);
                 }
                 else
                 {
-                    ModernMessageDialog.ShowAlert(this, "Import", "The selected backup package contains no actions or folders.", ModernDialogType.Warning);
+                    ModernMessageDialog.ShowAlert(this, "Import", "The selected package contains no actions or folders.", ModernDialogType.Warning);
                 }
                 return;
             }
 
             Guid? targetParentId = null;
-            string targetScopeName = "Root";
-
             if (_rightClickedTreeVm != null)
             {
-                if (_rightClickedTreeVm.Item.ActionType == ActionType.Folder)
-                {
-                    targetParentId = _rightClickedTreeVm.Item.Id;
-                    targetScopeName = $"'{_rightClickedTreeVm.Name}'";
-                }
-                else
-                {
-                    targetParentId = _rightClickedTreeVm.Item.ParentId;
-                    var parentFolder = targetParentId.HasValue ? _items.FirstOrDefault(x => x.Id == targetParentId.Value) : null;
-                    targetScopeName = parentFolder != null ? $"'{parentFolder.Name}'" : "Root";
-                }
+                targetParentId = _rightClickedTreeVm.Item.ActionType == ActionType.Folder
+                    ? _rightClickedTreeVm.Item.Id
+                    : _rightClickedTreeVm.Item.ParentId;
             }
 
-            bool canReplace = _rightClickedTreeVm == null;
-            var choice = ModernMessageDialog.ShowImportChoiceDialog(
-                this,
-                targetScopeName,
-                package.FolderCount,
-                package.ActionCount,
-                canReplace);
-
-            if (choice == ImportChoice.Cancel) return;
-
-            CommitCurrentFormChanges();
-
-            TriggerItem? itemToSelect = null;
-
-            if (choice == ImportChoice.Replace)
+            var dlg = new ImportPackageDialog(package, _items, targetParentId)
             {
+                Owner = this
+            };
+
+            if (dlg.ShowDialog() == true && dlg.ImportedCount > 0)
+            {
+                CommitCurrentFormChanges();
                 _items.Clear();
-                _items.AddRange(package.Items.Select(x => x.Clone()));
-                itemToSelect = _items.FirstOrDefault();
-            }
-            else // ImportChoice.Merge
-            {
-                var idMap = new Dictionary<Guid, Guid>();
-                foreach (var item in package.Items)
+                _items.AddRange(dlg.FinalItems);
+
+                await _repository.SaveAsync(_items);
+                RegisterShortcuts();
+                await RebuildTreeAsync();
+                RefreshTreeConflictStates();
+
+                var firstImported = _items.LastOrDefault();
+                if (firstImported != null)
                 {
-                    idMap[item.Id] = Guid.NewGuid();
+                    SelectTreeItem(firstImported);
+                    _ = RestoreTreeFocus(firstImported);
                 }
 
-                var importedItems = new List<TriggerItem>();
-                foreach (var origItem in package.Items)
-                {
-                    var clone = origItem.Clone();
-                    clone.Id = idMap[origItem.Id];
-
-                    if (origItem.ParentId.HasValue && idMap.TryGetValue(origItem.ParentId.Value, out var newParentGuid))
-                    {
-                        clone.ParentId = newParentGuid;
-                    }
-                    else
-                    {
-                        clone.ParentId = targetParentId;
-                    }
-
-                    importedItems.Add(clone);
-                }
-
-                _items.AddRange(importedItems);
-                itemToSelect = importedItems.FirstOrDefault();
+                StatusText.Text = $"📥 Imported {dlg.ImportedCount} item(s) from '{Path.GetFileName(ofd.FileName)}'.";
             }
-
-            await _repository.SaveAsync(_items);
-            RegisterShortcuts();
-            RebuildTree();
-            RefreshTreeConflictStates();
-
-            if (itemToSelect != null)
-            {
-                SelectTreeItem(itemToSelect);
-                await RestoreTreeFocus(itemToSelect);
-            }
-
-            StatusText.Text = $"📥 Successfully imported {package.FolderCount} folder(s) and {package.ActionCount} action(s).";
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "Failed to import configuration package");
-            ModernMessageDialog.ShowAlert(this, "Import Error", $"Failed to import items: {ex.Message}", ModernDialogType.Error);
+            _logger.Error(ex, "Failed to import package");
+            ModernMessageDialog.ShowAlert(this, "Import Error", $"Failed to import package: {ex.Message}", ModernDialogType.Error);
         }
     }
 
@@ -3923,6 +4064,9 @@ public partial class SettingsWindow : Window
 
     private void RefreshTreeConflictStates()
     {
+        bool defaultCase = _appSettings?.AbbreviationCaseSensitive ?? true;
+        AbbreviationCollisionValidator.ValidateAll(_items, defaultCase);
+
         foreach (var root in _treeRoots)
         {
             root.NotifyUpdated();
@@ -3935,6 +4079,7 @@ public partial class SettingsWindow : Window
         if (_selectedItem != null)
         {
             UpdateConflictBanner(_selectedItem);
+            UpdateSnippetAbbreviationConflictDiagnostics();
         }
     }
 

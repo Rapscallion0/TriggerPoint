@@ -88,9 +88,9 @@ public class CommandPaletteViewTests
         Assert.Empty(CommandPaletteView.GetPrefixSuggestions("notepad"));
         Assert.Empty(CommandPaletteView.GetPrefixSuggestions("@app query")); // space means query entered
 
-        // Single '@' returns all 9 prefixes
+        // Single '@' returns all 11 prefixes
         var all = CommandPaletteView.GetPrefixSuggestions("@");
-        Assert.Equal(9, all.Count);
+        Assert.Equal(11, all.Count);
         Assert.Contains(all, x => x.Prefix == "@all");
         Assert.Contains(all, x => x.Prefix == "@app");
         Assert.Contains(all, x => x.Prefix == "@snip");
@@ -100,6 +100,8 @@ public class CommandPaletteViewTests
         Assert.Contains(all, x => x.Prefix == "@svc");
         Assert.Contains(all, x => x.Prefix == "@calc");
         Assert.Contains(all, x => x.Prefix == "@current");
+        Assert.Contains(all, x => x.Prefix == "@clip");
+        Assert.Contains(all, x => x.Prefix == "@c");
 
         // Partial prefix '@sn' matches snippet
         var snipOnly = CommandPaletteView.GetPrefixSuggestions("@sn");
@@ -827,16 +829,17 @@ public class CommandPaletteViewTests
                 // Assert expected keys and prefixes are present
                 Assert.Contains(textBlocks, t => t.Contains("=, @calc"));
                 Assert.Contains(textBlocks, t => t.Contains("@current"));
-                Assert.Contains(textBlocks, t => t.Contains("@app, @apps"));
-                Assert.Contains(textBlocks, t => t.Contains("@snip, @snippets"));
-                Assert.Contains(textBlocks, t => t.Contains("@flow, @workflows"));
-                Assert.Contains(textBlocks, t => t.Contains("@folder, @folders"));
+                Assert.Contains(textBlocks, t => t.Contains("@app, @cmd"));
+                Assert.Contains(textBlocks, t => t.Contains("@snip, @text"));
+                Assert.Contains(textBlocks, t => t.Contains("@flow, @wf"));
+                Assert.Contains(textBlocks, t => t.Contains("@folder, @dir"));
+                Assert.Contains(textBlocks, t => t.Contains("@clip, @c"));
                 Assert.Contains(textBlocks, t => t.Contains("#<tag>"));
                 Assert.Contains(textBlocks, t => t.Contains("? or >"));
                 Assert.Contains(textBlocks, t => t.Contains("Ctrl+Shift+C"));
                 Assert.Contains(textBlocks, t => t.Contains("Alt+U"));
                 Assert.Contains(textBlocks, t => t.Contains("Hold Ctrl"));
-                Assert.Contains(textBlocks, t => t.Contains("Ctrl+1 .. 5"));
+                Assert.Contains(textBlocks, t => t.Contains("Ctrl+1 .. 7"));
                 Assert.Contains(textBlocks, t => t.Contains("full Calculator Workspace"));
             }
             catch (Exception ex)
@@ -889,6 +892,299 @@ public class CommandPaletteViewTests
                 Assert.Contains("Cannot convert", vm.DetailPreviewText);
                 Assert.Contains(vm.Description, vm.DetailPreviewText);
                 Assert.Equal(vm.DetailPreviewText, view.PreviewDetailText.ToolTip as string);
+            }
+            catch (Exception ex)
+            {
+                caughtEx = ex;
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join(5000);
+
+        if (caughtEx != null)
+        {
+            throw new InvalidOperationException($"Test failed: {caughtEx.Message}", caughtEx);
+        }
+    }
+
+    [Fact]
+    public void PaletteItemViewModel_SnippetKeyword_ExposesKeywordPropertiesAndRespectsVisibility()
+    {
+        var snippetItem = new TriggerItem
+        {
+            Name = "Signature",
+            ActionType = ActionType.Snippet,
+            Abbreviation = ";sig",
+            AbbreviationMode = AbbreviationTriggerMode.Immediate
+        };
+
+        var vmEnabled = new PaletteItemViewModel(snippetItem, null, showSnippetKeywords: true);
+        Assert.Equal(";sig", vmEnabled.KeywordText);
+        Assert.True(vmEnabled.HasKeyword);
+        Assert.Equal(Visibility.Visible, vmEnabled.KeywordVisibility);
+        Assert.Contains(";sig", vmEnabled.KeywordTooltip);
+        Assert.Contains("Immediate", vmEnabled.KeywordTooltip);
+
+        var vmDisabled = new PaletteItemViewModel(snippetItem, null, showSnippetKeywords: false);
+        Assert.Equal(";sig", vmDisabled.KeywordText);
+        Assert.False(vmDisabled.HasKeyword);
+        Assert.Equal(Visibility.Collapsed, vmDisabled.KeywordVisibility);
+
+        var appItem = new TriggerItem
+        {
+            Name = "Notepad",
+            ActionType = ActionType.Shell,
+            Abbreviation = "np"
+        };
+        var vmApp = new PaletteItemViewModel(appItem, null, showSnippetKeywords: true);
+        Assert.Empty(vmApp.KeywordText);
+        Assert.False(vmApp.HasKeyword);
+        Assert.Equal(Visibility.Collapsed, vmApp.KeywordVisibility);
+    }
+
+    [Fact]
+    public void CommandPalette_SnippetKeyword_FiltersAndSelectsByKeyword()
+    {
+        Exception? caughtEx = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                EnsureApplicationAndThemeResources();
+                var items = new List<TriggerItem>
+                {
+                    new()
+                    {
+                        Id = Guid.NewGuid(),
+                        Name = "Executive Signature",
+                        ActionType = ActionType.Snippet,
+                        Abbreviation = ";sig",
+                        Payload = new ActionPayload { SnippetTemplate = "Best regards,\nExecutive" }
+                    },
+                    new()
+                    {
+                        Id = Guid.NewGuid(),
+                        Name = "Calculator",
+                        ActionType = ActionType.Shell,
+                        Payload = new ActionPayload { Command = "calc.exe" }
+                    }
+                };
+
+                var dummyExecutor = new DummyExecutor();
+                var view = new CommandPaletteView(items, dummyExecutor);
+
+                // Type snippet keyword ";sig"
+                view.SearchTextBox.Text = ";sig";
+
+                Assert.True(view.ResultsListBox.Items.Count > 0);
+                var selected = view.ResultsListBox.SelectedItem as PaletteItemViewModel;
+                Assert.NotNull(selected);
+                Assert.Equal("Executive Signature", selected.Name);
+                Assert.Equal(";sig", selected.KeywordText);
+                Assert.Equal(Visibility.Visible, selected.KeywordVisibility);
+            }
+            catch (Exception ex)
+            {
+                caughtEx = ex;
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join(5000);
+
+        if (caughtEx != null)
+        {
+            throw new InvalidOperationException($"Test failed: {caughtEx.Message}", caughtEx);
+        }
+    }
+
+    [Fact]
+    public void CommandPaletteView_SearchMargins_CaretAndWatermarkProperlyAligned()
+    {
+        Exception? caughtEx = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                EnsureApplicationAndThemeResources();
+                var items = new List<TriggerItem>();
+                var dummyExecutor = new DummyExecutor();
+                var view = new CommandPaletteView(items, dummyExecutor);
+
+                // Verify comfortable left margin on SearchTextBox and SearchWatermark
+                Assert.Equal(6.0, view.SearchTextBox.Padding.Left);
+                Assert.Equal(8.0, view.SearchWatermark.Margin.Left);
+            }
+            catch (Exception ex)
+            {
+                caughtEx = ex;
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join(5000);
+
+        if (caughtEx != null)
+        {
+            throw new InvalidOperationException($"Test failed: {caughtEx.Message}", caughtEx);
+        }
+    }
+
+    [Fact]
+    public void PaletteItemViewModel_KeywordTooltip_ReflectsGlobalDefaultCasing()
+    {
+        var item = new TriggerItem
+        {
+            Id = Guid.NewGuid(),
+            Name = "Email Signature",
+            ActionType = ActionType.Snippet,
+            Abbreviation = ";sig",
+            AbbreviationCaseSensitive = null
+        };
+
+        PaletteItemViewModel.DefaultAbbreviationCaseSensitive = true;
+        var vmTrue = new PaletteItemViewModel(item, null);
+        Assert.Contains("Default: Case-sensitive (Global setting)", vmTrue.KeywordTooltip);
+
+        PaletteItemViewModel.DefaultAbbreviationCaseSensitive = false;
+        var vmFalse = new PaletteItemViewModel(item, null);
+        Assert.Contains("Default: Case-insensitive (Global setting)", vmFalse.KeywordTooltip);
+
+        // Reset to default
+        PaletteItemViewModel.DefaultAbbreviationCaseSensitive = true;
+    }
+
+    [Fact]
+    public void CommandPaletteView_FormatPillCount_FormatsAndCapsCleanly()
+    {
+        Assert.Equal("All (0)", CommandPaletteView.FormatPillCount("All", 0));
+        Assert.Equal("Apps (42)", CommandPaletteView.FormatPillCount("Apps", 42));
+        Assert.Equal("Snippets (999)", CommandPaletteView.FormatPillCount("Snippets", 999));
+        Assert.Equal("Clipboard (999+)", CommandPaletteView.FormatPillCount("Clipboard", 1000));
+        Assert.Equal("Services (999+)", CommandPaletteView.FormatPillCount("Services", 5280));
+    }
+
+    [Fact]
+    public void CommandPaletteView_FilterPills_WidthAndScrollButtons_ConfiguredProperly()
+    {
+        Exception? caughtEx = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                EnsureApplicationAndThemeResources();
+
+                var items = new List<TriggerItem>
+                {
+                    new() { Id = Guid.NewGuid(), Name = "App", ActionType = ActionType.Shell },
+                    new() { Id = Guid.NewGuid(), Name = "Snippet", ActionType = ActionType.Snippet }
+                };
+
+                var dummyExecutor = new DummyExecutor();
+                var view = new CommandPaletteView(items, dummyExecutor);
+
+                Assert.Equal(780, view.Width);
+                Assert.NotNull(view.FilterPillScrollLeftBtn);
+                Assert.NotNull(view.FilterPillScrollRightBtn);
+                Assert.NotNull(view.FilterPillsScrollViewer);
+                Assert.NotNull(view.FilterPillClipboard);
+                Assert.Contains("Clipboard", view.FilterCountClipboard.Text);
+
+                // Verify perimeter resize thumbs and footer resize grip exist
+                Assert.NotNull(view.ResizeThumbRight);
+                Assert.NotNull(view.ResizeThumbBottom);
+                Assert.NotNull(view.ResizeThumbLeft);
+                Assert.NotNull(view.ResizeThumbBottomRight);
+                Assert.NotNull(view.ResizeThumbBottomLeft);
+                Assert.NotNull(view.FooterResizeGripThumb);
+
+                // Verify searchbox height and caret breathing room
+                Assert.Equal(42, view.SearchBoxBorder.MinHeight);
+                Assert.Equal(30, view.SearchTextBox.Height);
+                Assert.Equal(15, view.SearchTextBox.FontSize);
+                Assert.Equal(2, view.SearchTextBox.Padding.Top);
+                Assert.Equal(2, view.SearchTextBox.Padding.Bottom);
+            }
+            catch (Exception ex)
+            {
+                caughtEx = ex;
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join(5000);
+
+        if (caughtEx != null)
+        {
+            throw new InvalidOperationException($"Test failed: {caughtEx.Message}", caughtEx);
+        }
+    }
+
+    [Fact]
+    public void AppSettings_CommandPaletteDimensions_SerializesAndDeserializes()
+    {
+        var settings = new AppSettings
+        {
+            CommandPaletteWidth = 920,
+            CommandPaletteHeight = 640
+        };
+
+        string json = System.Text.Json.JsonSerializer.Serialize(settings);
+        var restored = System.Text.Json.JsonSerializer.Deserialize<AppSettings>(json);
+
+        Assert.NotNull(restored);
+        Assert.Equal(920, restored.CommandPaletteWidth);
+        Assert.Equal(640, restored.CommandPaletteHeight);
+    }
+
+    [Fact]
+    public void CommandPaletteView_LoadAndSaveDimensions_PersistsAccurately()
+    {
+        Exception? caughtEx = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                EnsureApplicationAndThemeResources();
+
+                var tempDir = Path.Combine(Path.GetTempPath(), "TP_PaletteResize_" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(tempDir);
+                try
+                {
+                    var repo = new TriggerPoint.Infrastructure.Persistence.JsonConfigRepository(tempDir);
+                    var settings = repo.LoadSettingsAsync().GetAwaiter().GetResult();
+                    settings.CommandPaletteWidth = 850;
+                    settings.CommandPaletteHeight = 580;
+                    repo.SaveSettingsAsync(settings).GetAwaiter().GetResult();
+
+                    var items = new List<TriggerItem>();
+                    var view = new CommandPaletteView(items, new DummyExecutor(), repo);
+
+                    // Verify loaded dimensions from settings
+                    Assert.Equal(850, view.Width);
+                    Assert.Equal(580, view.Height);
+
+                    // Resize to a new custom dimension and save
+                    view.Width = 950;
+                    view.Height = 620;
+                    view.SaveCurrentDimensions();
+
+                    var reloadedSettings = repo.LoadSettingsAsync().GetAwaiter().GetResult();
+                    Assert.Equal(950, reloadedSettings.CommandPaletteWidth);
+                    Assert.Equal(620, reloadedSettings.CommandPaletteHeight);
+                }
+                finally
+                {
+                    if (Directory.Exists(tempDir))
+                    {
+                        Directory.Delete(tempDir, true);
+                    }
+                }
             }
             catch (Exception ex)
             {

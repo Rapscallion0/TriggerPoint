@@ -644,7 +644,7 @@ public class JsonConfigRepository : IConfigRepository
                 ActionType = ActionType.Snippet,
                 Payload = new ActionPayload
                 {
-                    SnippetTemplate = "## Meeting Notes - {date:MMMM dd, yyyy}\n**Attendees:** {text:Attendees}\n\n### Agenda\n- {text:Topic 1}\n- \n\n### Action Items\n- [ ] {cursor}"
+                    SnippetTemplate = "## Meeting Notes - {datetime:MMMM dd, yyyy}\n**Attendees:** {text:Attendees}\n\n### Agenda\n- {text:Topic 1}\n- \n\n### Action Items\n- [ ] {cursor}"
                 },
                 OrderIndex = 2
             },

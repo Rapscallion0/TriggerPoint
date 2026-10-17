@@ -1,0 +1,394 @@
+<Window x:Class="TriggerPoint.UI.Views.TokenConfigurationDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Configure Token"
+        Width="460"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        KeyDown="Window_KeyDown">
+
+    <Border Background="{DynamicResource BgSecondaryBrush}"
+            BorderBrush="{DynamicResource BorderBrush}"
+            BorderThickness="1"
+            CornerRadius="10"
+            Margin="10">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="22" ShadowDepth="4" Opacity="0.45" Direction="270"/>
+        </Border.Effect>
+
+        <Grid Margin="20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <Grid Grid.Row="0" Margin="0,0,0,14">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock x:Name="DialogIconText" Text="⚙️" FontSize="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="DialogTitleText"
+                               Text="Configure Token"
+                               FontSize="16"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <Button Grid.Column="1"
+                        Content="✕"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Foreground="{DynamicResource TextSecondaryBrush}"
+                        FontSize="13"
+                        FontWeight="Bold"
+                        Padding="6,2"
+                        Cursor="Hand"
+                        Click="CancelBtn_Click">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="Transparent" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </Grid>
+
+            <!-- Dynamic Token Form Container -->
+            <StackPanel Grid.Row="1" Margin="0,0,0,14">
+
+                <!-- 1. Date Format Panel -->
+                <StackPanel x:Name="DateFormatPanel" Visibility="Collapsed">
+                    <TextBlock Text="Date / Time Format String:" 
+                               FontSize="12" 
+                               FontWeight="SemiBold" 
+                               Foreground="{DynamicResource TextPrimaryBrush}" 
+                               Margin="0,0,0,5"/>
+                    <TextBox x:Name="DateFormatBox" 
+                             Height="30"
+                             Padding="8,5" 
+                             FontSize="12.5" 
+                             FontFamily="{StaticResource CodeFont}"
+                             Background="{DynamicResource BgInputBrush}"
+                             Foreground="{DynamicResource TextPrimaryBrush}"
+                             BorderBrush="{DynamicResource BorderBrush}"
+                             BorderThickness="1"
+                             TextChanged="DateFormatBox_TextChanged"/>
+
+                    <TextBlock Text="Quick presets (click to insert):" 
+                               FontSize="11" 
+                               Foreground="{DynamicResource TextSecondaryBrush}" 
+                               Margin="0,8,0,4"/>
+                    <WrapPanel x:Name="DatePresetsWrapPanel" Margin="0,0,0,10"/>
+
+                    <Border Background="{DynamicResource BgTertiaryBrush}"
+                            BorderBrush="{DynamicResource BorderSubtleBrush}"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="10,6"
+                            Margin="0,2,0,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Live Preview: " 
+                                       FontSize="11.5" 
+                                       FontWeight="SemiBold" 
+                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            <TextBlock x:Name="DateLivePreviewText" 
+                                       FontSize="11.5" 
+                                       FontFamily="{StaticResource CodeFont}"
+                                       FontWeight="SemiBold" 
+                                       Foreground="{DynamicResource AccentBrush}"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- 2. Text / Multiline Panel -->
+                <StackPanel x:Name="TextPromptPanel" Visibility="Collapsed">
+                    <TextBlock Text="Field Label (displayed to user):" 
+                               FontSize="12" 
+                               FontWeight="SemiBold" 
+                               Foreground="{DynamicResource TextPrimaryBrush}" 
+                               Margin="0,0,0,5"/>
+                    <TextBox x:Name="TextPromptLabelBox" 
+                             Height="30"
+                             Padding="8,5" 
+                             FontSize="12.5" 
+                             Background="{DynamicResource BgInputBrush}"
+                             Foreground="{DynamicResource TextPrimaryBrush}"
+                             BorderBrush="{DynamicResource BorderBrush}"
+                             BorderThickness="1"
+                             Margin="0,0,0,10"
+                             TextChanged="AnyField_TextChanged"/>
+
+                    <TextBlock Text="Default Value (optional prefill):" 
+                               FontSize="12" 
+                               FontWeight="SemiBold" 
+                               Foreground="{DynamicResource TextPrimaryBrush}" 
+                               Margin="0,0,0,5"/>
+                    <TextBox x:Name="TextPromptDefaultBox" 
+                             Height="30"
+                             Padding="8,5" 
+                             FontSize="12.5" 
+                             Background="{DynamicResource BgInputBrush}"
+                             Foreground="{DynamicResource TextPrimaryBrush}"
+                             BorderBrush="{DynamicResource BorderBrush}"
+                             BorderThickness="1"
+                             TextChanged="AnyField_TextChanged"/>
+                </StackPanel>
+
+                <!-- 3. Number Prompt Panel -->
+                <StackPanel x:Name="NumberPromptPanel" Visibility="Collapsed">
+                    <TextBlock Text="Field Label:" 
+                               FontSize="12" 
+                               FontWeight="SemiBold" 
+                               Foreground="{DynamicResource TextPrimaryBrush}" 
+                               Margin="0,0,0,5"/>
+                    <TextBox x:Name="NumberPromptLabelBox" 
+                             Height="30"
+                             Padding="8,5" 
+                             FontSize="12.5" 
+                             Background="{DynamicResource BgInputBrush}"
+                             Foreground="{DynamicResource TextPrimaryBrush}"
+                             BorderBrush="{DynamicResource BorderBrush}"
+                             BorderThickness="1"
+                             Margin="0,0,0,10"
+                             TextChanged="AnyField_TextChanged"/>
+
+                    <Grid Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="Min Value (optional):" 
+                                       FontSize="11.5" 
+                                       Foreground="{DynamicResource TextSecondaryBrush}" 
+                                       Margin="0,0,0,4"/>
+                            <TextBox x:Name="NumberMinBox" 
+                                     Height="30"
+                                     Padding="8,5" 
+                                     FontSize="12.5" 
+                                     Background="{DynamicResource BgInputBrush}"
+                                     Foreground="{DynamicResource TextPrimaryBrush}"
+                                     BorderBrush="{DynamicResource BorderBrush}"
+                                     BorderThickness="1"
+                                     TextChanged="AnyField_TextChanged"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="Max Value (optional):" 
+                                       FontSize="11.5" 
+                                       Foreground="{DynamicResource TextSecondaryBrush}" 
+                                       Margin="0,0,0,4"/>
+                            <TextBox x:Name="NumberMaxBox" 
+                                     Height="30"
+                                     Padding="8,5" 
+                                     FontSize="12.5" 
+                                     Background="{DynamicResource BgInputBrush}"
+                                     Foreground="{DynamicResource TextPrimaryBrush}"
+                                     BorderBrush="{DynamicResource BorderBrush}"
+                                     BorderThickness="1"
+                                     TextChanged="AnyField_TextChanged"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBlock Text="Default Value (optional):" 
+                               FontSize="11.5" 
+                               Foreground="{DynamicResource TextSecondaryBrush}" 
+                               Margin="0,0,0,4"/>
+                    <TextBox x:Name="NumberDefaultBox" 
+                             Height="30"
+                             Padding="8,5" 
+                             FontSize="12.5" 
+                             Background="{DynamicResource BgInputBrush}"
+                             Foreground="{DynamicResource TextPrimaryBrush}"
+                             BorderBrush="{DynamicResource BorderBrush}"
+                             BorderThickness="1"
+                             TextChanged="AnyField_TextChanged"/>
+                </StackPanel>
+
+                <!-- 4. Choice Prompt Panel -->
+                <StackPanel x:Name="ChoicePromptPanel" Visibility="Collapsed">
+                    <TextBlock Text="Field Label:" 
+                               FontSize="12" 
+                               FontWeight="SemiBold" 
+                               Foreground="{DynamicResource TextPrimaryBrush}" 
+                               Margin="0,0,0,5"/>
+                    <TextBox x:Name="ChoicePromptLabelBox" 
+                             Height="30"
+                             Padding="8,5" 
+                             FontSize="12.5" 
+                             Background="{DynamicResource BgInputBrush}"
+                             Foreground="{DynamicResource TextPrimaryBrush}"
+                             BorderBrush="{DynamicResource BorderBrush}"
+                             BorderThickness="1"
+                             Margin="0,0,0,10"
+                             TextChanged="AnyField_TextChanged"/>
+
+                    <TextBlock Text="Options (comma-separated, add * to mark default):" 
+                               FontSize="12" 
+                               FontWeight="SemiBold" 
+                               Foreground="{DynamicResource TextPrimaryBrush}" 
+                               Margin="0,0,0,5"/>
+                    <TextBox x:Name="ChoiceOptionsBox" 
+                             Height="50"
+                             TextWrapping="Wrap"
+                             AcceptsReturn="False"
+                             Padding="8,5" 
+                             FontSize="12" 
+                             Background="{DynamicResource BgInputBrush}"
+                             Foreground="{DynamicResource TextPrimaryBrush}"
+                             BorderBrush="{DynamicResource BorderBrush}"
+                             BorderThickness="1"
+                             Margin="0,0,0,4"
+                             TextChanged="AnyField_TextChanged"/>
+                    <TextBlock Text="Example: Low, Medium*, High or Production=prod, Staging*=stg" 
+                               FontSize="11" 
+                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                </StackPanel>
+
+                <!-- 5. Date Picker Prompt Panel -->
+                <StackPanel x:Name="DatePickerPromptPanel" Visibility="Collapsed">
+                    <TextBlock Text="Field Label:" 
+                               FontSize="12" 
+                               FontWeight="SemiBold" 
+                               Foreground="{DynamicResource TextPrimaryBrush}" 
+                               Margin="0,0,0,5"/>
+                    <TextBox x:Name="DatePickerLabelBox" 
+                             Height="30"
+                             Padding="8,5" 
+                             FontSize="12.5" 
+                             Background="{DynamicResource BgInputBrush}"
+                             Foreground="{DynamicResource TextPrimaryBrush}"
+                             BorderBrush="{DynamicResource BorderBrush}"
+                             BorderThickness="1"
+                             Margin="0,0,0,10"
+                             TextChanged="AnyField_TextChanged"/>
+
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="Output Date Format:" 
+                                       FontSize="11.5" 
+                                       Foreground="{DynamicResource TextSecondaryBrush}" 
+                                       Margin="0,0,0,4"/>
+                            <TextBox x:Name="DatePickerFormatBox" 
+                                     Height="30"
+                                     Padding="8,5" 
+                                     FontSize="12" 
+                                     FontFamily="{StaticResource CodeFont}"
+                                     Background="{DynamicResource BgInputBrush}"
+                                     Foreground="{DynamicResource TextPrimaryBrush}"
+                                     BorderBrush="{DynamicResource BorderBrush}"
+                                     BorderThickness="1"
+                                     TextChanged="AnyField_TextChanged"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="Default Offset (e.g. +7d, +1m):" 
+                                       FontSize="11.5" 
+                                       Foreground="{DynamicResource TextSecondaryBrush}" 
+                                       Margin="0,0,0,4"/>
+                            <TextBox x:Name="DatePickerOffsetBox" 
+                                     Height="30"
+                                     Padding="8,5" 
+                                     FontSize="12" 
+                                     FontFamily="{StaticResource CodeFont}"
+                                     Background="{DynamicResource BgInputBrush}"
+                                     Foreground="{DynamicResource TextPrimaryBrush}"
+                                     BorderBrush="{DynamicResource BorderBrush}"
+                                     BorderThickness="1"
+                                     TextChanged="AnyField_TextChanged"/>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+
+                <!-- 6. Generic Token Panel -->
+                <StackPanel x:Name="GenericTokenPanel" Visibility="Collapsed">
+                    <TextBlock Text="Token Tag:" 
+                               FontSize="12" 
+                               FontWeight="SemiBold" 
+                               Foreground="{DynamicResource TextPrimaryBrush}" 
+                               Margin="0,0,0,5"/>
+                    <TextBox x:Name="GenericTokenBox" 
+                             Height="30"
+                             Padding="8,5" 
+                             FontSize="12.5" 
+                             FontFamily="{StaticResource CodeFont}"
+                             Background="{DynamicResource BgInputBrush}"
+                             Foreground="{DynamicResource TextPrimaryBrush}"
+                             BorderBrush="{DynamicResource BorderBrush}"
+                             BorderThickness="1"
+                             TextChanged="AnyField_TextChanged"/>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Resulting Token Preview Badge -->
+            <Border Grid.Row="2"
+                    Background="{DynamicResource BgPrimaryBrush}"
+                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    Padding="10,6"
+                    Margin="0,0,0,16">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Resulting Token: " 
+                               FontSize="11.5" 
+                               FontWeight="SemiBold" 
+                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <TextBlock x:Name="ResultingTokenBadge" 
+                               Text="{}{datetime:yyyy-MM-dd HH:mm}" 
+                               FontSize="11.5" 
+                               FontFamily="{StaticResource CodeFont}"
+                               FontWeight="Bold" 
+                               Foreground="{DynamicResource AccentBrush}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Buttons -->
+            <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Cancel" 
+                        Width="85"
+                        Height="32"
+                        Margin="0,0,10,0"
+                        Style="{DynamicResource SecondaryButtonStyle}"
+                        Click="CancelBtn_Click"/>
+                <Button x:Name="SaveBtn"
+                        Content="Apply" 
+                        Width="85"
+                        Height="32"
+                        Style="{DynamicResource AccentButtonStyle}"
+                        Click="SaveBtn_Click"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

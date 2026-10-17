@@ -3,8 +3,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:TriggerPoint.UI.Views"
         Title="TriggerPoint Command Palette"
-        Width="720"
+        Width="780"
         Height="520"
+        MinWidth="640"
         MinHeight="360"
         WindowStartupLocation="CenterScreen"
         WindowStyle="None"
@@ -145,6 +146,41 @@
             </Setter>
         </Style>
 
+        <!-- Filter Pill Scroll Navigation Button Style -->
+        <Style x:Key="FilterPillNavButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="Width" Value="18"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="4"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ItemHoverBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ItemSelectedBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- Filter Pill Button Style -->
         <Style x:Key="FilterPillStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
@@ -154,8 +190,8 @@
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="FontWeight" Value="Medium"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Margin" Value="0,0,5,0"/>
-            <Setter Property="Padding" Value="7,2.5"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="Padding" Value="5,2"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -413,6 +449,74 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- Window Resize Invisible Edge/Corner Thumb Style -->
+        <Style x:Key="ResizeThumbStyle" TargetType="Thumb">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border Background="{TemplateBinding Background}"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Footer Visual Resize Grip Style -->
+        <Style x:Key="ResizeGripStyle" TargetType="Thumb">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border Background="{TemplateBinding Background}" SnapsToDevicePixels="True" Padding="2">
+                            <Path Data="M 12,2 L 14,2 L 14,4 L 12,4 Z M 8,6 L 10,6 L 10,8 L 8,8 Z M 12,6 L 14,6 L 14,8 L 12,8 Z M 4,10 L 6,10 L 6,12 L 4,12 Z M 8,10 L 10,10 L 10,12 L 8,12 Z M 12,10 L 14,10 L 14,12 L 12,12 Z"
+                                  Fill="{DynamicResource TextMutedBrush}"
+                                  Opacity="0.4"
+                                  Stretch="Uniform"
+                                  HorizontalAlignment="Right"
+                                  VerticalAlignment="Bottom"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Opacity" Value="0.9"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- Command Palette Search Input TextBox Style -->
+        <Style x:Key="CommandPaletteSearchTextBoxStyle" TargetType="TextBox">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource AccentBrush}"/>
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Padding" Value="6,2"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border Background="Transparent"
+                                BorderThickness="0"
+                                SnapsToDevicePixels="True">
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          Focusable="False"
+                                          HorizontalScrollBarVisibility="Hidden"
+                                          VerticalScrollBarVisibility="Hidden"
+                                          VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Border Background="{DynamicResource BgSecondaryBrush}"
@@ -424,7 +528,8 @@
             <DropShadowEffect BlurRadius="30" ShadowDepth="8" Opacity="0.55" Direction="270"/>
         </Border.Effect>
 
-        <Grid Margin="16,14,16,12">
+        <Grid>
+            <Grid Margin="16,14,16,12">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/> <!-- Search & Scope Header -->
                 <RowDefinition Height="Auto"/> <!-- Filter Pills Bar -->
@@ -438,11 +543,23 @@
                     x:Name="SearchBoxBorder"
                     Panel.ZIndex="1"
                     Background="{DynamicResource BgInputBrush}"
-                    BorderBrush="{DynamicResource BorderBrush}"
-                    BorderThickness="1"
                     CornerRadius="8"
-                    Padding="10,8"
-                    Margin="0,0,0,6">
+                    MinHeight="42"
+                    Height="42"
+                    Padding="10,0"
+                    Margin="0,0,0,7">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+                        <Setter Property="BorderThickness" Value="1"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsKeyboardFocusWithin, ElementName=SearchTextBox}" Value="True">
+                                <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                <Setter Property="BorderThickness" Value="1.5"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/> <!-- Back Button (Scoped) -->
@@ -466,28 +583,24 @@
                     <!-- Search Icon -->
                     <TextBlock Grid.Column="1" 
                                Text="🔍" 
-                               FontSize="14" 
-                               Margin="0,0,8,0" 
+                               FontSize="16" 
+                               Margin="0,0,10,0" 
                                VerticalAlignment="Center"
                                Foreground="{DynamicResource TextMutedBrush}"/>
 
                     <!-- Search Box with Placeholder -->
                     <Grid Grid.Column="2" VerticalAlignment="Center">
                         <TextBox x:Name="SearchTextBox"
-                                 Background="Transparent"
-                                 BorderThickness="0"
-                                 Foreground="{DynamicResource TextPrimaryBrush}"
-                                 CaretBrush="{DynamicResource AccentBrush}"
-                                 FontSize="14.5"
-                                 VerticalAlignment="Center"
+                                 Style="{StaticResource CommandPaletteSearchTextBoxStyle}"
                                  TextChanged="SearchTextBox_TextChanged"/>
 
                         <!-- Search Watermark Placeholder -->
                         <TextBlock x:Name="SearchWatermark"
                                    Text="Search actions, type @ for filters, = for math, or ? for help..."
-                                   FontSize="13.5"
+                                   FontSize="15"
                                    Foreground="{DynamicResource TextMutedBrush}"
                                    IsHitTestVisible="False"
+                                   Margin="8,0,0,0"
                                    VerticalAlignment="Center"
                                    Visibility="Visible"/>
                     </Grid>
@@ -556,7 +669,7 @@
                                 Style="{StaticResource HeaderIconButtonStyle}"
                                 Click="AppSettingsBtn_Click"
                                 ToolTip="Application Settings (Ctrl+,)">
-                            <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Grid HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
                                 <Path Width="14" Height="14" 
                                       Stretch="Uniform" 
                                       Fill="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
@@ -573,6 +686,14 @@
                                          Margin="0,-2,-2,0"
                                          Visibility="Collapsed"/>
                             </Grid>
+                        </Button>
+
+                        <!-- Productivity & Keystroke Savings Button -->
+                        <Button x:Name="ProductivityStatsBtn"
+                                Style="{StaticResource HeaderIconButtonStyle}"
+                                Click="ProductivityStatsBtn_Click"
+                                ToolTip="Productivity &amp; Keystroke Savings (📈)">
+                            <TextBlock Text="📈" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
                         </Button>
 
                         <!-- Shortcut & Help Cheat-Sheet Button -->
@@ -681,114 +802,161 @@
 
             <!-- Row 1: Filter Pills Bar -->
             <Border Grid.Row="1" x:Name="FilterPillsBar" Panel.ZIndex="50" Margin="0,0,0,6" ClipToBounds="False">
-                <ScrollViewer x:Name="FilterPillsScrollViewer"
-                              HorizontalScrollBarVisibility="Hidden"
-                              VerticalScrollBarVisibility="Disabled"
-                              Focusable="False"
-                              Padding="2,0,16,2"
-                              PreviewMouseWheel="FilterPillsScrollViewer_PreviewMouseWheel"
-                              ClipToBounds="False">
-                    <StackPanel Orientation="Horizontal" ClipToBounds="False">
-                        <!-- Filter Pill: All -->
-                        <Grid ClipToBounds="False" Margin="0,0,12,0">
-                            <Button x:Name="FilterPillAll" 
-                                    Click="FilterPill_Click" 
-                                    Tag="All" 
-                                    Margin="0,7,0,0"
-                                    Style="{StaticResource FilterPillStyle}">
-                                <TextBlock x:Name="FilterCountAll" Text="All (0)"/>
-                            </Button>
-                            <Border x:Name="PillShortcutAll" Style="{StaticResource PillCtrlBadgeStyle}" Visibility="Collapsed">
-                                <TextBlock Text="Ctrl+1" Style="{StaticResource PillCtrlBadgeTextStyle}"/>
-                            </Border>
-                        </Grid>
+                <Grid ClipToBounds="False">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
 
-                        <!-- Filter Pill: Apps -->
-                        <Grid ClipToBounds="False" Margin="0,0,12,0">
-                            <Button x:Name="FilterPillApp" 
-                                    Click="FilterPill_Click" 
-                                    Tag="App" 
-                                    Margin="0,7,0,0"
-                                    Style="{StaticResource FilterPillStyle}">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="⚡ " FontSize="11" Foreground="{DynamicResource ShellBrush}"/>
-                                    <TextBlock x:Name="FilterCountApp" Text="Apps (0)"/>
-                                </StackPanel>
-                            </Button>
-                            <Border x:Name="PillShortcutApp" Style="{StaticResource PillCtrlBadgeStyle}" Visibility="Collapsed">
-                                <TextBlock Text="Ctrl+2" Style="{StaticResource PillCtrlBadgeTextStyle}"/>
-                            </Border>
-                        </Grid>
+                    <!-- Scroll Left Chevron Button (Visible when horizontally scrolled) -->
+                    <Button x:Name="FilterPillScrollLeftBtn"
+                            Grid.Column="0"
+                            Style="{StaticResource FilterPillNavButtonStyle}"
+                            Content="◀"
+                            ToolTip="Scroll filter tabs left"
+                            Visibility="Collapsed"
+                            Margin="0,7,3,0"
+                            Click="FilterPillScrollLeftBtn_Click"/>
 
-                        <!-- Filter Pill: Snippets -->
-                        <Grid ClipToBounds="False" Margin="0,0,12,0">
-                            <Button x:Name="FilterPillSnippet" 
-                                    Click="FilterPill_Click" 
-                                    Tag="Snippet" 
-                                    Margin="0,7,0,0"
-                                    Style="{StaticResource FilterPillStyle}">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="📝 " FontSize="11" Foreground="{DynamicResource SnippetBrush}"/>
-                                    <TextBlock x:Name="FilterCountSnippet" Text="Snippets (0)"/>
-                                </StackPanel>
-                            </Button>
-                            <Border x:Name="PillShortcutSnippet" Style="{StaticResource PillCtrlBadgeStyle}" Visibility="Collapsed">
-                                <TextBlock Text="Ctrl+3" Style="{StaticResource PillCtrlBadgeTextStyle}"/>
-                            </Border>
-                        </Grid>
+                    <ScrollViewer Grid.Column="1"
+                                  x:Name="FilterPillsScrollViewer"
+                                  HorizontalScrollBarVisibility="Hidden"
+                                  VerticalScrollBarVisibility="Disabled"
+                                  Focusable="False"
+                                  Padding="2,0,2,2"
+                                  PreviewMouseWheel="FilterPillsScrollViewer_PreviewMouseWheel"
+                                  ScrollChanged="FilterPillsScrollViewer_ScrollChanged"
+                                  ClipToBounds="False">
+                        <StackPanel Orientation="Horizontal" ClipToBounds="False">
+                            <!-- Filter Pill: All -->
+                            <Grid ClipToBounds="False" Margin="0,0,4,0">
+                                <Button x:Name="FilterPillAll" 
+                                        Click="FilterPill_Click" 
+                                        Tag="All" 
+                                        Margin="0,7,0,0"
+                                        Style="{StaticResource FilterPillStyle}">
+                                    <TextBlock x:Name="FilterCountAll" Text="All (0)"/>
+                                </Button>
+                                <Border x:Name="PillShortcutAll" Style="{StaticResource PillCtrlBadgeStyle}" Visibility="Collapsed">
+                                    <TextBlock Text="Ctrl+1" Style="{StaticResource PillCtrlBadgeTextStyle}"/>
+                                </Border>
+                            </Grid>
 
-                        <!-- Filter Pill: Workflows -->
-                        <Grid ClipToBounds="False" Margin="0,0,12,0">
-                            <Button x:Name="FilterPillWorkflow" 
-                                    Click="FilterPill_Click" 
-                                    Tag="Workflow" 
-                                    Margin="0,7,0,0"
-                                    Style="{StaticResource FilterPillStyle}">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="🔀 " FontSize="11" Foreground="{DynamicResource WorkflowBrush}"/>
-                                    <TextBlock x:Name="FilterCountWorkflow" Text="Workflows (0)"/>
-                                </StackPanel>
-                            </Button>
-                            <Border x:Name="PillShortcutWorkflow" Style="{StaticResource PillCtrlBadgeStyle}" Visibility="Collapsed">
-                                <TextBlock Text="Ctrl+4" Style="{StaticResource PillCtrlBadgeTextStyle}"/>
-                            </Border>
-                        </Grid>
+                            <!-- Filter Pill: Apps -->
+                            <Grid ClipToBounds="False" Margin="0,0,4,0">
+                                <Button x:Name="FilterPillApp" 
+                                        Click="FilterPill_Click" 
+                                        Tag="App" 
+                                        Margin="0,7,0,0"
+                                        Style="{StaticResource FilterPillStyle}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="⚡ " FontSize="11" Foreground="{DynamicResource ShellBrush}"/>
+                                        <TextBlock x:Name="FilterCountApp" Text="Apps (0)"/>
+                                    </StackPanel>
+                                </Button>
+                                <Border x:Name="PillShortcutApp" Style="{StaticResource PillCtrlBadgeStyle}" Visibility="Collapsed">
+                                    <TextBlock Text="Ctrl+2" Style="{StaticResource PillCtrlBadgeTextStyle}"/>
+                                </Border>
+                            </Grid>
 
-                        <!-- Filter Pill: Folders -->
-                        <Grid ClipToBounds="False" Margin="0,0,12,0">
-                            <Button x:Name="FilterPillFolder" 
-                                    Click="FilterPill_Click" 
-                                    Tag="Folder" 
-                                    Margin="0,7,0,0"
-                                    Style="{StaticResource FilterPillStyle}">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="📁 " FontSize="11" Foreground="{DynamicResource FolderBrush}"/>
-                                    <TextBlock x:Name="FilterCountFolder" Text="Folders (0)"/>
-                                </StackPanel>
-                            </Button>
-                            <Border x:Name="PillShortcutFolder" Style="{StaticResource PillCtrlBadgeStyle}" Visibility="Collapsed">
-                                <TextBlock Text="Ctrl+5" Style="{StaticResource PillCtrlBadgeTextStyle}"/>
-                            </Border>
-                        </Grid>
+                            <!-- Filter Pill: Snippets -->
+                            <Grid ClipToBounds="False" Margin="0,0,4,0">
+                                <Button x:Name="FilterPillSnippet" 
+                                        Click="FilterPill_Click" 
+                                        Tag="Snippet" 
+                                        Margin="0,7,0,0"
+                                        Style="{StaticResource FilterPillStyle}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="📝 " FontSize="11" Foreground="{DynamicResource SnippetBrush}"/>
+                                        <TextBlock x:Name="FilterCountSnippet" Text="Snippets (0)"/>
+                                    </StackPanel>
+                                </Button>
+                                <Border x:Name="PillShortcutSnippet" Style="{StaticResource PillCtrlBadgeStyle}" Visibility="Collapsed">
+                                    <TextBlock Text="Ctrl+3" Style="{StaticResource PillCtrlBadgeTextStyle}"/>
+                                </Border>
+                            </Grid>
 
-                        <!-- Filter Pill: Services -->
-                        <Grid ClipToBounds="False" Margin="0,0,12,0">
-                            <Button x:Name="FilterPillService" 
-                                    Click="FilterPill_Click" 
-                                    Tag="Service" 
-                                    Margin="0,7,0,0"
-                                    Style="{StaticResource FilterPillStyle}">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="⚙️ " FontSize="11" Foreground="{DynamicResource AccentBrush}"/>
-                                    <TextBlock x:Name="FilterCountService" Text="Services (0)"/>
-                                </StackPanel>
-                            </Button>
-                            <Border x:Name="PillShortcutService" Style="{StaticResource PillCtrlBadgeStyle}" Visibility="Collapsed">
-                                <TextBlock Text="Ctrl+6" Style="{StaticResource PillCtrlBadgeTextStyle}"/>
-                            </Border>
-                        </Grid>
-                    </StackPanel>
-                </ScrollViewer>
+                            <!-- Filter Pill: Workflows -->
+                            <Grid ClipToBounds="False" Margin="0,0,4,0">
+                                <Button x:Name="FilterPillWorkflow" 
+                                        Click="FilterPill_Click" 
+                                        Tag="Workflow" 
+                                        Margin="0,7,0,0"
+                                        Style="{StaticResource FilterPillStyle}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="🔀 " FontSize="11" Foreground="{DynamicResource WorkflowBrush}"/>
+                                        <TextBlock x:Name="FilterCountWorkflow" Text="Workflows (0)"/>
+                                    </StackPanel>
+                                </Button>
+                                <Border x:Name="PillShortcutWorkflow" Style="{StaticResource PillCtrlBadgeStyle}" Visibility="Collapsed">
+                                    <TextBlock Text="Ctrl+4" Style="{StaticResource PillCtrlBadgeTextStyle}"/>
+                                </Border>
+                            </Grid>
+
+                            <!-- Filter Pill: Folders -->
+                            <Grid ClipToBounds="False" Margin="0,0,4,0">
+                                <Button x:Name="FilterPillFolder" 
+                                        Click="FilterPill_Click" 
+                                        Tag="Folder" 
+                                        Margin="0,7,0,0"
+                                        Style="{StaticResource FilterPillStyle}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="📁 " FontSize="11" Foreground="{DynamicResource FolderBrush}"/>
+                                        <TextBlock x:Name="FilterCountFolder" Text="Folders (0)"/>
+                                    </StackPanel>
+                                </Button>
+                                <Border x:Name="PillShortcutFolder" Style="{StaticResource PillCtrlBadgeStyle}" Visibility="Collapsed">
+                                    <TextBlock Text="Ctrl+5" Style="{StaticResource PillCtrlBadgeTextStyle}"/>
+                                </Border>
+                            </Grid>
+
+                            <!-- Filter Pill: Services -->
+                            <Grid ClipToBounds="False" Margin="0,0,4,0">
+                                <Button x:Name="FilterPillService" 
+                                        Click="FilterPill_Click" 
+                                        Tag="Service" 
+                                        Margin="0,7,0,0"
+                                        Style="{StaticResource FilterPillStyle}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="⚙️ " FontSize="11" Foreground="{DynamicResource AccentBrush}"/>
+                                        <TextBlock x:Name="FilterCountService" Text="Services (0)"/>
+                                    </StackPanel>
+                                </Button>
+                                <Border x:Name="PillShortcutService" Style="{StaticResource PillCtrlBadgeStyle}" Visibility="Collapsed">
+                                    <TextBlock Text="Ctrl+6" Style="{StaticResource PillCtrlBadgeTextStyle}"/>
+                                </Border>
+                            </Grid>
+
+                            <!-- Filter Pill: Clipboard History -->
+                            <Grid ClipToBounds="False" Margin="0,0,0,0">
+                                <Button x:Name="FilterPillClipboard" 
+                                        Click="FilterPill_Click" 
+                                        Tag="Clipboard" 
+                                        Margin="0,7,0,0"
+                                        Style="{StaticResource FilterPillStyle}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="📋 " FontSize="11" Foreground="{DynamicResource AccentBrush}"/>
+                                        <TextBlock x:Name="FilterCountClipboard" Text="Clipboard (0)"/>
+                                    </StackPanel>
+                                </Button>
+                                <Border x:Name="PillShortcutClipboard" Style="{StaticResource PillCtrlBadgeStyle}" Visibility="Collapsed">
+                                    <TextBlock Text="Ctrl+7" Style="{StaticResource PillCtrlBadgeTextStyle}"/>
+                                </Border>
+                            </Grid>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- Scroll Right Chevron Button (Visible when more tabs exist to the right) -->
+                    <Button x:Name="FilterPillScrollRightBtn"
+                            Grid.Column="2"
+                            Style="{StaticResource FilterPillNavButtonStyle}"
+                            Content="▶"
+                            ToolTip="Scroll filter tabs right"
+                            Visibility="Collapsed"
+                            Margin="3,7,0,0"
+                            Click="FilterPillScrollRightBtn_Click"/>
+                </Grid>
             </Border>
 
             <!-- Row 2: Results List & Empty State View -->
@@ -982,6 +1150,29 @@
                                                         Foreground="{Binding TypeForegroundBrush}"/>
                                          </Border>
 
+                                         <!-- Snippet Trigger Keyword Badge -->
+                                         <Border CornerRadius="4"
+                                                 BorderThickness="1"
+                                                 BorderBrush="{DynamicResource SnippetBrush}"
+                                                 Background="{DynamicResource SnippetSubtleBrush}"
+                                                 Padding="5,1.5"
+                                                 Margin="0,0,6,0"
+                                                 ToolTip="{Binding KeywordTooltip}"
+                                                 Visibility="{Binding KeywordVisibility}"
+                                                 VerticalAlignment="Center">
+                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                 <TextBlock Text="&#x1F524; "
+                                                            FontSize="9"
+                                                            VerticalAlignment="Center"/>
+                                                 <TextBlock Text="{Binding KeywordText}"
+                                                            FontSize="9.5"
+                                                            FontWeight="SemiBold"
+                                                            FontFamily="{StaticResource CodeFont}"
+                                                            Foreground="{DynamicResource SnippetBrush}"
+                                                            VerticalAlignment="Center"/>
+                                             </StackPanel>
+                                         </Border>
+
                                          <!-- Admin Elevation Micro-Badge -->
                                          <Border CornerRadius="4"
                                                  BorderThickness="1"
@@ -997,6 +1188,22 @@
                                                         FontWeight="SemiBold"
                                                         Foreground="#E5A93C"/>
                                          </Border>
+
+                                          <!-- Pinned Badge for Clipboard Items -->
+                                          <Border CornerRadius="4"
+                                                  BorderThickness="1"
+                                                  BorderBrush="{DynamicResource AccentBrush}"
+                                                  Background="{DynamicResource AccentSubtleBrush}"
+                                                  Padding="5,1.5"
+                                                  Margin="0,0,6,0"
+                                                  ToolTip="Pinned clip"
+                                                  Visibility="{Binding PinBadgeVisibility}"
+                                                  VerticalAlignment="Center">
+                                              <TextBlock Text="📌 Pinned"
+                                                         FontSize="9.5"
+                                                         FontWeight="SemiBold"
+                                                         Foreground="{DynamicResource AccentBrush}"/>
+                                          </Border>
 
                                          <!-- Folder Drill-Down Chevron (Clickable for mouse users) -->
                                          <Button Visibility="{Binding IsFolder}"
@@ -1734,6 +1941,7 @@
                             Background="{DynamicResource SuccessBrush}"
                             CornerRadius="4"
                             Padding="8,2"
+                            Margin="0,0,24,0"
                             HorizontalAlignment="Right"
                             VerticalAlignment="Center"
                             Visibility="Collapsed">
@@ -1743,12 +1951,26 @@
                                    FontWeight="SemiBold"
                                    Foreground="White"/>
                     </Border>
+
+                    <!-- Visual Corner Resize Grip in Bottom-Right -->
+                    <Thumb x:Name="FooterResizeGripThumb"
+                           Tag="BottomRight"
+                           HorizontalAlignment="Right"
+                           VerticalAlignment="Center"
+                           Width="18"
+                           Height="18"
+                           Cursor="SizeNWSE"
+                           ToolTip="Drag to resize palette. Double-click to reset size."
+                           MouseDoubleClick="ResizeGrip_MouseDoubleClick"
+                           DragDelta="ResizeThumb_DragDelta"
+                           Style="{StaticResource ResizeGripStyle}"/>
                 </Grid>
             </Border>
 
             <!-- Overlay: Keyboard Shortcuts & Search Hints Cheat-Sheet Modal -->
             <Grid Grid.Row="0" Grid.RowSpan="5" 
                   x:Name="CheatSheetOverlay" 
+                  Panel.ZIndex="100"
                   Background="{DynamicResource BgSecondaryBrush}"
                   Visibility="Collapsed">
                 <Border BorderBrush="{DynamicResource BorderBrush}"
@@ -1817,7 +2039,7 @@
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
                                             <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
-                                                <TextBlock Text="@app, @apps" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                <TextBlock Text="@app, @cmd" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             </Border>
                                             <TextBlock Grid.Column="1" Text="Filter to Apps &amp; Shell Commands (Ctrl+2)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                         </Grid>
@@ -1828,7 +2050,7 @@
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
                                             <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
-                                                <TextBlock Text="@snip, @snippets" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                <TextBlock Text="@snip, @text" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             </Border>
                                             <TextBlock Grid.Column="1" Text="Filter to Snippets &amp; Templates (Ctrl+3)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                         </Grid>
@@ -1839,7 +2061,7 @@
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
                                             <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
-                                                <TextBlock Text="@flow, @workflows" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                <TextBlock Text="@flow, @wf" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             </Border>
                                             <TextBlock Grid.Column="1" Text="Filter to Workflows (Ctrl+4)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                         </Grid>
@@ -1850,7 +2072,7 @@
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
                                             <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
-                                                <TextBlock Text="@folder, @folders" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                <TextBlock Text="@folder, @dir" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             </Border>
                                             <TextBlock Grid.Column="1" Text="Filter to Folders (Ctrl+5)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                         </Grid>
@@ -1864,6 +2086,17 @@
                                                 <TextBlock Text="@service, @svc" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             </Border>
                                             <TextBlock Grid.Column="1" Text="Manage Windows Services (Ctrl+6)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="@clip, @c" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Filter to Clipboard History (Ctrl+7)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                         </Grid>
 
                                         <Grid Margin="0,2.5">
@@ -1914,7 +2147,7 @@
                                             <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
                                                 <TextBlock Text="Enter" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             </Border>
-                                            <TextBlock Grid.Column="1" Text="Execute action / Drill into folder / Open Calc View" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1" Text="Execute action / Drill into folder / Open Calc / Paste clip" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                         </Grid>
 
                                         <Grid Margin="0,2.5">
@@ -1925,7 +2158,29 @@
                                             <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
                                                 <TextBlock Text="Shift+Enter" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             </Border>
-                                            <TextBlock Grid.Column="1" Text="Reveal in Explorer / Direct paste calc answer" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1" Text="Reveal in Explorer / Direct paste calc / Paste plain text" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="Ctrl+P" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Pin / unpin selected clipboard item" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="Delete" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Delete selected clip from clipboard history" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                         </Grid>
 
                                         <Grid Margin="0,2.5">
@@ -2053,7 +2308,7 @@
                                             <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
                                                 <TextBlock Text="Hold Ctrl" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             </Border>
-                                            <TextBlock Grid.Column="1" Text="Show quick filter jump keys (Ctrl+1 .. Ctrl+5)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1" Text="Show quick filter jump keys (Ctrl+1 .. Ctrl+7)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                         </Grid>
 
                                         <Grid Margin="0,2.5">
@@ -2062,7 +2317,7 @@
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
                                             <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
-                                                <TextBlock Text="Ctrl+1 .. 5" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                <TextBlock Text="Ctrl+1 .. 7" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             </Border>
                                             <TextBlock Grid.Column="1" Text="Switch filter pills directly" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                         </Grid>
@@ -2600,5 +2855,13 @@
                 </Border>
             </Grid>
         </Grid>
+
+        <!-- Invisible Perimeter Resize Thumbs around the card border -->
+        <Thumb x:Name="ResizeThumbRight" Tag="Right" HorizontalAlignment="Right" Width="7" Cursor="SizeWE" DragDelta="ResizeThumb_DragDelta" Style="{StaticResource ResizeThumbStyle}"/>
+        <Thumb x:Name="ResizeThumbBottom" Tag="Bottom" VerticalAlignment="Bottom" Height="7" Cursor="SizeNS" DragDelta="ResizeThumb_DragDelta" Style="{StaticResource ResizeThumbStyle}"/>
+        <Thumb x:Name="ResizeThumbLeft" Tag="Left" HorizontalAlignment="Left" Width="7" Cursor="SizeWE" DragDelta="ResizeThumb_DragDelta" Style="{StaticResource ResizeThumbStyle}"/>
+        <Thumb x:Name="ResizeThumbBottomRight" Tag="BottomRight" HorizontalAlignment="Right" VerticalAlignment="Bottom" Width="14" Height="14" Cursor="SizeNWSE" DragDelta="ResizeThumb_DragDelta" Style="{StaticResource ResizeThumbStyle}"/>
+        <Thumb x:Name="ResizeThumbBottomLeft" Tag="BottomLeft" HorizontalAlignment="Left" VerticalAlignment="Bottom" Width="14" Height="14" Cursor="SizeNESW" DragDelta="ResizeThumb_DragDelta" Style="{StaticResource ResizeThumbStyle}"/>
+    </Grid>
     </Border>
 </Window>

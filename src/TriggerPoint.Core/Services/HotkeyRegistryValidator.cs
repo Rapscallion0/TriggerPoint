@@ -271,7 +271,8 @@ public static class HotkeyRegistryValidator
         ShortcutBinding? openSettingsHotkey,
         ShortcutBinding? commandPaletteHotkey,
         IEnumerable<TriggerItem> allItems,
-        ShortcutBinding? cheatSheetHotkey = null)
+        ShortcutBinding? cheatSheetHotkey = null,
+        ShortcutBinding? clipboardHotkey = null)
     {
         if (openSettingsHotkey != null && !openSettingsHotkey.IsEmpty)
         {
@@ -280,7 +281,8 @@ public static class HotkeyRegistryValidator
                 openSettingsHotkey, 
                 allItems, 
                 ("Command Palette", commandPaletteHotkey),
-                ("Cheat Sheet HUD", cheatSheetHotkey));
+                ("Cheat Sheet HUD", cheatSheetHotkey),
+                ("Clipboard History", clipboardHotkey));
 
             if (conflict != null)
             {
@@ -295,7 +297,8 @@ public static class HotkeyRegistryValidator
                 commandPaletteHotkey, 
                 allItems, 
                 ("Open Action Manager", openSettingsHotkey),
-                ("Cheat Sheet HUD", cheatSheetHotkey));
+                ("Cheat Sheet HUD", cheatSheetHotkey),
+                ("Clipboard History", clipboardHotkey));
 
             if (conflict != null)
             {
@@ -310,11 +313,28 @@ public static class HotkeyRegistryValidator
                 cheatSheetHotkey, 
                 allItems, 
                 ("Open Action Manager", openSettingsHotkey),
-                ("Command Palette", commandPaletteHotkey));
+                ("Command Palette", commandPaletteHotkey),
+                ("Clipboard History", clipboardHotkey));
 
             if (conflict != null)
             {
                 return (false, $"The shortcut '{cheatSheetHotkey.DisplayText}' for 'Cheat Sheet HUD' conflicts with '{conflict.ConflictingActionName}' ({conflict.ConflictingFolderName}).");
+            }
+        }
+
+        if (clipboardHotkey != null && !clipboardHotkey.IsEmpty)
+        {
+            var conflict = CheckApplicationHotkeyConflict(
+                "Clipboard History", 
+                clipboardHotkey, 
+                allItems, 
+                ("Open Action Manager", openSettingsHotkey),
+                ("Command Palette", commandPaletteHotkey),
+                ("Cheat Sheet HUD", cheatSheetHotkey));
+
+            if (conflict != null)
+            {
+                return (false, $"The shortcut '{clipboardHotkey.DisplayText}' for 'Clipboard History' conflicts with '{conflict.ConflictingActionName}' ({conflict.ConflictingFolderName}).");
             }
         }
 

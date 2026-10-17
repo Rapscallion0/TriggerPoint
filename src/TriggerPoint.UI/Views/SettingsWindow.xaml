@@ -75,18 +75,31 @@
                     <Button x:Name="SnoozeToggleBtn"
                             Content="🔔 Active" 
                             Style="{StaticResource SecondaryButtonStyle}" 
+                            WindowChrome.IsHitTestVisibleInChrome="True"
                             Margin="0,0,8,0"
                             ToolTip="Toggle global hotkeys snooze mode"
                             Click="SnoozeToggleBtn_Click"/>
 
+                    <Button x:Name="ProductivityBtn"
+                            Style="{StaticResource SecondaryButtonStyle}" 
+                            WindowChrome.IsHitTestVisibleInChrome="True"
+                            Width="32" Height="32"
+                            Padding="0"
+                            Margin="0,0,8,0"
+                            ToolTip="Productivity &amp; Keystroke Savings Dashboard (📈)"
+                            Click="ProductivityBtn_Click">
+                        <TextBlock Text="📈" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                    </Button>
+
                     <Button x:Name="AppSettingsBtn"
                             Style="{StaticResource SecondaryButtonStyle}" 
+                            WindowChrome.IsHitTestVisibleInChrome="True"
                             Width="32" Height="32"
                             Padding="0"
                             Margin="0,0,16,0"
                             ToolTip="Application Settings (Log Level, Log Retention, Theme, Startup)"
                             Click="AppSettingsBtn_Click">
-                        <Grid>
+                        <Grid IsHitTestVisible="False">
                             <Path Width="14" Height="14" 
                                   Stretch="Uniform" 
                                   Fill="{DynamicResource TextPrimaryBrush}"
@@ -372,6 +385,11 @@
                                     <TextBlock Text="✏" FontSize="13" Foreground="{DynamicResource AccentBrush}"/>
                                 </MenuItem.Icon>
                             </MenuItem>
+                            <MenuItem x:Name="ContextJumpToAbbreviationConflictItem" Header="Jump to Conflicting Snippet..." Click="ContextJumpToAbbreviationConflictItem_Click" Visibility="Collapsed">
+                                <MenuItem.Icon>
+                                    <TextBlock Text="⚡" FontSize="13" Foreground="{DynamicResource WarningBrush}"/>
+                                </MenuItem.Icon>
+                            </MenuItem>
                             <Separator x:Name="ContextDeleteSeparator"/>
                             <MenuItem x:Name="ContextDeleteItem" Header="Delete" InputGestureText="Del" Click="DeleteItemBtn_Click">
                                 <MenuItem.Icon>
@@ -504,18 +522,32 @@
                                                        Foreground="{DynamicResource ErrorBrush}"/>
                                         </Border>
 
-                                        <!-- Conflict Warning Badge: Icon Only with Tooltip -->
-                                        <Border Grid.Column="3" 
-                                                Style="{StaticResource ConflictBadgeStyle}" 
-                                                Margin="6,0,0,0"
-                                                VerticalAlignment="Center"
-                                                ToolTip="{Binding ConflictTooltip}"
-                                                Visibility="{Binding HasConflictVisibility}">
-                                            <TextBlock Text="⚠" 
-                                                       FontSize="11" 
-                                                       FontWeight="Bold" 
-                                                       Foreground="{DynamicResource WarningBrush}"/>
-                                        </Border>
+                                        <!-- Conflict Warning Badges (Hotkey and/or Abbreviation) -->
+                                        <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <!-- Hotkey Conflict Warning Badge -->
+                                            <Border Style="{StaticResource ConflictBadgeStyle}" 
+                                                    Margin="6,0,0,0"
+                                                    VerticalAlignment="Center"
+                                                    ToolTip="{Binding ConflictTooltip}"
+                                                    Visibility="{Binding HasConflictVisibility}">
+                                                <TextBlock Text="⚠" 
+                                                           FontSize="11" 
+                                                           FontWeight="Bold" 
+                                                           Foreground="{DynamicResource WarningBrush}"/>
+                                            </Border>
+
+                                            <!-- Abbreviation Conflict Warning Badge -->
+                                            <Border Style="{StaticResource ConflictBadgeStyle}" 
+                                                    Margin="6,0,0,0"
+                                                    VerticalAlignment="Center"
+                                                    ToolTip="{Binding AbbreviationConflictTooltip}"
+                                                    Visibility="{Binding HasAbbreviationConflictVisibility}">
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="⚡" FontSize="9.5" Foreground="{DynamicResource WarningBrush}"/>
+                                                    <TextBlock Text="⚠" FontSize="9.5" FontWeight="Bold" Foreground="{DynamicResource WarningBrush}"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </StackPanel>
 
                                         <!-- Disabled Badge -->
                                         <Border Grid.Column="4" 
@@ -1077,14 +1109,43 @@
                             <TextBlock Text="Type this abbreviation in any document, terminal, or browser tab to automatically replace it with your snippet template."
                                        FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,10" TextWrapping="Wrap"/>
 
+                            <!-- Inline Abbreviation Conflict & Shadow Diagnostic Banner -->
+                            <Border x:Name="SnippetAbbreviationConflictBanner"
+                                    Background="{DynamicResource WarningSubtleBrush}"
+                                    BorderBrush="{DynamicResource WarningBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="10,8"
+                                    Margin="0,0,0,10"
+                                    Visibility="Collapsed">
+                                <StackPanel>
+                                    <TextBlock x:Name="SnippetAbbreviationConflictTitle"
+                                               Text="⚠ Abbreviation Collision"
+                                               FontWeight="SemiBold"
+                                               FontSize="11.5"
+                                               Foreground="{DynamicResource WarningBrush}"
+                                               Margin="0,0,0,2"/>
+                                    <TextBlock x:Name="SnippetAbbreviationConflictMessage"
+                                               FontSize="11"
+                                               Foreground="{DynamicResource TextPrimaryBrush}"
+                                               TextWrapping="Wrap"
+                                               Margin="0,0,0,6"/>
+                                    <WrapPanel x:Name="SnippetAbbreviationConflictLinksPanel" Orientation="Horizontal"/>
+                                </StackPanel>
+                            </Border>
+
                             <Grid Margin="0,0,0,4">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="180"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
 
                                 <!-- Abbreviation input box -->
-                                <StackPanel Grid.Column="0" Margin="0,0,14,0">
+                                <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,14,0">
                                     <TextBlock Text="Abbreviation / Keyword" FontSize="11" FontWeight="Medium" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4"/>
                                     <TextBox x:Name="SnippetAbbreviationBox"
                                              Style="{StaticResource ModernTextBoxStyle}"
@@ -1094,7 +1155,7 @@
                                 </StackPanel>
 
                                 <!-- Trigger Mode options -->
-                                <StackPanel Grid.Column="1">
+                                <StackPanel Grid.Row="0" Grid.Column="1">
                                     <TextBlock Text="Expansion Trigger Mode" FontSize="11" FontWeight="Medium" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4"/>
                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,0,0">
                                         <RadioButton x:Name="SnippetModeImmediateRadio"
@@ -1110,6 +1171,23 @@
                                                      IsChecked="True"
                                                      ToolTip="Expands when followed by a delimiter key such as space, enter, comma, or period (prevents accidental trigger inside longer words)"/>
                                     </StackPanel>
+                                </StackPanel>
+
+                                <!-- Case Sensitivity option: Compact Dropdown with Dynamic Default & Global Setting Hint -->
+                                <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="0,10,0,0">
+                                    <TextBlock Text="Case Sensitivity" FontSize="11" FontWeight="Medium" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4"/>
+                                    <ComboBox x:Name="SnippetAbbreviationCaseSensitiveCombo"
+                                              Width="240"
+                                              HorizontalAlignment="Left"
+                                              Style="{StaticResource ModernComboBoxStyle}">
+                                        <ComboBoxItem x:Name="SnippetCaseSensitiveDefaultItem" Content="Default: Case-sensitive" Tag="default"/>
+                                        <ComboBoxItem Content="Always Case-sensitive" Tag="sensitive"/>
+                                        <ComboBoxItem Content="Always Case-insensitive" Tag="insensitive"/>
+                                    </ComboBox>
+                                    <TextBlock Text="Default inherits your global Application Settings configuration."
+                                               FontSize="11"
+                                               Foreground="{DynamicResource TextMutedBrush}"
+                                               Margin="2,4,0,0"/>
                                 </StackPanel>
                             </Grid>
                         </StackPanel>

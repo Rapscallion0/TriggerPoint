@@ -65,6 +65,45 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- Modern Radio Pill Style for Productivity Time Horizon Filter -->
+        <Style x:Key="RadioPillStyle" TargetType="RadioButton">
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="PillBorder"
+                                Background="Transparent"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="12"
+                                Padding="10,3"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <ContentPresenter.Resources>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="FontSize" Value="11.5"/>
+                                        <Setter Property="FontWeight" Value="Medium"/>
+                                        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+                                    </Style>
+                                </ContentPresenter.Resources>
+                            </ContentPresenter>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="PillBorder" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="PillBorder" Property="Background" Value="{DynamicResource AccentSubtleBrush}"/>
+                                <Setter TargetName="PillBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Grid Margin="18,14,18,14">
@@ -298,6 +337,34 @@
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="💾" FontSize="13" VerticalAlignment="Center"/>
                                     <TextBlock Grid.Column="1" Text="Data &amp; Backup" FontSize="12.5" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Button>
+
+                            <!-- 7. Productivity & Statistics -->
+                            <Button x:Name="NavProductivityBtn" 
+                                    Style="{StaticResource SettingsNavButtonStyle}" 
+                                    Click="NavCategory_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="24"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="📈" FontSize="13" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="Productivity" FontSize="12.5" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Button>
+
+                            <!-- 8. Clipboard History -->
+                            <Button x:Name="NavClipboardBtn" 
+                                    Style="{StaticResource SettingsNavButtonStyle}" 
+                                    Click="NavCategory_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="24"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="📋" FontSize="13" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="Clipboard History" FontSize="12.5" VerticalAlignment="Center"/>
                                 </Grid>
                             </Button>
                         </StackPanel>
@@ -592,7 +659,16 @@
 
                                     <!-- Command Palette -->
                                     <TextBlock Text="Open Command Palette" FontWeight="SemiBold" FontSize="12.5" Margin="0,0,0,4"/>
-                                    <controls:HotkeyRecorderControl x:Name="CommandPaletteHotkeyRecorder" Margin="0,0,0,12"/>
+                                    <controls:HotkeyRecorderControl x:Name="CommandPaletteHotkeyRecorder" Margin="0,0,0,6"/>
+                                    <CheckBox x:Name="ShowSnippetKeywordsInCommandPaletteCheck"
+                                              Content="Show snippet trigger keywords in Command Palette"
+                                              FontSize="12"
+                                              Margin="0,0,0,12"
+                                              ToolTip="Displays keyword badges next to snippet items and enables searching snippets by their trigger keyword"/>
+
+                                    <!-- Clipboard History Palette -->
+                                    <TextBlock Text="Clipboard History Palette (@clip)" FontWeight="SemiBold" FontSize="12.5" Margin="0,0,0,4"/>
+                                    <controls:HotkeyRecorderControl x:Name="GlobalClipboardHotkeyRecorder" Margin="0,0,0,12"/>
 
                                     <!-- Shortcut Cheat Sheet HUD -->
                                     <TextBlock Text="Shortcut Cheat Sheet HUD Overlay" FontWeight="SemiBold" FontSize="12.5" Margin="0,0,0,4"/>
@@ -639,6 +715,15 @@
                                     <TextBlock Text="When enabled, typing a snippet's abbreviation anywhere in Windows will automatically backspace the keyword and expand the template."
                                                FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="24,0,0,12" TextWrapping="Wrap"/>
 
+                                    <CheckBox x:Name="AbbreviationCaseSensitiveCheck"
+                                              Content="Match keyword casing by default (Case-sensitive)"
+                                              FontSize="12.5"
+                                              Margin="0,0,0,6"
+                                              ToolTip="When enabled, snippet abbreviations must match exact casing unless explicitly overridden on a specific snippet"/>
+
+                                    <TextBlock Text="When enabled, typing 'brb' will not trigger an abbreviation defined as 'BRB' unless case sensitivity is turned off."
+                                               FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="24,0,0,12" TextWrapping="Wrap"/>
+
                                     <CheckBox x:Name="AbbreviationSuppressInFullScreenGamesCheck"
                                               Content="Suppress expansion during full-screen games &amp; 3D apps"
                                               FontSize="12.5"
@@ -657,6 +742,44 @@
                                              ToolTip="Processes where abbreviation expansion is suppressed (e.g. mstsc.exe, vmconnect.exe)"/>
                                     <TextBlock Text="Expansion will never trigger inside these applications (e.g. Remote Desktop, Virtual Machines, Terminals)."
                                                FontSize="11" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap"/>
+
+                                    <Border Height="1" Background="{DynamicResource BorderSubtleBrush}" Margin="0,14,0,14" SnapsToDevicePixels="True"/>
+
+                                    <TextBlock Text="Expansion Feedback" FontWeight="SemiBold" FontSize="13" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,4"/>
+                                    <TextBlock Text="Provide subtle auditory and visual confirmation when a snippet abbreviation expands."
+                                               FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,10"/>
+
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="20"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <CheckBox x:Name="EnableAbbreviationSoundFeedbackCheck"
+                                                  Grid.Column="0"
+                                                  Content="Play sound effect on expansion"
+                                                  FontSize="12.5"
+                                                  VerticalAlignment="Center"/>
+
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="Sound:" FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                            <ComboBox x:Name="AbbreviationSoundProfileCombo" Width="170" Style="{StaticResource ModernComboBoxStyle}" FontSize="12">
+                                                <ComboBoxItem Content="Subtle Click (Crisp)" Tag="SubtleClick"/>
+                                                <ComboBoxItem Content="Soft Chime (Melodic)" Tag="SoftChime"/>
+                                                <ComboBoxItem Content="Modern Blip (Short)" Tag="ModernBlip"/>
+                                            </ComboBox>
+                                            <Button x:Name="PreviewSoundBtn" Content="🔊 Test" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="8,2" Margin="8,0,0,0" Click="PreviewSoundBtn_Click"/>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <CheckBox x:Name="EnableAbbreviationVisualFeedbackCheck"
+                                              Content="Show micro-toast notification on expansion"
+                                              FontSize="12.5"
+                                              Margin="0,0,0,6"
+                                              ToolTip="Displays a subtle toast notification showing the expanded abbreviation"/>
+                                    <TextBlock Text="Displays a brief notification displaying the expanded snippet name and characters saved."
+                                               FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="24,0,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -1272,6 +1395,333 @@
                                         </Button>
                                     </Grid>
                                 </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- 7. Category 7: Productivity & Keystroke Savings Panel -->
+                        <StackPanel x:Name="CategoryProductivityPanel" Visibility="Collapsed">
+                            <!-- Time Horizon Selector Bar -->
+                            <Border Background="{DynamicResource BgSecondaryBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="10,8"
+                                    Margin="0,0,0,12">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Column="0" Text="Time Horizon:" 
+                                               FontSize="12" FontWeight="SemiBold" 
+                                               Foreground="{DynamicResource TextSecondaryBrush}"
+                                               VerticalAlignment="Center" Margin="0,0,10,0"/>
+
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <RadioButton x:Name="HorizonTodayRadio" Content="Today" Style="{StaticResource RadioPillStyle}" GroupName="ProductivityHorizonGroup" IsChecked="True" Checked="ProductivityHorizon_Checked" Margin="0,0,4,0"/>
+                                        <RadioButton x:Name="Horizon7DaysRadio" Content="7 Days" Style="{StaticResource RadioPillStyle}" GroupName="ProductivityHorizonGroup" Checked="ProductivityHorizon_Checked" Margin="0,0,4,0"/>
+                                        <RadioButton x:Name="Horizon30DaysRadio" Content="30 Days" Style="{StaticResource RadioPillStyle}" GroupName="ProductivityHorizonGroup" Checked="ProductivityHorizon_Checked" Margin="0,0,4,0"/>
+                                        <RadioButton x:Name="Horizon1YearRadio" Content="1 Year" Style="{StaticResource RadioPillStyle}" GroupName="ProductivityHorizonGroup" Checked="ProductivityHorizon_Checked" Margin="0,0,4,0"/>
+                                        <RadioButton x:Name="HorizonAllTimeRadio" Content="All Time" Style="{StaticResource RadioPillStyle}" GroupName="ProductivityHorizonGroup" Checked="ProductivityHorizon_Checked"/>
+                                    </StackPanel>
+
+                                    <!-- Typing Speed Calibration Input -->
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"
+                                                ToolTip="Your estimated typing speed in words per minute (WPM). This is used to calculate estimated hours saved: Keystrokes Saved ÷ (WPM × 5 chars/word) ÷ 60 minutes.">
+                                        <TextBlock Text="Typing Speed:" FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                        <TextBox x:Name="ProductivityWpmBox" Width="44" Height="26" FontSize="11.5" TextAlignment="Center" Text="40" VerticalContentAlignment="Center" LostFocus="ProductivityWpmBox_LostFocus" KeyDown="ProductivityWpmBox_KeyDown"
+                                                 ToolTip="Your estimated typing speed in words per minute (WPM). This is used to calculate estimated hours saved: Keystrokes Saved ÷ (WPM × 5 chars/word) ÷ 60 minutes."/>
+                                        <TextBlock Text="WPM" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="4,0,0,0"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+
+                            <!-- 4 Key Metric Cards -->
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Card 1: Keystrokes Saved -->
+                                <Border Grid.Column="0" Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="12,10">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                            <TextBlock Text="⌨️" FontSize="12" Margin="0,0,5,0"/>
+                                            <TextBlock Text="Keystrokes" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        </StackPanel>
+                                        <TextBlock x:Name="MetricKeystrokesSavedText" Text="0" FontSize="19" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}"/>
+                                        <TextBlock Text="chars saved" FontSize="10" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Card 2: Hours Saved -->
+                                <Border Grid.Column="2" Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="12,10">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                            <TextBlock Text="⏱️" FontSize="12" Margin="0,0,5,0"/>
+                                            <TextBlock Text="Time Saved" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        </StackPanel>
+                                        <TextBlock x:Name="MetricHoursSavedText" Text="0.0 hrs" FontSize="19" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}"/>
+                                        <TextBlock x:Name="MetricTypingWpmSubtext" Text="@ 40 WPM" FontSize="10" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Card 3: Snippets Expanded -->
+                                <Border Grid.Column="4" Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="12,10">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                            <TextBlock Text="⚡" FontSize="12" Margin="0,0,5,0"/>
+                                            <TextBlock Text="Snippets" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        </StackPanel>
+                                        <TextBlock x:Name="MetricSnippetsExpandedText" Text="0" FontSize="19" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                        <TextBlock Text="expansions" FontSize="10" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Card 4: Hotkeys Fired -->
+                                <Border Grid.Column="6" Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="12,10">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                            <TextBlock Text="🎯" FontSize="12" Margin="0,0,5,0"/>
+                                            <TextBlock Text="Hotkeys" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        </StackPanel>
+                                        <TextBlock x:Name="MetricHotkeysFiredText" Text="0" FontSize="19" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                        <TextBlock Text="shortcuts pressed" FontSize="10" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+
+                            <!-- Dual Rankings: Top by Count & Top by Volume -->
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Left: Top Snippets by Frequency -->
+                                <Border Grid.Column="0" Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="14,12">
+                                    <StackPanel>
+                                        <TextBlock Text="🏆 Top Snippets by Frequency" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                        <ItemsControl x:Name="TopSnippetsByCountItemsControl">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid Margin="0,3">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Grid.Column="0" Text="{Binding Name}" TextTrimming="CharacterEllipsis" FontSize="11.5" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center"/>
+                                                        <Border Grid.Column="1" Background="{DynamicResource AccentSubtleBrush}" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1" CornerRadius="8" Padding="6,1" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding Count, StringFormat='{}{0}×'}" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}"/>
+                                                        </Border>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <TextBlock x:Name="NoSnippetsByCountText" Text="No snippet expansion telemetry recorded yet for this period." FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" FontStyle="Italic" Margin="0,6,0,0" Visibility="Collapsed"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Right: Top Snippets by Volume (Keystrokes Saved) -->
+                                <Border Grid.Column="2" Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="14,12">
+                                    <StackPanel>
+                                        <TextBlock Text="🚀 Top Snippets by Typing Volume" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                        <ItemsControl x:Name="TopSnippetsByVolumeItemsControl">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid Margin="0,3">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Grid.Column="0" Text="{Binding Name}" TextTrimming="CharacterEllipsis" FontSize="11.5" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center"/>
+                                                        <Border Grid.Column="1" Background="{DynamicResource BgPrimaryBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="6,1" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding KeystrokesSaved, StringFormat='{}{0:N0} keys'}" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                        </Border>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <TextBlock x:Name="NoSnippetsByVolumeText" Text="No typing volume savings recorded yet for this period." FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" FontStyle="Italic" Margin="0,6,0,0" Visibility="Collapsed"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+
+                            <!-- Hourly Activity Distribution Bar Chart -->
+                            <Border Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="14,12" Margin="0,0,0,12">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="📊 Peak Productivity Hours (24-Hour Distribution)" FontSize="12" FontWeight="SemiBold"/>
+                                        <TextBlock Grid.Column="1" x:Name="PeakHourSummaryText" Text="Peak hour: --" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                    </Grid>
+
+                                    <!-- 24-Column Bar Graph Container -->
+                                    <Canvas x:Name="HourlyChartCanvas" Height="64" HorizontalAlignment="Stretch" Margin="0,4,0,4"/>
+
+                                    <Grid Margin="0,2,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="12 AM" FontSize="9.5" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        <TextBlock Grid.Column="1" Text="6 AM" FontSize="9.5" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        <TextBlock Grid.Column="2" Text="12 PM" FontSize="9.5" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        <TextBlock Grid.Column="3" Text="6 PM" FontSize="9.5" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        <TextBlock Grid.Column="4" Text="11 PM" FontSize="9.5" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Bottom Action / Reset Section -->
+                            <Border Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="14,10">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                        <TextBlock Text="Productivity Data Management" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                        <TextBlock Text="Productivity statistics are stored locally in productivity.json. Resetting clears all records." FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <Button Grid.Column="1" x:Name="ResetProductivityStatsBtn" Content="Reset Statistics..." Style="{StaticResource SecondaryButtonStyle}" Padding="10,4" Click="ResetProductivityStatsBtn_Click"/>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- 8. Clipboard History Panel -->
+                        <StackPanel x:Name="CategoryClipboardPanel" Visibility="Collapsed">
+                            <TextBlock Text="Smart Clipboard History" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,4,0,8"/>
+
+                            <Border Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="14,12" Margin="0,0,0,12">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                            <TextBlock Text="Enable Clipboard History" FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                            <TextBlock Text="Automatically captures copied plain text, rich text, images, and file lists into history" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <CheckBox Grid.Column="1" x:Name="EnableClipboardHistoryCheck" VerticalAlignment="Center"/>
+                                    </Grid>
+
+                                    <!-- Global Hotkey -->
+                                    <Grid Margin="0,6,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                            <TextBlock Text="Clipboard Palette Shortcut" FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                            <TextBlock Text="Opens the Command Palette directly focused on Clipboard History (@clip)" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <controls:HotkeyRecorderControl Grid.Column="1" x:Name="ClipboardHotkeyRecorder" Width="200" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Section: Limits & Retention -->
+                            <TextBlock Text="Limits &amp; Retention" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,4,0,8"/>
+
+                            <Border Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="14,12" Margin="0,0,0,12">
+                                <StackPanel>
+                                    <!-- Max Items -->
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="150"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                            <TextBlock Text="Maximum Clips Retained" FontSize="12.5" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                            <TextBlock Text="Older unpinned clips are automatically trimmed when capacity is reached (5 - 500)" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <ComboBox Grid.Column="1" x:Name="ClipboardMaxItemsCombo" VerticalAlignment="Center">
+                                            <ComboBoxItem Content="25 items" Tag="25"/>
+                                            <ComboBoxItem Content="50 items" Tag="50"/>
+                                            <ComboBoxItem Content="100 items" Tag="100"/>
+                                            <ComboBoxItem Content="200 items" Tag="200"/>
+                                            <ComboBoxItem Content="500 items" Tag="500"/>
+                                        </ComboBox>
+                                    </Grid>
+
+                                    <!-- Retention Days -->
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="150"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                            <TextBlock Text="History Retention Period" FontSize="12.5" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                            <TextBlock Text="Clips older than this duration are automatically purged (pinned clips are preserved)" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <ComboBox Grid.Column="1" x:Name="ClipboardRetentionDaysCombo" VerticalAlignment="Center">
+                                            <ComboBoxItem Content="3 days" Tag="3"/>
+                                            <ComboBoxItem Content="7 days" Tag="7"/>
+                                            <ComboBoxItem Content="14 days" Tag="14"/>
+                                            <ComboBoxItem Content="30 days" Tag="30"/>
+                                            <ComboBoxItem Content="90 days" Tag="90"/>
+                                            <ComboBoxItem Content="Keep Forever (1 year)" Tag="365"/>
+                                        </ComboBox>
+                                    </Grid>
+
+                                    <!-- Max Item Size -->
+                                    <Grid Margin="0,0,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="150"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                            <TextBlock Text="Maximum Clip Size" FontSize="12.5" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                            <TextBlock Text="Single images or large payloads exceeding this limit will not be saved (1 - 50 MB)" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <ComboBox Grid.Column="1" x:Name="ClipboardMaxItemSizeCombo" VerticalAlignment="Center">
+                                            <ComboBoxItem Content="5 MB" Tag="5"/>
+                                            <ComboBoxItem Content="10 MB (Default)" Tag="10"/>
+                                            <ComboBoxItem Content="25 MB" Tag="25"/>
+                                            <ComboBoxItem Content="50 MB (High Res)" Tag="50"/>
+                                        </ComboBox>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Section: Storage & Maintenance -->
+                            <TextBlock Text="Storage &amp; Maintenance" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,4,0,8"/>
+
+                            <Border Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="14,12" Margin="0,0,0,12">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                            <TextBlock Text="Disk Storage Used: " FontSize="12.5" FontWeight="SemiBold"/>
+                                            <TextBlock x:Name="ClipboardStorageUsedText" Text="Calculating..." FontSize="12.5" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}"/>
+                                        </StackPanel>
+                                        <TextBlock Text="Metadata is stored in clipboard_history.json and image artifacts are stored in clips/" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Button x:Name="OpenClipsFolderBtn" Content="Open Folder" Style="{StaticResource SecondaryButtonStyle}" Padding="10,4" Margin="0,0,8,0" Click="OpenClipsFolderBtn_Click"/>
+                                        <Button x:Name="PurgeClipboardBtn" Content="Purge History..." Style="{StaticResource SecondaryButtonStyle}" Padding="10,4" Click="PurgeClipboardBtn_Click"/>
+                                    </StackPanel>
+                                </Grid>
                             </Border>
                         </StackPanel>
 

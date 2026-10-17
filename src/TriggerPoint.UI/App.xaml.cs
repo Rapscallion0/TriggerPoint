@@ -23,9 +23,13 @@ public partial class App : Application
     public static readonly Guid OpenSettingsActionId = Guid.Parse("00000000-0000-0000-0000-000000000001");
     public static readonly Guid CommandPaletteActionId = Guid.Parse("00000000-0000-0000-0000-000000000002");
     public static readonly Guid CheatSheetActionId = Guid.Parse("00000000-0000-0000-0000-000000000003");
+    public static readonly Guid ClipboardHistoryActionId = Guid.Parse("00000000-0000-0000-0000-000000000004");
 
     private IServiceProvider? _serviceProvider;
     public IServiceProvider? ServiceProvider => _serviceProvider;
+    private IClipboardHistoryService? _clipboardHistoryService;
+    public IClipboardHistoryService? ClipboardHistoryService => _clipboardHistoryService;
+    private System.Windows.Interop.HwndSource? _clipboardHwndSource;
     private SingleInstanceService? _singleInstanceService;
     private TrayIconService? _trayIconService;
     private SettingsWindow? _settingsWindow;
@@ -79,6 +83,18 @@ public partial class App : Application
                 Id = CheatSheetActionId,
                 Name = "Shortcut Cheat Sheet HUD",
                 Hotkey = settings.CheatSheetHotkey,
+                IsEnabled = true,
+                PresentationMode = PresentationMode.Direct
+            });
+        }
+
+        if (settings.EnableClipboardHistory && settings.ClipboardHotkey != null && !settings.ClipboardHotkey.IsEmpty)
+        {
+            list.Add(new TriggerItem
+            {
+                Id = ClipboardHistoryActionId,
+                Name = "Clipboard History (@clip)",
+                Hotkey = settings.ClipboardHotkey,
                 IsEnabled = true,
                 PresentationMode = PresentationMode.Direct
             });
@@ -351,6 +367,25 @@ public partial class App : Application
         _shortcutListener = _serviceProvider.GetRequiredService<IShortcutListener>();
         _executor = _serviceProvider.GetRequiredService<IActionExecutor>();
         var toastService = _serviceProvider.GetRequiredService<IToastNotificationService>();
+        _clipboardHistoryService = _serviceProvider.GetRequiredService<IClipboardHistoryService>();
+        try
+        {
+            var hwndParams = new System.Windows.Interop.HwndSourceParameters("TriggerPoint_ClipboardListener")
+            {
+                Width = 0,
+                Height = 0,
+                PositionX = -32000,
+                PositionY = -32000,
+                WindowStyle = 0x800000
+            };
+            _clipboardHwndSource = new System.Windows.Interop.HwndSource(hwndParams);
+            _clipboardHwndSource.AddHook(ClipboardWndProc);
+            _clipboardHistoryService.Start(_clipboardHwndSource.Handle);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Failed to initialize clipboard format listener window.");
+        }
 
         // Wire executor open settings and toast notifications
         if (_executor is ShellActionExecutor shellExec)
@@ -608,6 +643,7 @@ public partial class App : Application
         services.AddSingleton<IContextFilterService, ContextFilterService>();
         services.AddSingleton<IIconService, Win32IconService>();
         services.AddSingleton<ITelemetryService, TelemetryService>();
+        services.AddSingleton<IProductivityService, ProductivityService>();
         services.AddSingleton<IShortcutListener, Win32HotkeyListener>();
         services.AddSingleton<IBrowserDetectionService, BrowserDetectionService>();
         services.AddSingleton<IScriptEngineService, JintScriptEngineService>();
@@ -618,14 +654,32 @@ public partial class App : Application
         services.AddSingleton<IWorkflowTemplateService, WorkflowTemplateService>();
         services.AddSingleton<IUpdateService, GitHubUpdateService>();
         services.AddSingleton<IWindowsServiceManager, WindowsServiceManager>();
+        services.AddSingleton<IClipboardHistoryService, ClipboardHistoryService>();
         services.AddSingleton<IAbbreviationExpanderService>(sp => new AbbreviationExpanderService(
             sp.GetRequiredService<ISnippetService>(),
             sp.GetRequiredService<IContextFilterService>(),
-            () => (Application.Current as App)?.CachedSettings ?? new AppSettings()));
+            () => (Application.Current as App)?.CachedSettings ?? new AppSettings(),
+            sp.GetService<IProductivityService>(),
+            sp.GetService<ITelemetryService>(),
+            sp.GetService<IToastNotificationService>()));
+    }
+
+    private IntPtr ClipboardWndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        const int WM_CLIPBOARDUPDATE = 0x031D;
+        if (msg == WM_CLIPBOARDUPDATE)
+        {
+            _clipboardHistoryService?.HandleClipboardUpdateMessage();
+            handled = true;
+        }
+        return IntPtr.Zero;
     }
 
     private void ShortcutListener_HotkeyTriggered(object? sender, TriggerItem item)
     {
+        // Record productivity telemetry for hotkey activation
+        _serviceProvider?.GetService<IProductivityService>()?.RecordHotkeyTrigger(item.Id, item.Name);
+
         // Capture active foreground window BEFORE TriggerPoint displays any UI
         var targetHwnd = NativeMethods.GetForegroundWindow();
         if (_serviceProvider != null)
@@ -654,6 +708,12 @@ public partial class App : Application
             if (item.Id == CheatSheetActionId)
             {
                 OpenCheatSheetHud(targetHwnd: targetHwnd);
+                return;
+            }
+
+            if (item.Id == ClipboardHistoryActionId)
+            {
+                OpenCommandPalette(targetHwnd: targetHwnd, initialFilter: CommandPaletteFilterType.Clipboard);
                 return;
             }
 
@@ -707,7 +767,7 @@ public partial class App : Application
         });
     }
 
-    private void OpenCommandPalette(TriggerItem? triggerItem = null, IntPtr targetHwnd = default)
+    private void OpenCommandPalette(TriggerItem? triggerItem = null, IntPtr targetHwnd = default, CommandPaletteFilterType initialFilter = CommandPaletteFilterType.All)
     {
         if (_repository == null || _executor == null)
         {
@@ -733,8 +793,9 @@ public partial class App : Application
                 {
                     try
                     {
+                        PaletteItemViewModel.DefaultAbbreviationCaseSensitive = _cachedSettings?.AbbreviationCaseSensitive ?? true;
                         var serviceManager = _serviceProvider?.GetService<IWindowsServiceManager>();
-                        var palette = new CommandPaletteView(allItems, _executor, _repository, scopeId, scopeName, targetHwnd, serviceManager);
+                        var palette = new CommandPaletteView(allItems, _executor, _repository, scopeId, scopeName, targetHwnd, serviceManager, _clipboardHistoryService, initialFilter);
                         palette.Show();
                         palette.Activate();
                         try
@@ -790,6 +851,10 @@ public partial class App : Application
                                 else if (targetItem.Id == CommandPaletteActionId)
                                 {
                                     OpenCommandPalette(targetHwnd: targetHwnd);
+                                }
+                                else if (targetItem.Id == ClipboardHistoryActionId)
+                                {
+                                    OpenCommandPalette(targetHwnd: targetHwnd, initialFilter: CommandPaletteFilterType.Clipboard);
                                 }
                                 else if (_executor != null)
                                 {
@@ -959,9 +1024,17 @@ public partial class App : Application
 
         var updateService = _serviceProvider?.GetService<IUpdateService>();
         var pathsService = _serviceProvider?.GetService<IAppPathsService>();
+        var prodService = _serviceProvider?.GetService<IProductivityService>();
+        var clipService = _clipboardHistoryService;
         var appSettingsWin = initialCategory.HasValue
-            ? new ApplicationSettingsWindow(_repository, _logManagerService, updateService, initialCategory.Value, pathsService)
-            : new ApplicationSettingsWindow(_repository, _logManagerService, updateService, pathsService: pathsService);
+            ? new ApplicationSettingsWindow(_repository, _logManagerService, updateService, initialCategory.Value, pathsService, prodService, clipService)
+            : new ApplicationSettingsWindow(_repository, _logManagerService, updateService, ApplicationSettingsWindow.SettingsCategory.Appearance, pathsService, prodService, clipService);
+
+        if (_settingsWindow != null && _settingsWindow.IsVisible && _settingsWindow.WindowState != WindowState.Minimized)
+        {
+            appSettingsWin.Owner = _settingsWindow;
+        }
+
         appSettingsWin.ShowDialog();
 
         await ReloadApplicationSettingsAndHotkeysAsync();
@@ -969,7 +1042,10 @@ public partial class App : Application
 
     public void ShowApplicationSettingsWindow(ApplicationSettingsWindow.SettingsCategory? initialCategory = null)
     {
-        _ = ShowApplicationSettingsWindowAsync(initialCategory);
+        Dispatcher.InvokeAsync(async () =>
+        {
+            await ShowApplicationSettingsWindowAsync(initialCategory);
+        });
     }
 
     public async Task PerformManualUpdateCheckAsync()
@@ -1012,6 +1088,7 @@ public partial class App : Application
         {
             var settings = await _repository.LoadSettingsAsync();
             _cachedSettings = settings;
+            PaletteItemViewModel.DefaultAbbreviationCaseSensitive = settings.AbbreviationCaseSensitive;
             var items = await _repository.LoadAsync();
             var allItems = new List<TriggerItem>(items);
             allItems.AddRange(CreateVirtualApplicationItems(settings));
@@ -1109,6 +1186,8 @@ public partial class App : Application
         _trayIconService?.Dispose();
         _shortcutListener?.Dispose();
         _abbreviationExpander?.Dispose();
+        _clipboardHistoryService?.Stop();
+        _clipboardHwndSource?.Dispose();
         _singleInstanceService?.Dispose();
 
         Log.CloseAndFlush();
@@ -1131,6 +1210,8 @@ public partial class App : Application
         _trayIconService?.Dispose();
         _shortcutListener?.Dispose();
         _abbreviationExpander?.Dispose();
+        _clipboardHistoryService?.Stop();
+        _clipboardHwndSource?.Dispose();
         _singleInstanceService?.Dispose();
         Log.CloseAndFlush();
         base.OnExit(e);

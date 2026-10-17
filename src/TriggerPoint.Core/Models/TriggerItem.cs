@@ -25,9 +25,16 @@ public sealed class TriggerItem
     public bool IsExpanded { get; set; } = true;
     public string? Abbreviation { get; set; }
     public AbbreviationTriggerMode AbbreviationMode { get; set; } = AbbreviationTriggerMode.Immediate;
+    public bool? AbbreviationCaseSensitive { get; set; }
 
     [JsonIgnore]
     public HotkeyConflictStatus ConflictStatus { get; set; } = HotkeyConflictStatus.None;
+
+    [JsonIgnore]
+    public List<AbbreviationConflictDiagnostic> AbbreviationConflicts { get; set; } = [];
+
+    [JsonIgnore]
+    public bool HasAbbreviationConflict => AbbreviationConflicts.Count > 0;
 
     [JsonIgnore]
     public List<TriggerItem> Children { get; set; } = [];
@@ -49,6 +56,7 @@ public sealed class TriggerItem
             IsExpanded = IsExpanded,
             Abbreviation = Abbreviation,
             AbbreviationMode = AbbreviationMode,
+            AbbreviationCaseSensitive = AbbreviationCaseSensitive,
             Payload = Payload?.Clone() ?? new ActionPayload(),
             ContextFilter = new ContextFilter
             {
@@ -65,7 +73,8 @@ public sealed class TriggerItem
             OrderIndex = OrderIndex,
             IsEnabled = IsEnabled,
             InheritContextFilter = InheritContextFilter,
-            ConflictStatus = ConflictStatus
+            ConflictStatus = ConflictStatus,
+            AbbreviationConflicts = [.. AbbreviationConflicts]
         };
     }
 }

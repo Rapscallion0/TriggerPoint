@@ -56,7 +56,7 @@ public class VariablePickerDialogTests
                 Assert.Contains(itemList, i => i.Token == "{customerEmail}" && i.Category == "Workflow");
 
                 // Must contain system tokens
-                Assert.Contains(itemList, i => i.Token == "{date:yyyy-MM-dd}" && i.Category == "System");
+                Assert.Contains(itemList, i => i.Token == "{datetime:yyyy-MM-dd}" && i.Category == "System");
                 Assert.Contains(itemList, i => i.Token == "{clipboard}" && i.Category == "System");
 
                 // Must contain standard Windows environment variables

@@ -113,14 +113,42 @@ public static class FuzzyMatcher
 
     public static FuzzyMatchResult Match(TriggerItem item, string pattern)
     {
-        var match = MatchText(item.Name, pattern);
-        if (match == null)
+        var nameMatch = MatchText(item.Name, pattern);
+        var abbrMatch = (!string.IsNullOrWhiteSpace(pattern) && !string.IsNullOrWhiteSpace(item.Abbreviation))
+            ? MatchText(item.Abbreviation, pattern)
+            : null;
+
+        if (nameMatch == null && abbrMatch == null)
         {
             return new FuzzyMatchResult(item, 0, []);
         }
 
-        double score = match.Value.Score + CalculateTelemetryBoost(item.UsageStats);
-        return new FuzzyMatchResult(item, score, match.Value.MatchedIndices);
+        double score;
+        IReadOnlyList<int> matchedIndices;
+
+        if (abbrMatch != null && (nameMatch == null || abbrMatch.Value.Score >= nameMatch.Value.Score))
+        {
+            // Give abbreviation matches a strong bonus (+100.0) so typing a trigger keyword ranks high
+            score = abbrMatch.Value.Score + 100.0;
+            matchedIndices = nameMatch?.MatchedIndices ?? [];
+        }
+        else if (nameMatch != null)
+        {
+            score = nameMatch.Value.Score;
+            matchedIndices = nameMatch.Value.MatchedIndices;
+            if (abbrMatch != null)
+            {
+                score += 20.0; // Bonus when both name and keyword match
+            }
+        }
+        else
+        {
+            score = 0;
+            matchedIndices = [];
+        }
+
+        score += CalculateTelemetryBoost(item.UsageStats);
+        return new FuzzyMatchResult(item, score, matchedIndices);
     }
 
     public static IReadOnlyList<FuzzyMatchResult> FilterAndRank(

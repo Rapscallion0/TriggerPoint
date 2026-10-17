@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -22,8 +23,6 @@ namespace TriggerPoint.UI.Controls;
 public partial class SnippetEditorControl : UserControl
 {
     private SnippetContentType _currentContentType = SnippetContentType.PlainText;
-    private int _lastCaretIndex = -1;
-    private int _lastSelectionLength = 0;
     private bool _isUpdatingUi;
     private bool _isUpdatingRichText;
     private bool _isPaperCanvasActive = true;
@@ -38,12 +37,12 @@ public partial class SnippetEditorControl : UserControl
 
     public string PlainTextTemplate
     {
-        get => SnippetTemplateBox?.Text ?? string.Empty;
+        get => SnippetPlainTextBox != null ? RichTextService.ExtractPlainText(SnippetPlainTextBox.Document) : string.Empty;
         set
         {
-            if (SnippetTemplateBox != null)
+            if (SnippetPlainTextBox != null)
             {
-                SnippetTemplateBox.Text = value ?? string.Empty;
+                LoadPlainTextIntoDocument(SnippetPlainTextBox.Document, value ?? string.Empty);
             }
         }
     }
@@ -59,7 +58,7 @@ public partial class SnippetEditorControl : UserControl
         {
             if (SnippetRichTextBox != null)
             {
-                RichTextService.LoadFromRtf(SnippetRichTextBox.Document, value ?? string.Empty);
+                LoadRtfIntoDocumentWithPills(SnippetRichTextBox.Document, value ?? string.Empty);
             }
         }
     }
@@ -97,18 +96,17 @@ public partial class SnippetEditorControl : UserControl
             SetAvailableVariables(availableVariables);
 
             _currentContentType = contentType;
-            SnippetTemplateBox.Text = template ?? string.Empty;
-            SnippetTemplateBox.ScrollToHome();
+            PlainTextTemplate = template ?? string.Empty;
 
             if (contentType == SnippetContentType.RichText)
             {
                 if (!string.IsNullOrEmpty(rtf))
                 {
-                    RichTextService.LoadFromRtf(SnippetRichTextBox.Document, rtf);
+                    LoadRtfIntoDocumentWithPills(SnippetRichTextBox.Document, rtf);
                 }
                 else if (!string.IsNullOrEmpty(template))
                 {
-                    RichTextService.LoadFromPlainText(SnippetRichTextBox.Document, template);
+                    LoadPlainTextIntoDocument(SnippetRichTextBox.Document, template);
                 }
                 else
                 {
@@ -119,7 +117,7 @@ public partial class SnippetEditorControl : UserControl
             {
                 if (!string.IsNullOrEmpty(rtf))
                 {
-                    RichTextService.LoadFromRtf(SnippetRichTextBox.Document, rtf);
+                    LoadRtfIntoDocumentWithPills(SnippetRichTextBox.Document, rtf);
                 }
                 else
                 {
@@ -177,7 +175,7 @@ public partial class SnippetEditorControl : UserControl
         }
         else
         {
-            SnippetTemplateBox?.Focus();
+            SnippetPlainTextBox?.Focus();
         }
     }
 
@@ -191,7 +189,7 @@ public partial class SnippetEditorControl : UserControl
         }
         else
         {
-            return (SnippetTemplateBox.Text, string.Empty);
+            return (PlainTextTemplate, string.Empty);
         }
     }
 
@@ -238,10 +236,29 @@ public partial class SnippetEditorControl : UserControl
 
             if (SnippetLivePreviewContainerBorder != null)
             {
-                SnippetLivePreviewContainerBorder.Background = Application.Current.TryFindResource("BgInputBrush") as Brush ?? Brushes.Transparent;
-                SnippetLivePreviewContainerBorder.BorderBrush = Application.Current.TryFindResource("BorderBrush") as Brush ?? Brushes.Gray;
+                SnippetLivePreviewContainerBorder.SetResourceReference(Border.BackgroundProperty, "BgInputBrush");
+                SnippetLivePreviewContainerBorder.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
+            }
+            if (SnippetLivePreviewText != null)
+            {
+                SnippetLivePreviewText.SetResourceReference(TextBlock.ForegroundProperty, "TextSecondaryBrush");
+            }
+            if (SnippetLivePreviewRichBox != null)
+            {
+                SnippetLivePreviewRichBox.SetResourceReference(Control.ForegroundProperty, "TextPrimaryBrush");
+            }
+            if (SnippetPlainEditorBorder != null)
+            {
+                SnippetPlainEditorBorder.SetResourceReference(Border.BackgroundProperty, "BgInputBrush");
+                SnippetPlainEditorBorder.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
+            }
+            if (SnippetPlainTextBox != null)
+            {
+                SnippetPlainTextBox.SetResourceReference(Control.ForegroundProperty, "TextPrimaryBrush");
             }
         }
+
+        UpdateContextualTokenAssistant();
 
         if (notify)
         {
@@ -255,13 +272,13 @@ public partial class SnippetEditorControl : UserControl
 
         // When switching from Rich to Plain, extract plain text from RichTextBox
         var plainText = RichTextService.ExtractPlainText(SnippetRichTextBox.Document);
-        if (!string.IsNullOrEmpty(plainText) && string.IsNullOrEmpty(SnippetTemplateBox.Text))
+        if (!string.IsNullOrEmpty(plainText) && string.IsNullOrEmpty(PlainTextTemplate))
         {
-            SnippetTemplateBox.Text = plainText;
+            PlainTextTemplate = plainText;
         }
 
         SetFormatMode(SnippetContentType.PlainText);
-        SnippetTemplateBox.Focus();
+        SnippetPlainTextBox.Focus();
     }
 
     private void SnippetFormatRichSegment_Click(object sender, RoutedEventArgs e)
@@ -270,14 +287,15 @@ public partial class SnippetEditorControl : UserControl
 
         // When switching from Plain to Rich, load plain text into RichTextBox if currently empty
         var richPlain = RichTextService.ExtractPlainText(SnippetRichTextBox.Document);
-        if (string.IsNullOrEmpty(richPlain) && !string.IsNullOrEmpty(SnippetTemplateBox.Text))
+        if (string.IsNullOrEmpty(richPlain) && !string.IsNullOrEmpty(PlainTextTemplate))
         {
-            RichTextService.LoadFromPlainText(SnippetRichTextBox.Document, SnippetTemplateBox.Text);
+            LoadPlainTextIntoDocument(SnippetRichTextBox.Document, PlainTextTemplate);
         }
 
         SetFormatMode(SnippetContentType.RichText);
         SnippetRichTextBox.Focus();
     }
+
 
     #region Token Chips & Presets
 
@@ -294,6 +312,33 @@ public partial class SnippetEditorControl : UserControl
         if (sender is MenuItem item && item.Tag is string token)
         {
             InsertTokenIntoEditor(token);
+        }
+    }
+
+    private void TokenLibraryToggleBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (StaticTokenLibraryPanel == null) return;
+
+        bool isCurrentlyVisible = StaticTokenLibraryPanel.Visibility == Visibility.Visible;
+        StaticTokenLibraryPanel.Visibility = isCurrentlyVisible ? Visibility.Collapsed : Visibility.Visible;
+
+        if (TokenLibraryChevron != null)
+        {
+            TokenLibraryChevron.Text = isCurrentlyVisible ? "▸" : "▾";
+        }
+    }
+
+    public void OpenTokenConfigurationDialog(InlineUIContainer uic)
+    {
+        string currentToken = uic.Tag as string ?? "{datetime:yyyy-MM-dd HH:mm}";
+        var parentWindow = Window.GetWindow(this);
+        var dlg = new TriggerPoint.UI.Views.TokenConfigurationDialog(currentToken)
+        {
+            Owner = parentWindow
+        };
+        if (dlg.ShowDialog() == true && !string.IsNullOrWhiteSpace(dlg.ResultToken))
+        {
+            UpdateTokenPillValue(uic, dlg.ResultToken);
         }
     }
 
@@ -316,18 +361,23 @@ public partial class SnippetEditorControl : UserControl
         }
     }
 
+    private RichTextBox? GetActiveEditor() =>
+        _currentContentType == SnippetContentType.RichText ? SnippetRichTextBox : SnippetPlainTextBox;
+
     public void InsertTokenIntoEditor(string token)
     {
         if (string.IsNullOrEmpty(token)) return;
 
+        var activeBox = GetActiveEditor();
+        if (activeBox == null) return;
+
+        string currentContent = RichTextService.ExtractPlainText(activeBox.Document);
+
         // Enforce single {cursor} rule
         if (token.Equals("{cursor}", StringComparison.OrdinalIgnoreCase))
         {
-            string existing = _currentContentType == SnippetContentType.RichText && SnippetRichTextBox != null
-                ? RichTextService.ExtractPlainText(SnippetRichTextBox.Document)
-                : (SnippetTemplateBox?.Text ?? string.Empty);
-
-            if (existing.Contains("{cursor}", StringComparison.OrdinalIgnoreCase) || existing.Contains("{{cursor}}", StringComparison.OrdinalIgnoreCase))
+            if (currentContent.Contains("{cursor}", StringComparison.OrdinalIgnoreCase) || 
+                currentContent.Contains("{{cursor}}", StringComparison.OrdinalIgnoreCase))
             {
                 ShowSnippetWarning("Only one {cursor} token is allowed per snippet. Existing {cursor} has been highlighted.");
                 HighlightExistingCursorToken();
@@ -336,103 +386,645 @@ public partial class SnippetEditorControl : UserControl
         }
 
         // Disambiguate prompt token labels
-        string currentContent = _currentContentType == SnippetContentType.RichText && SnippetRichTextBox != null
-            ? RichTextService.ExtractPlainText(SnippetRichTextBox.Document)
-            : (SnippetTemplateBox?.Text ?? string.Empty);
-
         token = PlaceholderParser.GetDisambiguatedPromptToken(token, currentContent);
 
-        if (_currentContentType == SnippetContentType.RichText && SnippetRichTextBox != null)
+        var uic = CreateInlineTokenPill(token);
+
+        // If there's an active text selection, clear it
+        if (!activeBox.Selection.IsEmpty)
         {
-            SnippetRichTextBox.Selection.Text = token;
-            SnippetRichTextBox.CaretPosition = SnippetRichTextBox.Selection.End;
-            SnippetRichTextBox.Focus();
-            OnContentChanged();
-            return;
+            activeBox.Selection.Text = string.Empty;
         }
 
-        if (SnippetTemplateBox == null) return;
-
-        string current = SnippetTemplateBox.Text ?? string.Empty;
-        int insertPos;
-
-        if (_lastCaretIndex >= 0 && _lastCaretIndex <= current.Length)
+        var caret = activeBox.CaretPosition;
+        if (caret.Paragraph == null)
         {
-            insertPos = _lastCaretIndex;
-            int selLen = Math.Max(0, Math.Min(_lastSelectionLength, current.Length - insertPos));
-            if (selLen > 0)
+            var p = new Paragraph { Margin = new Thickness(0) };
+            activeBox.Document.Blocks.Add(p);
+            caret = p.ContentStart;
+        }
+
+        var insertionPoint = caret.GetInsertionPosition(LogicalDirection.Forward);
+        if (insertionPoint.Paragraph != null)
+        {
+            var run = insertionPoint.Parent as Run;
+            if (run != null)
             {
-                current = current.Remove(insertPos, selLen);
+                int offset = run.ContentStart.GetOffsetToPosition(insertionPoint);
+                string text = run.Text;
+                var parentInlines = run.SiblingInlines;
+
+                if (offset <= 0)
+                {
+                    parentInlines.InsertBefore(run, uic);
+                }
+                else if (offset >= text.Length)
+                {
+                    parentInlines.InsertAfter(run, uic);
+                }
+                else
+                {
+                    var prefixRun = CloneRun(run, text[..offset]);
+                    var suffixRun = CloneRun(run, text[offset..]);
+                    parentInlines.InsertBefore(run, prefixRun);
+                    parentInlines.InsertBefore(run, uic);
+                    parentInlines.InsertBefore(run, suffixRun);
+                    parentInlines.Remove(run);
+                }
+            }
+            else
+            {
+                insertionPoint.Paragraph.Inlines.Add(uic);
             }
         }
         else
         {
-            insertPos = current.Length;
+            var p = new Paragraph { Margin = new Thickness(0) };
+            p.Inlines.Add(uic);
+            activeBox.Document.Blocks.Add(p);
         }
 
-        SnippetTemplateBox.Text = current.Insert(insertPos, token);
-        SnippetTemplateBox.Focus();
-        SnippetTemplateBox.CaretIndex = insertPos + token.Length;
-        SnippetTemplateBox.SelectionLength = 0;
-        _lastCaretIndex = insertPos + token.Length;
-        _lastSelectionLength = 0;
+        if (uic.ElementEnd != null)
+        {
+            activeBox.CaretPosition = uic.ElementEnd;
+        }
 
-        ShowFloatingTokenPillOverlay(SnippetFloatingOverlayCanvas, SnippetTemplateBox, token, insertPos);
+        activeBox.Focus();
         UpdateContextualTokenAssistant();
         OnContentChanged();
     }
 
-    private void HighlightExistingCursorToken()
+    #region Inline Token Pill Creation & Management
+
+    private static string GetTokenCategory(string token)
     {
-        if (_currentContentType == SnippetContentType.RichText && SnippetRichTextBox != null)
+        var inner = token.Trim().TrimStart('{').TrimEnd('}');
+        var colon = inner.IndexOf(':');
+        var prefix = colon > 0 ? inner[..colon].Trim().ToLowerInvariant() : inner.Trim().ToLowerInvariant();
+
+        return prefix switch
         {
-            var range = FindTextInRange(SnippetRichTextBox.Document.ContentStart, SnippetRichTextBox.Document.ContentEnd, "{cursor}")
-                     ?? FindTextInRange(SnippetRichTextBox.Document.ContentStart, SnippetRichTextBox.Document.ContentEnd, "{{cursor}}");
-            if (range != null)
+            "date" or "time" or "datetime" or "tomorrow" or "yesterday" => "Date",
+            "clipboard" or "clip" => "Clip",
+            _ => "Prompt"
+        };
+    }
+
+    private static string GetTokenIcon(string token)
+    {
+        var inner = token.Trim().TrimStart('{').TrimEnd('}');
+        var colon = inner.IndexOf(':');
+        var prefix = colon > 0 ? inner[..colon].Trim().ToLowerInvariant() : inner.Trim().ToLowerInvariant();
+
+        return prefix switch
+        {
+            "date" or "tomorrow" or "yesterday" => "📅",
+            "time" => "⏰",
+            "datetime" => "🗓️",
+            "clipboard" or "clip" => "📋",
+            "guid" or "uuid" => "🔑",
+            "cursor" => "📍",
+            "env" => "💻",
+            "choice" => "🔽",
+            "number" => "🔢",
+            "multiline" => "📝",
+            "date_picker" => "📆",
+            _ => "💬"
+        };
+    }
+
+    private static bool IsFormatCustomizableToken(string token)
+    {
+        var inner = token.Trim().TrimStart('{').TrimEnd('}');
+        var colon = inner.IndexOf(':');
+        var prefix = colon > 0 ? inner[..colon].Trim().ToLowerInvariant() : inner.Trim().ToLowerInvariant();
+
+        return prefix switch
+        {
+            "date" or "tomorrow" or "yesterday" or "time" or "datetime" or
+            "clipboard" or "clip" or "guid" or "uuid" or "env" or "number" or "date_picker" => true,
+            _ => false
+        };
+    }
+
+    public InlineUIContainer CreateInlineTokenPill(string fullToken)
+    {
+        var uic = new InlineUIContainer
+        {
+            BaselineAlignment = BaselineAlignment.Center,
+            Focusable = false
+        };
+        PopulatePillVisuals(uic, fullToken);
+        return uic;
+    }
+
+    public void PopulatePillVisuals(InlineUIContainer uic, string fullToken)
+    {
+        uic.Tag = fullToken;
+        var category = GetTokenCategory(fullToken);
+        var icon = GetTokenIcon(fullToken);
+        bool isCustomizable = IsFormatCustomizableToken(fullToken);
+
+        var border = new Border
+        {
+            Style = Application.Current.TryFindResource($"InlineTokenPill{category}Style") as Style,
+            Cursor = Cursors.Arrow,
+            Focusable = false
+        };
+
+        var sp = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+
+        var mainBtn = new Button
+        {
+            Style = Application.Current.TryFindResource($"InlineTokenPill{category}MainBtnStyle") as Style,
+            Content = $"{icon} {fullToken}",
+            ToolTip = $"Token: {fullToken}\nDouble-click to configure",
+            Focusable = false
+        };
+
+        Button? arrowBtn = null;
+        if (isCustomizable)
+        {
+            arrowBtn = new Button
             {
-                SnippetRichTextBox.Focus();
-                SnippetRichTextBox.Selection.Select(range.Start, range.End);
-            }
+                Style = Application.Current.TryFindResource($"InlineTokenPill{category}ArrowBtnStyle") as Style,
+                Content = "▾",
+                ToolTip = "Change format / presets",
+                Focusable = false
+            };
         }
-        else if (SnippetTemplateBox != null)
+
+        var closeBtn = new Button
         {
-            string text = SnippetTemplateBox.Text ?? string.Empty;
-            int idx = text.IndexOf("{cursor}", StringComparison.OrdinalIgnoreCase);
-            int len = 8;
-            if (idx < 0)
+            Style = Application.Current.TryFindResource($"InlineTokenPill{category}CloseBtnStyle") as Style,
+            Content = "✕",
+            ToolTip = "Remove token",
+            Focusable = false
+        };
+
+        sp.Children.Add(mainBtn);
+        if (arrowBtn != null)
+        {
+            sp.Children.Add(arrowBtn);
+        }
+        sp.Children.Add(closeBtn);
+        border.Child = sp;
+
+        mainBtn.Click += (s, e) =>
+        {
+            e.Handled = true;
+            var activeBox = GetActiveEditor();
+            if (activeBox != null && uic.ElementEnd != null)
             {
-                idx = text.IndexOf("{{cursor}}", StringComparison.OrdinalIgnoreCase);
-                len = 10;
+                activeBox.CaretPosition = uic.ElementEnd;
+                activeBox.Focus();
+                UpdateContextualTokenAssistant();
+            }
+        };
+
+        border.MouseLeftButtonDown += (s, e) =>
+        {
+            if (e.ClickCount == 2)
+            {
+                e.Handled = true;
+                OpenTokenConfigurationDialog(uic);
+            }
+        };
+
+        if (arrowBtn != null)
+        {
+            arrowBtn.Click += (s, e) =>
+            {
+                e.Handled = true;
+                ShowTokenPresetMenu(uic, arrowBtn, uic.Tag as string ?? fullToken);
+            };
+        }
+
+        closeBtn.Click += (s, e) =>
+        {
+            e.Handled = true;
+            RemoveInlineTokenPill(uic);
+        };
+
+        border.ContextMenu = CreateTokenContextMenu(uic, fullToken);
+        uic.Child = border;
+    }
+
+    private ContextMenu? CreateTokenContextMenu(InlineUIContainer uic, string token)
+    {
+        var menu = new ContextMenu();
+        var inner = token.Trim().TrimStart('{').TrimEnd('}');
+        var colon = inner.IndexOf(':');
+        var prefix = colon > 0 ? inner[..colon].Trim().ToLowerInvariant() : inner.Trim().ToLowerInvariant();
+
+        var configMi = new MenuItem
+        {
+            Header = prefix is "datetime" or "date" or "time" or "tomorrow" or "yesterday"
+                ? "✏️ Custom Format..."
+                : "⚙️ Configure Parameters...",
+            FontWeight = FontWeights.SemiBold
+        };
+        configMi.Click += (s, e) => OpenTokenConfigurationDialog(uic);
+        menu.Items.Add(configMi);
+        menu.Items.Add(new Separator());
+
+        void AddItem(string header, string newToken)
+        {
+            bool isActive = string.Equals(newToken, token, StringComparison.OrdinalIgnoreCase);
+            var mi = new MenuItem
+            {
+                Header = isActive ? $"✓ {header}" : $"   {header}",
+                Tag = newToken,
+                IsChecked = isActive,
+                FontWeight = isActive ? FontWeights.Bold : FontWeights.Normal
+            };
+            mi.Click += (s, e) =>
+            {
+                UpdateTokenPillValue(uic, newToken);
+            };
+            menu.Items.Add(mi);
+        }
+
+        void AddCategoryHeader(string header)
+        {
+            if (menu.Items.Count > 0)
+            {
+                menu.Items.Add(new Separator());
+            }
+            var mi = new MenuItem
+            {
+                Header = header,
+                IsEnabled = false,
+                FontWeight = FontWeights.Bold
+            };
+            menu.Items.Add(mi);
+        }
+
+        switch (prefix)
+        {
+            case "datetime":
+                // 1. Date & Time (Combined)
+                AddCategoryHeader("🗓️ Date & Time (Combined)");
+                AddItem("Standard (yyyy-MM-dd HH:mm)", "{datetime:yyyy-MM-dd HH:mm}");
+                AddItem("With Seconds (yyyy-MM-dd HH:mm:ss)", "{datetime:yyyy-MM-dd HH:mm:ss}");
+                AddItem("US Full (MM/dd/yyyy hh:mm tt)", "{datetime:MM/dd/yyyy hh:mm tt}");
+                AddItem("ISO 8601 (yyyy-MM-ddTHH:mm:ss)", "{datetime:s}");
+                AddItem("Compact Timestamp (yyyyMMdd_HHmmss)", "{datetime:yyyyMMdd_HHmmss}");
+
+                // 2. Date Only
+                AddCategoryHeader("📅 Date Only");
+                AddItem("Standard ISO (yyyy-MM-dd)", "{datetime:yyyy-MM-dd}");
+                AddItem("US Date (MM/dd/yyyy)", "{datetime:MM/dd/yyyy}");
+                AddItem("EU Date (dd/MM/yyyy)", "{datetime:dd/MM/yyyy}");
+                AddItem("Full Date (dddd, MMMM d, yyyy)", "{datetime:dddd, MMMM d, yyyy}");
+                AddItem("Compact Date (yyyyMMdd)", "{datetime:yyyyMMdd}");
+
+                // 3. Time Only
+                AddCategoryHeader("⏰ Time Only");
+                AddItem("24-Hour (HH:mm:ss)", "{datetime:HH:mm:ss}");
+                AddItem("12-Hour AM/PM (hh:mm tt)", "{datetime:hh:mm tt}");
+                AddItem("Short 24-Hour (HH:mm)", "{datetime:HH:mm}");
+
+                // 4. Relative Offsets (Calculations)
+                AddCategoryHeader("⚡ Calculations (Offsets)");
+                AddItem("Tomorrow (+1d)", "{datetime:+1d}");
+                AddItem("Yesterday (-1d)", "{datetime:-1d}");
+                AddItem("Next Week (+7d)", "{datetime:+7d}");
+                AddItem("Next Month (+1m)", "{datetime:+1m}");
+                AddItem("One Hour Later (+1h)", "{datetime:+1h}");
+                break;
+
+            case "date":
+                // Deprecated token - offer 1-click conversion at top
+                var convertMi = new MenuItem
+                {
+                    Header = "⚡ Convert to {datetime}",
+                    FontWeight = FontWeights.Bold
+                };
+                convertMi.SetResourceReference(MenuItem.ForegroundProperty, "AccentBrush");
+                convertMi.Click += (s, e) =>
+                {
+                    string converted = token.StartsWith("{date:", StringComparison.OrdinalIgnoreCase)
+                        ? "{datetime:" + token[6..]
+                        : "{datetime:yyyy-MM-dd}";
+                    UpdateTokenPillValue(uic, converted);
+                };
+                menu.Items.Add(convertMi);
+
+                AddCategoryHeader("🗓️ Date & Time (Combined)");
+                AddItem("Standard (yyyy-MM-dd HH:mm)", "{date:yyyy-MM-dd HH:mm}");
+                AddItem("With Seconds (yyyy-MM-dd HH:mm:ss)", "{date:yyyy-MM-dd HH:mm:ss}");
+                AddItem("US Full (MM/dd/yyyy hh:mm tt)", "{date:MM/dd/yyyy hh:mm tt}");
+                AddItem("Compact (yyyyMMdd_HHmmss)", "{date:yyyyMMdd_HHmmss}");
+
+                AddCategoryHeader("📅 Date Only");
+                AddItem("Standard (yyyy-MM-dd)", "{date}");
+                AddItem("US Date (MM/dd/yyyy)", "{date:MM/dd/yyyy}");
+                AddItem("EU Date (dd/MM/yyyy)", "{date:dd/MM/yyyy}");
+                AddItem("Full Date (dddd, MMMM d, yyyy)", "{date:dddd, MMMM d, yyyy}");
+                AddItem("Compact Date (yyyyMMdd)", "{date:yyyyMMdd}");
+
+                AddCategoryHeader("⏰ Time Only");
+                AddItem("24-Hour (HH:mm:ss)", "{date:HH:mm:ss}");
+                AddItem("12-Hour AM/PM (hh:mm tt)", "{date:hh:mm tt}");
+
+                AddCategoryHeader("⚡ Calculations (Offsets)");
+                AddItem("Tomorrow (+1d)", "{date:+1d}");
+                AddItem("Yesterday (-1d)", "{date:-1d}");
+                AddItem("Next Week (+7d)", "{date:+7d}");
+                AddItem("Next Month (+1m)", "{date:+1m}");
+                break;
+
+            case "tomorrow":
+                AddItem("US Date (MM/dd/yyyy)", "{tomorrow:MM/dd/yyyy}");
+                AddItem("Full Date (dddd, MMMM d)", "{tomorrow:dddd, MMMM d}");
+                AddItem("Compact (yyyyMMdd)", "{tomorrow:yyyyMMdd}");
+                break;
+
+            case "yesterday":
+                AddItem("US Date (MM/dd/yyyy)", "{yesterday:MM/dd/yyyy}");
+                AddItem("Full Date (dddd, MMMM d)", "{yesterday:dddd, MMMM d}");
+                AddItem("Compact (yyyyMMdd)", "{yesterday:yyyyMMdd}");
+                break;
+
+            case "time":
+                AddItem("24-Hour (HH:mm:ss)", "{time:HH:mm:ss}");
+                AddItem("12-Hour AM/PM (hh:mm tt)", "{time:hh:mm tt}");
+                AddItem("Short 24-Hour (HH:mm)", "{time:HH:mm}");
+                AddItem("One Hour Later (+1h)", "{time:+1h:HH:mm}");
+                AddItem("30 Mins Ago (-30m)", "{time:-30m:HH:mm}");
+                break;
+
+            case "guid" or "uuid":
+                AddItem("Default (Hyphenated)", "{guid}");
+                AddItem("Uppercase (upper)", "{guid:upper}");
+                AddItem("Compact 32-digit (N)", "{guid:N}");
+                AddItem("Braced ({B})", "{guid:B}");
+                AddItem("Parentheses ((P))", "{guid:P}");
+                AddItem("Compact Uppercase (N:upper)", "{guid:N:upper}");
+                break;
+
+            case "clipboard" or "clip":
+                AddItem("Trim Whitespace (trim)", "{clipboard:trim}");
+                AddItem("Uppercase (upper)", "{clipboard:upper}");
+                AddItem("Lowercase (lower)", "{clipboard:lower}");
+                AddItem("URL Encoded (urlencode)", "{clipboard:urlencode}");
+                AddItem("URL Decoded (urldecode)", "{clipboard:urldecode}");
+                break;
+
+            case "number":
+                AddItem("Quantity: {number:Quantity}", "{number:Quantity}");
+                AddItem("Count (1-100): {number:Count|1,100|10}", "{number:Count|1,100|10}");
+                AddItem("Priority (1-10): {number:Priority|1,10|1}", "{number:Priority|1,10|1}");
+                AddItem("Age (0-120): {number:Age|0,120|25}", "{number:Age|0,120|25}");
+                break;
+
+            case "date_picker":
+                AddItem("Standard (yyyy-MM-dd)", "{date_picker:DueDate|yyyy-MM-dd}");
+                AddItem("US Format (MM/dd/yyyy)", "{date_picker:DueDate|MM/dd/yyyy}");
+                AddItem("EU Format (dd/MM/yyyy)", "{date_picker:DueDate|dd/MM/yyyy}");
+                AddItem("Full Date (dddd, MMMM d, yyyy)", "{date_picker:DueDate|dddd, MMMM d, yyyy}");
+                AddItem("Next Week (+7d)", "{date_picker:DueDate|MM/dd/yyyy|+7d}");
+                break;
+        }
+
+        if (menu.Items.Count > 0)
+        {
+            menu.Items.Add(new Separator());
+        }
+
+        var removeMi = new MenuItem { Header = "Remove Token", Foreground = Brushes.IndianRed };
+        removeMi.Click += (s, e) => RemoveInlineTokenPill(uic);
+        menu.Items.Add(removeMi);
+
+        return menu;
+    }
+
+    private void ShowTokenPresetMenu(InlineUIContainer uic, FrameworkElement target, string currentToken)
+    {
+        var menu = CreateTokenContextMenu(uic, currentToken);
+        if (menu != null)
+        {
+            menu.PlacementTarget = target;
+            menu.Placement = PlacementMode.Bottom;
+            menu.IsOpen = true;
+        }
+    }
+
+    public void UpdateTokenPillValue(InlineUIContainer uic, string newToken)
+    {
+        PopulatePillVisuals(uic, newToken);
+        OnContentChanged();
+        UpdateContextualTokenAssistant();
+    }
+
+    public void RemoveInlineTokenPill(InlineUIContainer uic)
+    {
+        DependencyObject parent = uic.Parent;
+        if (parent is Paragraph p)
+        {
+            p.Inlines.Remove(uic);
+        }
+        else if (parent is Span s)
+        {
+            s.Inlines.Remove(uic);
+        }
+        OnContentChanged();
+        UpdateContextualTokenAssistant();
+        GetActiveEditor()?.Focus();
+    }
+
+    private static readonly Regex TokenMatchRegex = new(@"\{[^{}\r\n]+\}", RegexOptions.Compiled);
+
+    public void LoadPlainTextIntoDocument(FlowDocument doc, string text)
+    {
+        doc.Blocks.Clear();
+        if (string.IsNullOrEmpty(text))
+        {
+            doc.Blocks.Add(new Paragraph { Margin = new Thickness(0) });
+            return;
+        }
+
+        var lines = text.Split(["\r\n", "\r", "\n"], StringSplitOptions.None);
+        foreach (var line in lines)
+        {
+            var p = new Paragraph { Margin = new Thickness(0) };
+            if (string.IsNullOrEmpty(line))
+            {
+                doc.Blocks.Add(p);
+                continue;
             }
 
-            if (idx >= 0)
+            PopulateInlinesWithPills(p.Inlines, line);
+            doc.Blocks.Add(p);
+        }
+
+        if (doc.Blocks.Count == 0)
+        {
+            doc.Blocks.Add(new Paragraph { Margin = new Thickness(0) });
+        }
+    }
+
+    private void PopulateInlinesWithPills(InlineCollection inlines, string text)
+    {
+        int lastIdx = 0;
+        var matches = TokenMatchRegex.Matches(text);
+        foreach (Match match in matches)
+        {
+            if (match.Index > lastIdx)
             {
-                SnippetTemplateBox.Focus();
-                SnippetTemplateBox.Select(idx, len);
-                _lastCaretIndex = idx;
-                _lastSelectionLength = len;
+                inlines.Add(new Run(text[lastIdx..match.Index]));
+            }
+
+            var pill = CreateInlineTokenPill(match.Value);
+            inlines.Add(pill);
+
+            lastIdx = match.Index + match.Length;
+        }
+
+        if (lastIdx < text.Length)
+        {
+            inlines.Add(new Run(text[lastIdx..]));
+        }
+    }
+
+    public void LoadRtfIntoDocumentWithPills(FlowDocument doc, string rtf)
+    {
+        RichTextService.LoadFromRtf(doc, rtf);
+        ConvertDocumentRunsToPills(doc);
+    }
+
+    private void ConvertDocumentRunsToPills(FlowDocument doc)
+    {
+        foreach (var block in doc.Blocks.ToList())
+        {
+            ConvertBlockRunsToPills(block);
+        }
+    }
+
+    private void ConvertBlockRunsToPills(Block block)
+    {
+        switch (block)
+        {
+            case Paragraph p:
+                ConvertInlinesRunsToPills(p.Inlines);
+                break;
+            case List list:
+                foreach (var item in list.ListItems)
+                {
+                    foreach (var child in item.Blocks.ToList())
+                    {
+                        ConvertBlockRunsToPills(child);
+                    }
+                }
+                break;
+            case Section sec:
+                foreach (var child in sec.Blocks.ToList())
+                {
+                    ConvertBlockRunsToPills(child);
+                }
+                break;
+        }
+    }
+
+    private void ConvertInlinesRunsToPills(InlineCollection inlines)
+    {
+        var inlineList = inlines.ToList();
+        foreach (var inline in inlineList)
+        {
+            if (inline is Run run)
+            {
+                var text = run.Text;
+                if (TokenMatchRegex.IsMatch(text))
+                {
+                    int lastIdx = 0;
+                    var matches = TokenMatchRegex.Matches(text);
+                    foreach (Match match in matches)
+                    {
+                        if (match.Index > lastIdx)
+                        {
+                            var prefixRun = CloneRun(run, text[lastIdx..match.Index]);
+                            inlines.InsertBefore(run, prefixRun);
+                        }
+
+                        var pill = CreateInlineTokenPill(match.Value);
+                        inlines.InsertBefore(run, pill);
+
+                        lastIdx = match.Index + match.Length;
+                    }
+
+                    if (lastIdx < text.Length)
+                    {
+                        var suffixRun = CloneRun(run, text[lastIdx..]);
+                        inlines.InsertBefore(run, suffixRun);
+                    }
+
+                    inlines.Remove(run);
+                }
+            }
+            else if (inline is Span span)
+            {
+                ConvertInlinesRunsToPills(span.Inlines);
             }
         }
     }
 
-    private static TextRange? FindTextInRange(TextPointer start, TextPointer end, string text)
+    private static Run CloneRun(Run source, string newText)
     {
-        while (start != null && start.CompareTo(end) < 0)
+        var clone = new Run(newText)
         {
-            if (start.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text)
+            FontWeight = source.FontWeight,
+            FontStyle = source.FontStyle,
+            FontSize = source.FontSize,
+            FontFamily = source.FontFamily,
+            Foreground = source.Foreground,
+            Background = source.Background
+        };
+        if (source.TextDecorations != null && source.TextDecorations.Count > 0)
+        {
+            clone.TextDecorations = source.TextDecorations.Clone();
+        }
+        return clone;
+    }
+
+    #endregion
+
+    private void HighlightExistingCursorToken()
+    {
+        var activeBox = GetActiveEditor();
+        if (activeBox == null) return;
+
+        foreach (var block in activeBox.Document.Blocks)
+        {
+            if (block is Paragraph p)
             {
-                string textRun = start.GetTextInRun(LogicalDirection.Forward);
-                int matchIndex = textRun.IndexOf(text, StringComparison.OrdinalIgnoreCase);
-                if (matchIndex >= 0)
+                foreach (var inline in p.Inlines)
                 {
-                    TextPointer matchStart = start.GetPositionAtOffset(matchIndex);
-                    TextPointer matchEnd = matchStart.GetPositionAtOffset(text.Length);
-                    return new TextRange(matchStart, matchEnd);
+                    if (inline is InlineUIContainer uic && (uic.Tag as string)?.Equals("{cursor}", StringComparison.OrdinalIgnoreCase) == true)
+                    {
+                        activeBox.Focus();
+                        activeBox.Selection.Select(uic.ElementStart, uic.ElementEnd);
+                        return;
+                    }
+                    else if (inline is Run r && r.Text.Contains("{cursor}", StringComparison.OrdinalIgnoreCase))
+                    {
+                        int idx = r.Text.IndexOf("{cursor}", StringComparison.OrdinalIgnoreCase);
+                        var start = r.ContentStart.GetPositionAtOffset(idx);
+                        var end = start?.GetPositionAtOffset(8);
+                        if (start != null && end != null)
+                        {
+                            activeBox.Focus();
+                            activeBox.Selection.Select(start, end);
+                            return;
+                        }
+                    }
                 }
             }
-            start = start.GetNextContextPosition(LogicalDirection.Forward);
         }
-        return null;
     }
 
     public void ShowSnippetWarning(string message)
@@ -455,314 +1047,473 @@ public partial class SnippetEditorControl : UserControl
         SnippetInlineWarningBanner.Visibility = Visibility.Collapsed;
     }
 
-    public static void ShowFloatingTokenPillOverlay(Canvas? canvas, TextBox textBox, string token, int insertPos)
-    {
-        if (canvas == null || textBox == null) return;
-
-        try
-        {
-            int charIndex = Math.Max(0, Math.Min(insertPos, textBox.Text.Length - 1));
-            var charRect = textBox.Text.Length > 0 ? textBox.GetRectFromCharacterIndex(charIndex, true) : new Rect(8, 8, 10, 16);
-            double left = charRect.Left;
-            double top = charRect.Top - 24;
-
-            if (double.IsInfinity(left) || double.IsNaN(left) || left < 0) left = 12;
-            if (double.IsInfinity(top) || double.IsNaN(top) || top < 0) top = 6;
-
-            if (canvas.ActualWidth > 80 && left > canvas.ActualWidth - 75)
-            {
-                left = canvas.ActualWidth - 75;
-            }
-
-            var pill = new Border
-            {
-                Background = Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.DodgerBlue,
-                BorderBrush = Application.Current.TryFindResource("AccentHoverBrush") as Brush ?? Brushes.DeepSkyBlue,
-                BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(10),
-                Padding = new Thickness(8, 2, 8, 2),
-                IsHitTestVisible = false,
-                Opacity = 1.0,
-                Effect = new System.Windows.Media.Effects.DropShadowEffect
-                {
-                    Color = (Application.Current.TryFindResource("AccentColorBrush") as SolidColorBrush)?.Color ?? Colors.DodgerBlue,
-                    BlurRadius = 14,
-                    ShadowDepth = 2,
-                    Opacity = 0.85
-                }
-            };
-
-            var textBlock = new TextBlock
-            {
-                Text = $"✨ {token}",
-                FontSize = 11,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = Brushes.White,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            pill.Child = textBlock;
-
-            var transformGroup = new TransformGroup();
-            var scaleTransform = new ScaleTransform(1.0, 1.0);
-            var translateTransform = new TranslateTransform(0, 0);
-            transformGroup.Children.Add(scaleTransform);
-            transformGroup.Children.Add(translateTransform);
-            pill.RenderTransform = transformGroup;
-            pill.RenderTransformOrigin = new Point(0.5, 0.5);
-
-            Canvas.SetLeft(pill, left);
-            Canvas.SetTop(pill, top);
-            canvas.Children.Add(pill);
-
-            var storyboard = new Storyboard();
-
-            var scaleXAnim = new DoubleAnimation(0.5, 1.0, TimeSpan.FromMilliseconds(180)) { EasingFunction = new BackEase { Amplitude = 0.5, EasingMode = EasingMode.EaseOut } };
-            var scaleYAnim = new DoubleAnimation(0.5, 1.0, TimeSpan.FromMilliseconds(180)) { EasingFunction = new BackEase { Amplitude = 0.5, EasingMode = EasingMode.EaseOut } };
-            var transYAnim = new DoubleAnimation(0, -18, TimeSpan.FromMilliseconds(900)) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } };
-            var fadeAnim = new DoubleAnimation(1.0, 0.0, TimeSpan.FromMilliseconds(400)) { BeginTime = TimeSpan.FromMilliseconds(500) };
-
-            Storyboard.SetTarget(scaleXAnim, pill);
-            Storyboard.SetTargetProperty(scaleXAnim, new PropertyPath("(UIElement.RenderTransform).(TransformGroup.Children)[0].(ScaleTransform.ScaleX)"));
-            Storyboard.SetTarget(scaleYAnim, pill);
-            Storyboard.SetTargetProperty(scaleYAnim, new PropertyPath("(UIElement.RenderTransform).(TransformGroup.Children)[0].(ScaleTransform.ScaleY)"));
-            Storyboard.SetTarget(transYAnim, pill);
-            Storyboard.SetTargetProperty(transYAnim, new PropertyPath("(UIElement.RenderTransform).(TransformGroup.Children)[1].(TranslateTransform.Y)"));
-            Storyboard.SetTarget(fadeAnim, pill);
-            Storyboard.SetTargetProperty(fadeAnim, new PropertyPath(UIElement.OpacityProperty));
-
-            storyboard.Children.Add(scaleXAnim);
-            storyboard.Children.Add(scaleYAnim);
-            storyboard.Children.Add(transYAnim);
-            storyboard.Children.Add(fadeAnim);
-
-            storyboard.Completed += (s, e) =>
-            {
-                canvas.Children.Remove(pill);
-            };
-            storyboard.Begin();
-        }
-        catch
-        {
-            // Floating overlay failure must not disrupt typing
-        }
-    }
-
     #endregion
 
     #region Contextual Token Assistant
 
-    private void SnippetTemplateBox_SelectionChanged(object sender, RoutedEventArgs e)
+    private void SnippetPlainTextBox_SelectionChanged(object sender, RoutedEventArgs e)
     {
-        _lastCaretIndex = SnippetTemplateBox.CaretIndex;
-        _lastSelectionLength = SnippetTemplateBox.SelectionLength;
+        CheckInlineAutocomplete(SnippetPlainTextBox);
         UpdateContextualTokenAssistant();
     }
 
-    private void SnippetTemplateBox_TextChanged(object sender, TextChangedEventArgs e)
+    private void SnippetPlainTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         if (_isUpdatingUi) return;
+        AutoConvertTypedTokens(SnippetPlainTextBox);
+        CheckInlineAutocomplete(SnippetPlainTextBox);
         UpdateContextualTokenAssistant();
         OnContentChanged();
     }
 
-    private void UpdateContextualTokenAssistant()
+    private void SnippetPlainTextBox_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (TokenAssistantBorder == null || AssistantOptionsPillsPanel == null) return;
+        HandleEditorPreviewKeyDown(SnippetPlainTextBox, e);
+    }
 
-        var tokenInfo = GetTokenAtCaret();
-        if (tokenInfo == null)
+    private void HandleEditorPreviewKeyDown(RichTextBox box, KeyEventArgs e)
+    {
+        if (TokenAutocompletePopup != null && TokenAutocompletePopup.IsOpen)
         {
-            AssistantBadgeBorder.Visibility = Visibility.Collapsed;
-            AssistantDescriptionText.Text = "Type '{' or move caret inside a token to see parameters and quick format options.";
-            AssistantOptionsPillsPanel.Children.Clear();
-            AssistantOptionsPillsPanel.Visibility = Visibility.Collapsed;
+            if (e.Key == Key.Escape)
+            {
+                TokenAutocompletePopup.IsOpen = false;
+                e.Handled = true;
+                return;
+            }
+            if (e.Key == Key.Down)
+            {
+                int next = TokenAutocompleteListBox.SelectedIndex + 1;
+                if (next < TokenAutocompleteListBox.Items.Count)
+                {
+                    TokenAutocompleteListBox.SelectedIndex = next;
+                    TokenAutocompleteListBox.ScrollIntoView(TokenAutocompleteListBox.SelectedItem);
+                }
+                e.Handled = true;
+                return;
+            }
+            if (e.Key == Key.Up)
+            {
+                int prev = TokenAutocompleteListBox.SelectedIndex - 1;
+                if (prev >= 0)
+                {
+                    TokenAutocompleteListBox.SelectedIndex = prev;
+                    TokenAutocompleteListBox.ScrollIntoView(TokenAutocompleteListBox.SelectedItem);
+                }
+                e.Handled = true;
+                return;
+            }
+            if (e.Key == Key.Enter || e.Key == Key.Tab)
+            {
+                if (TokenAutocompleteListBox.SelectedItem is AutocompleteTokenItem selectedItem)
+                {
+                    CommitAutocomplete(box, selectedItem);
+                    e.Handled = true;
+                    return;
+                }
+            }
+        }
+
+        if (e.Key == Key.Back)
+        {
+            var caret = box.CaretPosition;
+            var prev = caret.GetAdjacentElement(LogicalDirection.Backward);
+            if (prev is InlineUIContainer uic)
+            {
+                RemoveInlineTokenPill(uic);
+                e.Handled = true;
+            }
+        }
+        else if (e.Key == Key.Delete)
+        {
+            var caret = box.CaretPosition;
+            var next = caret.GetAdjacentElement(LogicalDirection.Forward);
+            if (next is InlineUIContainer uic)
+            {
+                RemoveInlineTokenPill(uic);
+                e.Handled = true;
+            }
+        }
+    }
+
+    private void AutoConvertTypedTokens(RichTextBox box)
+    {
+        if (_isUpdatingUi) return;
+
+        var caret = box.CaretPosition;
+        if (caret.Parent is Run run)
+        {
+            var text = run.Text;
+            if (text.Contains('{') && text.Contains('}'))
+            {
+                var match = TokenMatchRegex.Match(text);
+                if (match.Success)
+                {
+                    _isUpdatingUi = true;
+                    try
+                    {
+                        var parentInlines = run.SiblingInlines;
+                        int lastIdx = 0;
+                        var matches = TokenMatchRegex.Matches(text);
+                        InlineUIContainer? lastPill = null;
+
+                        foreach (Match m in matches)
+                        {
+                            if (m.Index > lastIdx)
+                            {
+                                var pre = CloneRun(run, text[lastIdx..m.Index]);
+                                parentInlines.InsertBefore(run, pre);
+                            }
+
+                            var pill = CreateInlineTokenPill(m.Value);
+                            parentInlines.InsertBefore(run, pill);
+                            lastPill = pill;
+
+                            lastIdx = m.Index + m.Length;
+                        }
+
+                        if (lastIdx < text.Length)
+                        {
+                            var post = CloneRun(run, text[lastIdx..]);
+                            parentInlines.InsertBefore(run, post);
+                        }
+
+                        parentInlines.Remove(run);
+
+                        if (lastPill?.ElementEnd != null)
+                        {
+                            box.CaretPosition = lastPill.ElementEnd;
+                        }
+                    }
+                    finally
+                    {
+                        _isUpdatingUi = false;
+                    }
+                }
+            }
+        }
+    }
+
+    #region Deprecated Token Upgrade Banner
+
+    public string GetCurrentSnippetText()
+    {
+        if (_currentContentType == SnippetContentType.RichText)
+        {
+            return SnippetRichTextBox != null ? RichTextService.ExtractPlainText(SnippetRichTextBox.Document) : string.Empty;
+        }
+        return PlainTextTemplate;
+    }
+
+    public bool HasDeprecatedDateTokens()
+    {
+        string text = GetCurrentSnippetText();
+        return Regex.IsMatch(text, @"\{date(?::[^{}]*)?\}", RegexOptions.IgnoreCase);
+    }
+
+    public void CheckForDeprecatedTokens()
+    {
+        if (SnippetTokenUpgradeBanner == null) return;
+        bool hasDeprecated = HasDeprecatedDateTokens();
+        SnippetTokenUpgradeBanner.Visibility = hasDeprecated ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    public void ConvertDeprecatedDateTokens()
+    {
+        string currentText = GetCurrentSnippetText();
+        if (string.IsNullOrEmpty(currentText)) return;
+
+        // Convert {date} -> {datetime:yyyy-MM-dd} (preserving exact same default date output)
+        // Convert {date:FMT} -> {datetime:FMT}
+        string updatedText = Regex.Replace(currentText, @"\{date(?::([^{}]+))?\}", m =>
+        {
+            if (m.Groups[1].Success && !string.IsNullOrWhiteSpace(m.Groups[1].Value))
+            {
+                return $"{{datetime:{m.Groups[1].Value}}}";
+            }
+            return "{datetime:yyyy-MM-dd}";
+        }, RegexOptions.IgnoreCase);
+
+        if (_currentContentType == SnippetContentType.RichText)
+        {
+            if (SnippetRichTextBox != null)
+            {
+                LoadPlainTextIntoDocument(SnippetRichTextBox.Document, updatedText);
+            }
+        }
+        else
+        {
+            PlainTextTemplate = updatedText;
+        }
+
+        OnContentChanged();
+        CheckForDeprecatedTokens();
+    }
+
+    private void ConvertDateTokensBtn_Click(object sender, RoutedEventArgs e)
+    {
+        ConvertDeprecatedDateTokens();
+    }
+
+    private void DismissDateUpgradeBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (SnippetTokenUpgradeBanner != null)
+        {
+            SnippetTokenUpgradeBanner.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    public void UpdateContextualTokenAssistant()
+    {
+        CheckForDeprecatedTokens();
+    }
+
+    #endregion
+
+    private (InlineUIContainer? ActivePill, string FullToken, string Prefix, string Arg)? GetActiveTokenAtCaret()
+    {
+        var box = GetActiveEditor();
+        if (box == null) return null;
+
+        var caret = box.CaretPosition;
+
+        // 1. Check if caret is adjacent to an InlineUIContainer
+        var backwardPill = caret.GetAdjacentElement(LogicalDirection.Backward) as InlineUIContainer;
+        var forwardPill = caret.GetAdjacentElement(LogicalDirection.Forward) as InlineUIContainer;
+        var pill = backwardPill ?? forwardPill;
+
+        if (pill != null && pill.Tag is string pillToken)
+        {
+            var inner = pillToken.TrimStart('{').TrimEnd('}').Trim();
+            var colonIdx = inner.IndexOf(':');
+            var prefix = colonIdx > 0 ? inner[..colonIdx].Trim().ToLowerInvariant() : inner.ToLowerInvariant();
+            var arg = colonIdx > 0 ? inner[(colonIdx + 1)..].Trim() : string.Empty;
+            return (pill, pillToken, prefix, arg);
+        }
+
+        // 2. Check if caret is inside a Run with {token}
+        if (caret.Parent is Run run)
+        {
+            var text = run.Text;
+            int offset = run.ContentStart.GetOffsetToPosition(caret);
+            offset = Math.Clamp(offset, 0, text.Length);
+
+            int start = -1;
+            for (int i = offset - 1; i >= 0; i--)
+            {
+                if (text[i] == '}') break;
+                if (text[i] == '{')
+                {
+                    start = i;
+                    break;
+                }
+            }
+            if (start == -1 && offset < text.Length && text[offset] == '{')
+            {
+                start = offset;
+            }
+
+            if (start >= 0)
+            {
+                int end = -1;
+                for (int i = start + 1; i < text.Length; i++)
+                {
+                    if (text[i] == '{') break;
+                    if (text[i] == '}')
+                    {
+                        end = i + 1;
+                        break;
+                    }
+                }
+                if (end == -1) end = text.Length;
+
+                var rawToken = text[start..end];
+                var inner = rawToken.TrimStart('{').TrimEnd('}').Trim();
+                var colonIdx = inner.IndexOf(':');
+                var prefix = colonIdx > 0 ? inner[..colonIdx].Trim().ToLowerInvariant() : inner.ToLowerInvariant();
+                var arg = colonIdx > 0 ? inner[(colonIdx + 1)..].Trim() : string.Empty;
+                return (null, rawToken, prefix, arg);
+            }
+        }
+
+        return null;
+    }
+
+    #endregion
+
+    #region Inline Token Autocomplete (@ Trigger)
+
+    public class AutocompleteTokenItem
+    {
+        public string DisplayText { get; set; } = string.Empty;
+        public string TokenValue { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string Icon { get; set; } = string.Empty;
+    }
+
+    private List<AutocompleteTokenItem> BuildTokenCatalog()
+    {
+        var list = new List<AutocompleteTokenItem>
+        {
+            new() { Icon = "🗓️", DisplayText = "{datetime}", TokenValue = "{datetime:yyyy-MM-dd HH:mm}", Description = "Current date & time (combined, date-only, time-only, offsets)" },
+            new() { Icon = "⏰", DisplayText = "{time}", TokenValue = "{time}", Description = "Current time (12/24-hour specifiers & offsets)" },
+            new() { Icon = "🔑", DisplayText = "{guid}", TokenValue = "{guid}", Description = "Unique identifier (hyphenated, upper, compact)" },
+            new() { Icon = "📋", DisplayText = "{clipboard}", TokenValue = "{clipboard}", Description = "Current clipboard contents (trim, casing)" },
+            new() { Icon = "💻", DisplayText = "{username}", TokenValue = "{username}", Description = "Current Windows login user name" },
+            new() { Icon = "💻", DisplayText = "{active_window}", TokenValue = "{active_window}", Description = "Active foreground window title" },
+            new() { Icon = "📍", DisplayText = "{cursor}", TokenValue = "{cursor}", Description = "Caret landing position after pasting snippet" },
+            new() { Icon = "💬", DisplayText = "{text:Label}", TokenValue = "{text:Label}", Description = "Interactive single-line text input prompt" },
+            new() { Icon = "📝", DisplayText = "{multiline:Label}", TokenValue = "{multiline:Label}", Description = "Interactive multi-line text input prompt" },
+            new() { Icon = "🔢", DisplayText = "{number:Quantity}", TokenValue = "{number:Quantity}", Description = "Numeric input prompt with optional min/max/step" },
+            new() { Icon = "🔽", DisplayText = "{choice:Label|Opt1,Opt2}", TokenValue = "{choice:Label|Opt1=Val1,Opt2}", Description = "Dropdown selection choice prompt" },
+            new() { Icon = "📆", DisplayText = "{date_picker:DueDate}", TokenValue = "{date_picker:DueDate}", Description = "Calendar date picker prompt with format & offset" }
+        };
+
+        if (_availableVariables != null)
+        {
+            foreach (var variable in _availableVariables)
+            {
+                if (!string.IsNullOrWhiteSpace(variable))
+                {
+                    list.Add(new AutocompleteTokenItem
+                    {
+                        Icon = "⚡",
+                        DisplayText = $"{{{variable}}}",
+                        TokenValue = $"{{{variable}}}",
+                        Description = "Workflow variable from preceding action"
+                    });
+                }
+            }
+        }
+
+        return list;
+    }
+
+    private void CheckInlineAutocomplete(RichTextBox box)
+    {
+        if (_isUpdatingUi || _isUpdatingRichText || TokenAutocompletePopup == null) return;
+
+        var caret = box.CaretPosition;
+        if (caret.Parent is Run run)
+        {
+            int offset = run.ContentStart.GetOffsetToPosition(caret);
+            string text = run.Text;
+            if (offset > 0 && offset <= text.Length)
+            {
+                int atIdx = text.LastIndexOf('@', offset - 1);
+                if (atIdx >= 0)
+                {
+                    string query = text.Substring(atIdx + 1, offset - atIdx - 1);
+                    if (!query.Any(char.IsWhiteSpace) && !query.Contains('{') && !query.Contains('}'))
+                    {
+                        OpenTokenAutocomplete(box, query);
+                        return;
+                    }
+                }
+            }
+        }
+
+        if (TokenAutocompletePopup.IsOpen)
+        {
+            TokenAutocompletePopup.IsOpen = false;
+        }
+    }
+
+    private void OpenTokenAutocomplete(RichTextBox box, string query)
+    {
+        var catalog = BuildTokenCatalog();
+        var filtered = string.IsNullOrWhiteSpace(query)
+            ? catalog
+            : catalog.Where(t =>
+                t.DisplayText.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                t.TokenValue.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                t.Description.Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        if (filtered.Count == 0)
+        {
+            TokenAutocompletePopup.IsOpen = false;
             return;
         }
 
-        var (start, end, fullToken, prefix, arg) = tokenInfo.Value;
-        AssistantOptionsPillsPanel.Children.Clear();
+        TokenAutocompleteListBox.ItemsSource = filtered;
+        TokenAutocompleteListBox.SelectedIndex = 0;
 
-        switch (prefix)
+        TokenAutocompletePopup.PlacementTarget = box;
+        TokenAutocompletePopup.CustomPopupPlacementCallback = (popupSize, targetSize, offset) =>
         {
-            case "date":
-                AssistantBadgeBorder.Visibility = Visibility.Visible;
-                AssistantTokenBadge.Text = "{date:format}";
-                AssistantDescriptionText.Text = "Current date. Options: custom format (.NET specifiers) and relative offsets (+/- days, weeks, months).";
-                AddAssistantPill("MM/dd/yyyy (US)", "MM/dd/yyyy", start, end, prefix);
-                AddAssistantPill("dd/MM/yyyy (EU)", "dd/MM/yyyy", start, end, prefix);
-                AddAssistantPill("dddd, MMMM d, yyyy (Full)", "dddd, MMMM d, yyyy", start, end, prefix);
-                AddAssistantPill("yyyyMMdd (Compact)", "yyyyMMdd", start, end, prefix);
-                AddAssistantPill("+1d (Tomorrow)", "+1d", start, end, prefix);
-                AddAssistantPill("-1d (Yesterday)", "-1d", start, end, prefix);
-                AddAssistantPill("+7d (Next Week)", "+7d", start, end, prefix);
-                AddAssistantPill("+1m (Next Month)", "+1m", start, end, prefix);
-                AddAssistantPill("+1d:MM/dd/yyyy", "+1d:MM/dd/yyyy", start, end, prefix);
-                break;
-
-            case "tomorrow":
-                AssistantBadgeBorder.Visibility = Visibility.Visible;
-                AssistantTokenBadge.Text = "{tomorrow:format}";
-                AssistantDescriptionText.Text = "Tomorrow's date with optional format specifier.";
-                AddAssistantPill("MM/dd/yyyy", "MM/dd/yyyy", start, end, prefix);
-                AddAssistantPill("dddd, MMMM d", "dddd, MMMM d", start, end, prefix);
-                AddAssistantPill("yyyyMMdd", "yyyyMMdd", start, end, prefix);
-                break;
-
-            case "yesterday":
-                AssistantBadgeBorder.Visibility = Visibility.Visible;
-                AssistantTokenBadge.Text = "{yesterday:format}";
-                AssistantDescriptionText.Text = "Yesterday's date with optional format specifier.";
-                AddAssistantPill("MM/dd/yyyy", "MM/dd/yyyy", start, end, prefix);
-                AddAssistantPill("dddd, MMMM d", "dddd, MMMM d", start, end, prefix);
-                AddAssistantPill("yyyyMMdd", "yyyyMMdd", start, end, prefix);
-                break;
-
-            case "time":
-                AssistantBadgeBorder.Visibility = Visibility.Visible;
-                AssistantTokenBadge.Text = "{time:format}";
-                AssistantDescriptionText.Text = "Current time. Options: 12/24-hour specifiers and relative offsets (+/- hours, minutes).";
-                AddAssistantPill("HH:mm:ss (24-Hour)", "HH:mm:ss", start, end, prefix);
-                AddAssistantPill("hh:mm tt (12-Hour AM/PM)", "hh:mm tt", start, end, prefix);
-                AddAssistantPill("HH:mm (Short 24-Hour)", "HH:mm", start, end, prefix);
-                AddAssistantPill("+1h (One Hour Later)", "+1h:HH:mm", start, end, prefix);
-                AddAssistantPill("-30m (30 Mins Ago)", "-30m:HH:mm", start, end, prefix);
-                break;
-
-            case "datetime":
-                AssistantBadgeBorder.Visibility = Visibility.Visible;
-                AssistantTokenBadge.Text = "{datetime:format}";
-                AssistantDescriptionText.Text = "Current date and time combined.";
-                AddAssistantPill("yyyy-MM-ddTHH:mm:ss (ISO)", "yyyy-MM-ddTHH:mm:ss", start, end, prefix);
-                AddAssistantPill("MM/dd/yyyy hh:mm tt", "MM/dd/yyyy hh:mm tt", start, end, prefix);
-                AddAssistantPill("yyyy-MM-dd HH:mm", "yyyy-MM-dd HH:mm", start, end, prefix);
-                break;
-
-            case "guid":
-            case "uuid":
-                AssistantBadgeBorder.Visibility = Visibility.Visible;
-                AssistantTokenBadge.Text = "{guid:modifier}";
-                AssistantDescriptionText.Text = "Generates a unique identifier with optional casing and format.";
-                AddAssistantPill("upper (Uppercase)", "upper", start, end, prefix);
-                AddAssistantPill("N (32 Digits No Hyphens)", "N", start, end, prefix);
-                AddAssistantPill("B (Braced)", "B", start, end, prefix);
-                AddAssistantPill("P (Parentheses)", "P", start, end, prefix);
-                AddAssistantPill("N:upper (Compact Uppercase)", "N:upper", start, end, prefix);
-                break;
-
-            case "clipboard":
-                AssistantBadgeBorder.Visibility = Visibility.Visible;
-                AssistantTokenBadge.Text = "{clipboard:modifier}";
-                AssistantDescriptionText.Text = "Inserts current clipboard text with optional transformation modifier.";
-                AddAssistantPill("trim (Strip Whitespace)", "trim", start, end, prefix);
-                AddAssistantPill("upper (UPPERCASE)", "upper", start, end, prefix);
-                AddAssistantPill("lower (lowercase)", "lower", start, end, prefix);
-                AddAssistantPill("urlencode (URL-Safe)", "urlencode", start, end, prefix);
-                AddAssistantPill("urldecode (Decoded)", "urldecode", start, end, prefix);
-                break;
-
-            case "env":
-                AssistantBadgeBorder.Visibility = Visibility.Visible;
-                AssistantTokenBadge.Text = "{env:VARIABLE_NAME}";
-                AssistantDescriptionText.Text = "Resolves a Windows environment variable.";
-                AddAssistantPill("USERPROFILE", "USERPROFILE", start, end, prefix);
-                AddAssistantPill("TEMP", "TEMP", start, end, prefix);
-                AddAssistantPill("APPDATA", "APPDATA", start, end, prefix);
-                AddAssistantPill("COMPUTERNAME", "COMPUTERNAME", start, end, prefix);
-                AddAssistantPill("PATH", "PATH", start, end, prefix);
-                break;
-
-            case "cursor":
-                AssistantBadgeBorder.Visibility = Visibility.Visible;
-                AssistantTokenBadge.Text = "{cursor}";
-                AssistantDescriptionText.Text = "Positions the text caret at this position after pasting snippet text.";
-                break;
-
-            default:
-                AssistantBadgeBorder.Visibility = Visibility.Visible;
-                AssistantTokenBadge.Text = $"{{{prefix}}}";
-                AssistantDescriptionText.Text = "Dynamic snippet token.";
-                break;
-        }
-
-        AssistantOptionsPillsPanel.Visibility = AssistantOptionsPillsPanel.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    private void AddAssistantPill(string displayLabel, string parameterValue, int tokenStart, int tokenEnd, string prefix)
-    {
-        var btn = new Button
-        {
-            Content = displayLabel,
-            Style = Application.Current.TryFindResource("TokenAssistantPillStyle") as Style,
-            ToolTip = $"Apply '{parameterValue}' to {{{prefix}}}"
+            var rect = box.CaretPosition.GetCharacterRect(LogicalDirection.Forward);
+            var point = new Point(Math.Max(0, rect.Left), rect.Bottom + 4);
+            return new[] { new CustomPopupPlacement(point, PopupPrimaryAxis.Horizontal) };
         };
 
-        btn.Click += (s, e) =>
+        if (!TokenAutocompletePopup.IsOpen)
         {
-            string replacement = string.IsNullOrEmpty(parameterValue) ? $"{{{prefix}}}" : $"{{{prefix}:{parameterValue}}}";
-            var text = SnippetTemplateBox.Text;
-            if (tokenStart >= 0 && tokenEnd <= text.Length && tokenStart <= tokenEnd)
-            {
-                SnippetTemplateBox.Text = text.Remove(tokenStart, tokenEnd - tokenStart).Insert(tokenStart, replacement);
-                SnippetTemplateBox.CaretIndex = tokenStart + replacement.Length;
-                SnippetTemplateBox.Focus();
-                UpdateContextualTokenAssistant();
-                OnContentChanged();
-            }
-        };
-
-        AssistantOptionsPillsPanel.Children.Add(btn);
+            TokenAutocompletePopup.IsOpen = true;
+        }
     }
 
-    private (int Start, int End, string FullToken, string Prefix, string Arg)? GetTokenAtCaret()
+    private void CommitAutocomplete(RichTextBox box, AutocompleteTokenItem item)
     {
-        var text = SnippetTemplateBox.Text;
-        if (string.IsNullOrEmpty(text)) return null;
-        var caret = Math.Clamp(SnippetTemplateBox.CaretIndex, 0, text.Length);
-
-        int start = -1;
-        for (int i = caret - 1; i >= 0; i--)
+        TokenAutocompletePopup.IsOpen = false;
+        var caret = box.CaretPosition;
+        if (caret.Parent is Run run)
         {
-            if (text[i] == '}') break;
-            if (text[i] == '{')
+            int offset = run.ContentStart.GetOffsetToPosition(caret);
+            string text = run.Text;
+            int atIdx = text.LastIndexOf('@', Math.Max(0, offset - 1));
+            if (atIdx >= 0)
             {
-                start = i;
-                break;
-            }
-        }
-        if (start == -1)
-        {
-            if (caret < text.Length && text[caret] == '{')
-            {
-                start = caret;
-            }
-            else
-            {
-                return null;
+                var atPos = run.ContentStart.GetPositionAtOffset(atIdx);
+                var endPos = run.ContentStart.GetPositionAtOffset(offset);
+                if (atPos != null && endPos != null)
+                {
+                    var range = new TextRange(atPos, endPos);
+                    range.Text = string.Empty;
+                    box.CaretPosition = range.Start;
+                }
             }
         }
 
-        int end = -1;
-        for (int i = start + 1; i < text.Length; i++)
+        InsertTokenIntoEditor(item.TokenValue);
+    }
+
+    private void TokenAutocompleteListBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter || e.Key == Key.Tab)
         {
-            if (text[i] == '{') break;
-            if (text[i] == '}')
+            var box = GetActiveEditor();
+            if (box != null && TokenAutocompleteListBox.SelectedItem is AutocompleteTokenItem item)
             {
-                end = i + 1;
-                break;
+                CommitAutocomplete(box, item);
+                e.Handled = true;
             }
         }
-        if (end == -1)
+        else if (e.Key == Key.Escape)
         {
-            end = text.Length;
+            TokenAutocompletePopup.IsOpen = false;
+            e.Handled = true;
+            GetActiveEditor()?.Focus();
         }
+    }
 
-        var fullToken = text[start..end];
-        var inner = fullToken.TrimStart('{').TrimEnd('}').Trim();
-        var colonIdx = inner.IndexOf(':');
-        var prefix = colonIdx > 0 ? inner[..colonIdx].Trim().ToLowerInvariant() : inner.ToLowerInvariant();
-        var arg = colonIdx > 0 ? inner[(colonIdx + 1)..].Trim() : string.Empty;
+    private void TokenAutocompleteListBox_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        var box = GetActiveEditor();
+        if (box != null && TokenAutocompleteListBox.SelectedItem is AutocompleteTokenItem item)
+        {
+            CommitAutocomplete(box, item);
+            e.Handled = true;
+        }
+    }
 
-        return (start, end, fullToken, prefix, arg);
+    private void TokenAutocompleteListBox_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        var box = GetActiveEditor();
+        if (box != null && TokenAutocompleteListBox.SelectedItem is AutocompleteTokenItem item)
+        {
+            CommitAutocomplete(box, item);
+            e.Handled = true;
+        }
     }
 
     #endregion
@@ -1023,10 +1774,6 @@ public partial class SnippetEditorControl : UserControl
                 {
                     SnippetLivePreviewRichBox.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1E293B"));
                 }
-                if (SnippetLivePreviewText != null)
-                {
-                    SnippetLivePreviewText.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1E293B"));
-                }
 
                 if (SnippetCanvasIconText != null) SnippetCanvasIconText.Text = "🌙";
                 if (SnippetCanvasModeText != null) SnippetCanvasModeText.Text = "Theme";
@@ -1036,25 +1783,21 @@ public partial class SnippetEditorControl : UserControl
             {
                 if (SnippetRichTextEditorBorder != null)
                 {
-                    SnippetRichTextEditorBorder.Background = Application.Current.TryFindResource("BgInputBrush") as Brush ?? Brushes.Transparent;
-                    SnippetRichTextEditorBorder.BorderBrush = Application.Current.TryFindResource("BorderBrush") as Brush ?? Brushes.Gray;
+                    SnippetRichTextEditorBorder.SetResourceReference(Border.BackgroundProperty, "BgInputBrush");
+                    SnippetRichTextEditorBorder.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
                 }
                 if (SnippetRichTextBox != null)
                 {
-                    SnippetRichTextBox.Foreground = Application.Current.TryFindResource("TextPrimaryBrush") as Brush ?? Brushes.White;
+                    SnippetRichTextBox.SetResourceReference(Control.ForegroundProperty, "TextPrimaryBrush");
                 }
                 if (SnippetLivePreviewContainerBorder != null)
                 {
-                    SnippetLivePreviewContainerBorder.Background = Application.Current.TryFindResource("BgInputBrush") as Brush ?? Brushes.Transparent;
-                    SnippetLivePreviewContainerBorder.BorderBrush = Application.Current.TryFindResource("BorderBrush") as Brush ?? Brushes.Gray;
+                    SnippetLivePreviewContainerBorder.SetResourceReference(Border.BackgroundProperty, "BgInputBrush");
+                    SnippetLivePreviewContainerBorder.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
                 }
                 if (SnippetLivePreviewRichBox != null)
                 {
-                    SnippetLivePreviewRichBox.Foreground = Application.Current.TryFindResource("TextPrimaryBrush") as Brush ?? Brushes.White;
-                }
-                if (SnippetLivePreviewText != null)
-                {
-                    SnippetLivePreviewText.Foreground = Application.Current.TryFindResource("TextSecondaryBrush") as Brush ?? Brushes.Gray;
+                    SnippetLivePreviewRichBox.SetResourceReference(Control.ForegroundProperty, "TextPrimaryBrush");
                 }
 
                 if (SnippetCanvasIconText != null) SnippetCanvasIconText.Text = "📄";
@@ -1071,13 +1814,18 @@ public partial class SnippetEditorControl : UserControl
 
     private void SnippetRichTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        if (_isUpdatingRichText) return;
+        if (_isUpdatingRichText || _isUpdatingUi) return;
+        AutoConvertTypedTokens(SnippetRichTextBox);
+        CheckInlineAutocomplete(SnippetRichTextBox);
+        UpdateContextualTokenAssistant();
         OnContentChanged();
     }
 
     private void SnippetRichTextBox_SelectionChanged(object sender, RoutedEventArgs e)
     {
         UpdateRichToolbarSelectionState();
+        CheckInlineAutocomplete(SnippetRichTextBox);
+        UpdateContextualTokenAssistant();
     }
 
     private void UpdateRichToolbarSelectionState()
@@ -1155,6 +1903,8 @@ public partial class SnippetEditorControl : UserControl
 
     private void SnippetRichTextBox_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        HandleEditorPreviewKeyDown(SnippetRichTextBox, e);
+
         if ((Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Control) == System.Windows.Input.ModifierKeys.Control)
         {
             if (e.Key == Key.B || e.Key == Key.I || e.Key == Key.U || e.Key == Key.Z || e.Key == Key.Y)
@@ -1179,7 +1929,7 @@ public partial class SnippetEditorControl : UserControl
         _ = UpdateLivePreviewAsync();
     }
 
-    private async Task UpdateLivePreviewAsync()
+    public async Task UpdateLivePreviewAsync()
     {
         if (SnippetLivePreviewText == null || SnippetPreviewStatsText == null) return;
 
@@ -1221,7 +1971,6 @@ public partial class SnippetEditorControl : UserControl
                     previewPrompts[t.Label] = !string.IsNullOrEmpty(t.DefaultValue) ? t.DefaultValue : $"[{t.Label}]";
                 }
 
-                // Inject mock values for available workflow variables if in workflow context
                 foreach (var v in _availableVariables)
                 {
                     if (!previewPrompts.ContainsKey(v))
@@ -1237,7 +1986,6 @@ public partial class SnippetEditorControl : UserControl
                     activeWindowTitle: "Active Application",
                     activeProcessName: "notepad.exe");
 
-                // Also evaluate workflow variables in RTF
                 foreach (var v in _availableVariables)
                 {
                     evaluatedRtf = evaluatedRtf.Replace($"{{{v}}}", $"[{v}]");
@@ -1246,7 +1994,7 @@ public partial class SnippetEditorControl : UserControl
                 RichTextService.LoadFromRtf(SnippetLivePreviewRichBox.Document, evaluatedRtf);
 
                 var evaluatedPlain = RichTextService.ExtractPlainText(SnippetLivePreviewRichBox.Document);
-                int tokenCount = tokens.Count + (plain.Contains("{date") ? 1 : 0) + (plain.Contains("{time") ? 1 : 0) + (plain.Contains("{guid") ? 1 : 0) + (plain.Contains("{clipboard") ? 1 : 0) + _availableVariables.Count(v => plain.Contains($"{{{v}}}"));
+                int tokenCount = tokens.Count + (plain.Contains("{datetime") || plain.Contains("{date") ? 1 : 0) + (plain.Contains("{time") ? 1 : 0) + (plain.Contains("{guid") ? 1 : 0) + (plain.Contains("{clipboard") ? 1 : 0) + _availableVariables.Count(v => plain.Contains($"{{{v}}}"));
                 SnippetPreviewStatsText.Text = $"{evaluatedPlain.Length} chars • {tokenCount} tokens";
             }
             catch
@@ -1256,7 +2004,7 @@ public partial class SnippetEditorControl : UserControl
         }
         else
         {
-            var template = SnippetTemplateBox.Text;
+            var template = PlainTextTemplate;
             if (string.IsNullOrEmpty(template))
             {
                 SnippetLivePreviewText.Text = "Type a snippet template above to see a real-time expansion preview...";
@@ -1288,7 +2036,6 @@ public partial class SnippetEditorControl : UserControl
                     previewPrompts[t.Label] = !string.IsNullOrEmpty(t.DefaultValue) ? t.DefaultValue : $"[{t.Label}]";
                 }
 
-                // Inject mock values for available workflow variables if in workflow context
                 foreach (var v in _availableVariables)
                 {
                     if (!previewPrompts.ContainsKey(v))
@@ -1304,7 +2051,6 @@ public partial class SnippetEditorControl : UserControl
                     activeWindowTitle: "Active Application",
                     activeProcessName: "notepad.exe");
 
-                // Also evaluate workflow variables in plain text
                 foreach (var v in _availableVariables)
                 {
                     evaluated = evaluated.Replace($"{{{v}}}", $"[{v}]");
@@ -1313,7 +2059,7 @@ public partial class SnippetEditorControl : UserControl
                 var (cleanPreview, _) = PlaceholderParser.ProcessCursorPosition(evaluated);
                 SnippetLivePreviewText.Text = cleanPreview;
 
-                int tokenCount = tokens.Count + (template.Contains("{date") ? 1 : 0) + (template.Contains("{time") ? 1 : 0) + (template.Contains("{guid") ? 1 : 0) + (template.Contains("{clipboard") ? 1 : 0) + _availableVariables.Count(v => template.Contains($"{{{v}}}"));
+                int tokenCount = tokens.Count + (template.Contains("{datetime") || template.Contains("{date") ? 1 : 0) + (template.Contains("{time") ? 1 : 0) + (template.Contains("{guid") ? 1 : 0) + (template.Contains("{clipboard") ? 1 : 0) + _availableVariables.Count(v => template.Contains($"{{{v}}}"));
                 SnippetPreviewStatsText.Text = $"{cleanPreview.Length} chars • {tokenCount} tokens";
             }
             catch (Exception ex)
@@ -1355,7 +2101,7 @@ public partial class SnippetEditorControl : UserControl
     {
         string template = _currentContentType == SnippetContentType.RichText
             ? (SnippetRichTextBox != null ? RichTextService.ExtractPlainText(SnippetRichTextBox.Document) : string.Empty)
-            : (SnippetTemplateBox?.Text ?? string.Empty);
+            : PlainTextTemplate;
 
         if (string.IsNullOrEmpty(template)) return true;
 
@@ -1429,15 +2175,12 @@ public partial class SnippetEditorControl : UserControl
                         {
                             if (SnippetRichTextBox != null)
                             {
-                                RichTextService.LoadFromPlainText(SnippetRichTextBox.Document, disambiguated);
+                                LoadPlainTextIntoDocument(SnippetRichTextBox.Document, disambiguated);
                             }
                         }
                         else
                         {
-                            if (SnippetTemplateBox != null)
-                            {
-                                SnippetTemplateBox.Text = disambiguated;
-                            }
+                            PlainTextTemplate = disambiguated;
                         }
                         OnContentChanged();
                     }

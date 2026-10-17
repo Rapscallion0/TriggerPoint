@@ -47,7 +47,8 @@ public static class RichTextService
     {
         try
         {
-            var range = new TextRange(doc.ContentStart, doc.ContentEnd);
+            FlowDocument targetDoc = HasInlineContainers(doc) ? FlattenInlineContainersForExport(doc) : doc;
+            var range = new TextRange(targetDoc.ContentStart, targetDoc.ContentEnd);
             using var stream = new MemoryStream();
             range.Save(stream, DataFormats.Rtf);
             var rtf = Encoding.UTF8.GetString(stream.ToArray());
@@ -199,12 +200,26 @@ public static class RichTextService
     }
 
     /// <summary>
-    /// Extracts plain text from a FlowDocument.
+    /// Extracts plain text from a FlowDocument, resolving any inline container tokens.
     /// </summary>
     public static string ExtractPlainText(FlowDocument doc)
     {
+        if (doc == null) return string.Empty;
         try
         {
+            if (HasInlineContainers(doc))
+            {
+                var sb = new StringBuilder();
+                bool firstBlock = true;
+                foreach (var block in doc.Blocks)
+                {
+                    if (!firstBlock) sb.AppendLine();
+                    firstBlock = false;
+                    ExtractBlockPlainText(block, sb);
+                }
+                return sb.ToString();
+            }
+
             var range = new TextRange(doc.ContentStart, doc.ContentEnd);
             var text = range.Text ?? string.Empty;
             // WPF TextRange includes trailing \r\n
@@ -214,6 +229,233 @@ public static class RichTextService
         {
             return string.Empty;
         }
+    }
+
+    public static bool HasInlineContainers(FlowDocument? doc)
+    {
+        if (doc == null) return false;
+        foreach (var block in doc.Blocks)
+        {
+            if (BlockHasInlineContainers(block)) return true;
+        }
+        return false;
+    }
+
+    private static bool BlockHasInlineContainers(Block block)
+    {
+        switch (block)
+        {
+            case Paragraph p:
+                return p.Inlines.Any(i => i is InlineUIContainer || (i is Span s && SpanHasInlineContainers(s)));
+            case List list:
+                return list.ListItems.Any(item => item.Blocks.Any(BlockHasInlineContainers));
+            case Section sec:
+                return sec.Blocks.Any(BlockHasInlineContainers);
+            default:
+                return false;
+        }
+    }
+
+    private static bool SpanHasInlineContainers(Span span)
+    {
+        return span.Inlines.Any(i => i is InlineUIContainer || (i is Span s && SpanHasInlineContainers(s)));
+    }
+
+    private static void ExtractBlockPlainText(Block block, StringBuilder sb)
+    {
+        switch (block)
+        {
+            case Paragraph p:
+                foreach (var inline in p.Inlines)
+                {
+                    ExtractInlinePlainText(inline, sb);
+                }
+                break;
+            case List list:
+                bool firstItem = true;
+                foreach (var item in list.ListItems)
+                {
+                    if (!firstItem) sb.AppendLine();
+                    firstItem = false;
+                    foreach (var child in item.Blocks)
+                    {
+                        ExtractBlockPlainText(child, sb);
+                    }
+                }
+                break;
+            case Section sec:
+                bool firstChild = true;
+                foreach (var child in sec.Blocks)
+                {
+                    if (!firstChild) sb.AppendLine();
+                    firstChild = false;
+                    ExtractBlockPlainText(child, sb);
+                }
+                break;
+        }
+    }
+
+    private static void ExtractInlinePlainText(Inline inline, StringBuilder sb)
+    {
+        switch (inline)
+        {
+            case Run r:
+                sb.Append(r.Text);
+                break;
+            case InlineUIContainer uic:
+                string token = uic.Tag as string ?? string.Empty;
+                sb.Append(token);
+                break;
+            case LineBreak:
+                sb.AppendLine();
+                break;
+            case Span sp:
+                foreach (var child in sp.Inlines)
+                {
+                    ExtractInlinePlainText(child, sb);
+                }
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Clones a FlowDocument, replacing any InlineUIContainer tokens (bearing token tag in Tag property)
+    /// with standard Run elements so they export cleanly to standard RTF.
+    /// </summary>
+    public static FlowDocument FlattenInlineContainersForExport(FlowDocument doc)
+    {
+        var clone = new FlowDocument();
+        foreach (var block in doc.Blocks)
+        {
+            clone.Blocks.Add(CloneBlockWithTextTokens(block));
+        }
+        return clone;
+    }
+
+    private static Block CloneBlockWithTextTokens(Block block)
+    {
+        switch (block)
+        {
+            case Paragraph p:
+                var newP = new Paragraph
+                {
+                    Margin = p.Margin,
+                    Padding = p.Padding,
+                    TextAlignment = p.TextAlignment,
+                    LineHeight = p.LineHeight
+                };
+                foreach (var inline in p.Inlines)
+                {
+                    switch (inline)
+                    {
+                        case Run r:
+                            var newR = new Run(r.Text)
+                            {
+                                FontWeight = r.FontWeight,
+                                FontStyle = r.FontStyle,
+                                FontSize = r.FontSize,
+                                FontFamily = r.FontFamily,
+                                Foreground = r.Foreground,
+                                Background = r.Background
+                            };
+                            if (r.TextDecorations != null && r.TextDecorations.Count > 0)
+                                newR.TextDecorations = r.TextDecorations.Clone();
+                            newP.Inlines.Add(newR);
+                            break;
+
+                        case InlineUIContainer uic:
+                            string tokenStr = uic.Tag as string ?? string.Empty;
+                            newP.Inlines.Add(new Run(tokenStr));
+                            break;
+
+                        case LineBreak:
+                            newP.Inlines.Add(new LineBreak());
+                            break;
+
+                        case Span sp:
+                            newP.Inlines.Add(CloneSpanWithTextTokens(sp));
+                            break;
+                    }
+                }
+                return newP;
+
+            case List list:
+                var newList = new List
+                {
+                    MarkerStyle = list.MarkerStyle,
+                    Margin = list.Margin,
+                    Padding = list.Padding
+                };
+                foreach (var item in list.ListItems)
+                {
+                    var newItem = new ListItem
+                    {
+                        Margin = item.Margin,
+                        Padding = item.Padding
+                    };
+                    foreach (var child in item.Blocks)
+                    {
+                        newItem.Blocks.Add(CloneBlockWithTextTokens(child));
+                    }
+                    newList.ListItems.Add(newItem);
+                }
+                return newList;
+
+            case Section sec:
+                var newSec = new Section();
+                foreach (var child in sec.Blocks)
+                {
+                    newSec.Blocks.Add(CloneBlockWithTextTokens(child));
+                }
+                return newSec;
+
+            default:
+                return new Paragraph();
+        }
+    }
+
+    private static Span CloneSpanWithTextTokens(Span sp)
+    {
+        var newSpan = new Span
+        {
+            FontWeight = sp.FontWeight,
+            FontStyle = sp.FontStyle,
+            FontSize = sp.FontSize,
+            FontFamily = sp.FontFamily,
+            Foreground = sp.Foreground,
+            Background = sp.Background
+        };
+        foreach (var inline in sp.Inlines)
+        {
+            switch (inline)
+            {
+                case Run r:
+                    var newR = new Run(r.Text)
+                    {
+                        FontWeight = r.FontWeight,
+                        FontStyle = r.FontStyle,
+                        FontSize = r.FontSize,
+                        FontFamily = r.FontFamily,
+                        Foreground = r.Foreground,
+                        Background = r.Background
+                    };
+                    if (r.TextDecorations != null && r.TextDecorations.Count > 0)
+                        newR.TextDecorations = r.TextDecorations.Clone();
+                    newSpan.Inlines.Add(newR);
+                    break;
+                case InlineUIContainer uic:
+                    string tokenStr = uic.Tag as string ?? string.Empty;
+                    newSpan.Inlines.Add(new Run(tokenStr));
+                    break;
+                case LineBreak:
+                    newSpan.Inlines.Add(new LineBreak());
+                    break;
+                case Span innerSpan:
+                    newSpan.Inlines.Add(CloneSpanWithTextTokens(innerSpan));
+                    break;
+            }
+        }
+        return newSpan;
     }
 
     /// <summary>

@@ -19,6 +19,7 @@ public class ShellActionExecutor : IActionExecutor
     private readonly IMacroService? _macroService;
     private readonly IWindowsServiceManager? _windowsServiceManager;
     private readonly IToastNotificationService? _toastNotificationService;
+    private readonly IProductivityService? _productivityService;
 
     public event Action<TriggerItem>? OpenSettingsRequested;
     public event Action<TriggerItem, string>? ExecutionSucceeded;
@@ -32,7 +33,8 @@ public class ShellActionExecutor : IActionExecutor
         IWorkflowExecutor? workflowExecutor = null,
         IMacroService? macroService = null,
         IWindowsServiceManager? windowsServiceManager = null,
-        IToastNotificationService? toastNotificationService = null)
+        IToastNotificationService? toastNotificationService = null,
+        IProductivityService? productivityService = null)
     {
         _snippetService = snippetService;
         _telemetryService = telemetryService;
@@ -42,6 +44,7 @@ public class ShellActionExecutor : IActionExecutor
         _macroService = macroService;
         _windowsServiceManager = windowsServiceManager;
         _toastNotificationService = toastNotificationService;
+        _productivityService = productivityService;
     }
 
     public async Task ExecuteAsync(TriggerItem item, ExecutionOverride executionOverride = ExecutionOverride.Standard, IntPtr? targetHwnd = null)
@@ -62,8 +65,9 @@ public class ShellActionExecutor : IActionExecutor
             return;
         }
 
-        // Record telemetry
+        // Record telemetry & productivity
         _ = _telemetryService.RecordExecutionAsync(item.Id);
+        _productivityService?.RecordActionExecution(item.Id, item.Name, item.ActionType);
 
         if (item.ActionType == ActionType.Workflow)
         {
@@ -99,6 +103,11 @@ public class ShellActionExecutor : IActionExecutor
                     effectiveHwnd, 
                     item.Payload.SnippetContentType, 
                     item.Payload.SnippetRtf).ConfigureAwait(false);
+                
+                int templateLen = item.Payload.SnippetTemplate?.Length ?? 0;
+                int abbrLen = item.Abbreviation?.Length ?? 0;
+                _productivityService?.RecordSnippetExpansion(item.Id, item.Name, templateLen, abbrLen);
+
                 ExecutionSucceeded?.Invoke(item, "Snippet injected into active window.");
             }
             catch (Exception ex)

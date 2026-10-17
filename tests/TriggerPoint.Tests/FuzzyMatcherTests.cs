@@ -187,5 +187,59 @@ public class FuzzyMatcherTests
         Assert.Equal("Alpha Action", results[1].Item.Name);
         Assert.Equal("Bravo Action", results[2].Item.Name);
     }
+
+    [Fact]
+    public void Match_SnippetAbbreviation_MatchesWhenNameDoesNotMatch()
+    {
+        var snippet = new TriggerItem
+        {
+            Name = "Email Signature Standard",
+            ActionType = ActionType.Snippet,
+            Abbreviation = ";sig"
+        };
+
+        var match = FuzzyMatcher.Match(snippet, ";sig");
+
+        Assert.True(match.IsMatch);
+        Assert.True(match.Score >= 1100); // 1000 (exact) + 100 (bonus)
+    }
+
+    [Fact]
+    public void FilterAndRank_SnippetAbbreviation_RanksSnippetHigh()
+    {
+        var items = new List<TriggerItem>
+        {
+            new() { Name = "Browser Bookmarks", ActionType = ActionType.Folder },
+            new() { Name = "Away Message", ActionType = ActionType.Snippet, Abbreviation = "brb" },
+            new() { Name = "Calculator", ActionType = ActionType.Shell }
+        };
+
+        var results = FuzzyMatcher.FilterAndRank(items, "brb");
+
+        Assert.NotEmpty(results);
+        Assert.Equal("Away Message", results[0].Item.Name);
+        Assert.True(results[0].Score > 1000);
+    }
+
+    [Fact]
+    public void Match_EmptyPattern_DoesNotGiveAbbreviationBonus()
+    {
+        var snippet = new TriggerItem
+        {
+            Name = "Quick Snippet",
+            ActionType = ActionType.Snippet,
+            Abbreviation = "qs"
+        };
+        var regular = new TriggerItem
+        {
+            Name = "Quick Regular",
+            ActionType = ActionType.Shell
+        };
+
+        var matchSnippet = FuzzyMatcher.Match(snippet, "");
+        var matchRegular = FuzzyMatcher.Match(regular, "");
+
+        Assert.Equal(matchRegular.Score, matchSnippet.Score);
+    }
 }
 

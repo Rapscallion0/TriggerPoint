@@ -2925,8 +2925,8 @@ public partial class SettingsWindow
         var sysMenu = new MenuItem { Header = "System & Dynamic Tokens" };
         var sysTokens = new (string Token, string Description)[]
         {
-            ("{date:yyyy-MM-dd}", "Current date (ISO format)"),
-            ("{date:MM/dd/yyyy}", "Current date (US format)"),
+            ("{datetime:yyyy-MM-dd}", "Current date (ISO format)"),
+            ("{datetime:MM/dd/yyyy}", "Current date (US format)"),
             ("{time:HH:mm:ss}", "Current time (24h)"),
             ("{datetime:yyyyMMdd_HHmmss}", "Timestamp for files/backups"),
             ("{clipboard}", "Current clipboard content"),

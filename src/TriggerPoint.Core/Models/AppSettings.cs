@@ -75,14 +75,28 @@ public class AppSettings
     public double? WindowHeight { get; set; }
     public bool WindowMaximized { get; set; }
     public CommandPaletteSortMode CommandPaletteSortMode { get; set; } = CommandPaletteSortMode.Smart;
+    public double? CommandPaletteWidth { get; set; }
+    public double? CommandPaletteHeight { get; set; }
+    public bool ShowSnippetKeywordsInCommandPalette { get; set; } = true;
     public bool CompactTreeDensity { get; set; } = true;
     public bool ShowDisabledItemsInTree { get; set; } = true;
     public bool ConfirmRevertChanges { get; set; } = true;
 
     // Inline Abbreviation Expander settings
     public bool EnableAbbreviationExpander { get; set; } = true;
+    public bool AbbreviationCaseSensitive { get; set; } = true;
     public List<string> AbbreviationGlobalExcludedProcesses { get; set; } = ["mstsc.exe", "vmconnect.exe", "putty.exe"];
     public bool AbbreviationSuppressInFullScreenGames { get; set; } = true;
+    public bool EnableAbbreviationSoundFeedback { get; set; } = false;
+    public AbbreviationSoundProfile AbbreviationSound { get; set; } = AbbreviationSoundProfile.SubtleClick;
+    public bool EnableAbbreviationVisualFeedback { get; set; } = false;
+
+    // Smart Clipboard History settings
+    public bool EnableClipboardHistory { get; set; } = true;
+    public int ClipboardMaxItems { get; set; } = 50;
+    public int ClipboardRetentionDays { get; set; } = 14;
+    public int ClipboardMaxItemSizeMb { get; set; } = 10;
+    public ShortcutBinding? ClipboardHotkey { get; set; } = new(ModifierKeys.Control | ModifierKeys.Shift, 86, "V");
 
     // Update settings
     public UpdateCheckFrequency UpdateFrequency { get; set; } = UpdateCheckFrequency.Daily;
@@ -100,6 +114,12 @@ public class AppSettings
         if (RecycleBinRetentionDays < 0) RecycleBinRetentionDays = 0;
         if (LogSplitThresholdMb < 10) LogSplitThresholdMb = 10;
         if (LogSplitThresholdMb > 1024) LogSplitThresholdMb = 1024;
+        if (ClipboardMaxItems < 5) ClipboardMaxItems = 5;
+        if (ClipboardMaxItems > 500) ClipboardMaxItems = 500;
+        if (ClipboardRetentionDays < 1) ClipboardRetentionDays = 1;
+        if (ClipboardRetentionDays > 365) ClipboardRetentionDays = 365;
+        if (ClipboardMaxItemSizeMb < 1) ClipboardMaxItemSizeMb = 1;
+        if (ClipboardMaxItemSizeMb > 50) ClipboardMaxItemSizeMb = 50;
 
         // Auto-migrate legacy Win+F1 shortcut (which is intercepted and consumed by Windows Help)
         if (CheatSheetHotkey != null && CheatSheetHotkey.Modifiers == ModifierKeys.Windows && CheatSheetHotkey.VirtualKey == 112)

@@ -149,7 +149,8 @@ public enum CommandPaletteFilterType
     Workflow = 3,
     Folder = 4,
     Macro = 5,
-    Service = 6
+    Service = 6,
+    Clipboard = 7
 }
 
 public enum SnippetContentType
@@ -174,5 +175,13 @@ public enum AccentColorChoice
     RoseCrimson = 5,
     WindowsSystem = 6,
     Custom = 7
+}
+
+public enum AbbreviationSoundProfile
+{
+    None = 0,
+    SubtleClick = 1,
+    SoftChime = 2,
+    ModernBlip = 3
 }
 

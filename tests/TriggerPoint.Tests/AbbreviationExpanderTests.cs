@@ -93,13 +93,15 @@ public class AbbreviationExpanderTests
             Name = "Snippet Item",
             ActionType = ActionType.Snippet,
             Abbreviation = ";email",
-            AbbreviationMode = AbbreviationTriggerMode.Delimiter
+            AbbreviationMode = AbbreviationTriggerMode.Delimiter,
+            AbbreviationCaseSensitive = false
         };
 
         var clone = original.Clone();
 
         Assert.Equal(original.Abbreviation, clone.Abbreviation);
         Assert.Equal(original.AbbreviationMode, clone.AbbreviationMode);
+        Assert.Equal(original.AbbreviationCaseSensitive, clone.AbbreviationCaseSensitive);
     }
 
     [Fact]
@@ -108,6 +110,7 @@ public class AbbreviationExpanderTests
         var settings = new AppSettings();
 
         Assert.True(settings.EnableAbbreviationExpander);
+        Assert.True(settings.AbbreviationCaseSensitive);
         Assert.True(settings.AbbreviationSuppressInFullScreenGames);
         Assert.NotNull(settings.AbbreviationGlobalExcludedProcesses);
         Assert.Contains("mstsc.exe", settings.AbbreviationGlobalExcludedProcesses);
@@ -199,6 +202,127 @@ public class AbbreviationExpanderTests
         item.IsEnabled = false;
         service.UpdateSnippets([item]);
         Assert.Null(service.MatchSuffix("hello", AbbreviationTriggerMode.Immediate));
+    }
+
+    [Fact]
+    public void AbbreviationTrie_CaseSensitive_MatchesOnlyExactCasing()
+    {
+        var trie = new AbbreviationTrie();
+        var item = new TriggerItem
+        {
+            Id = Guid.NewGuid(),
+            Name = "Sig",
+            ActionType = ActionType.Snippet,
+            Abbreviation = ";sig",
+            AbbreviationMode = AbbreviationTriggerMode.Immediate
+        };
+
+        trie.Insert(";sig", item, isCaseSensitive: true);
+
+        // Exact match works
+        Assert.NotNull(trie.MatchSuffix(";sig", AbbreviationTriggerMode.Immediate));
+
+        // Different casing does NOT match
+        Assert.Null(trie.MatchSuffix(";SIG", AbbreviationTriggerMode.Immediate));
+        Assert.Null(trie.MatchSuffix(";Sig", AbbreviationTriggerMode.Immediate));
+    }
+
+    [Fact]
+    public void AbbreviationTrie_CaseInsensitive_MatchesAnyCasing()
+    {
+        var trie = new AbbreviationTrie();
+        var item = new TriggerItem
+        {
+            Id = Guid.NewGuid(),
+            Name = "BRB",
+            ActionType = ActionType.Snippet,
+            Abbreviation = "brb",
+            AbbreviationMode = AbbreviationTriggerMode.Immediate
+        };
+
+        trie.Insert("brb", item, isCaseSensitive: false);
+
+        // Any casing matches
+        Assert.NotNull(trie.MatchSuffix("brb", AbbreviationTriggerMode.Immediate));
+        Assert.NotNull(trie.MatchSuffix("BRB", AbbreviationTriggerMode.Immediate));
+        Assert.NotNull(trie.MatchSuffix("Brb", AbbreviationTriggerMode.Immediate));
+        Assert.NotNull(trie.MatchSuffix("prefix BRB", AbbreviationTriggerMode.Immediate));
+    }
+
+    [Fact]
+    public void UpdateSnippets_GlobalCaseSensitiveFallback()
+    {
+        var snippetService = new MockSnippetService();
+        var contextService = new MockContextFilterService();
+        var settings = new AppSettings { EnableAbbreviationExpander = false, AbbreviationCaseSensitive = true };
+        var service = new AbbreviationExpanderService(snippetService, contextService, () => settings);
+
+        var item = new TriggerItem
+        {
+            Id = Guid.NewGuid(),
+            Name = "Fallback Item",
+            ActionType = ActionType.Snippet,
+            IsEnabled = true,
+            Abbreviation = "test",
+            AbbreviationMode = AbbreviationTriggerMode.Immediate,
+            AbbreviationCaseSensitive = null // Inherit global
+        };
+
+        service.UpdateSnippets([item]);
+
+        // Global is true -> exact casing required
+        Assert.NotNull(service.MatchSuffix("test", AbbreviationTriggerMode.Immediate));
+        Assert.Null(service.MatchSuffix("TEST", AbbreviationTriggerMode.Immediate));
+
+        // Switch global setting to false
+        settings.AbbreviationCaseSensitive = false;
+        service.UpdateSnippets([item]);
+
+        // Global is false -> both casings match
+        Assert.NotNull(service.MatchSuffix("test", AbbreviationTriggerMode.Immediate));
+        Assert.NotNull(service.MatchSuffix("TEST", AbbreviationTriggerMode.Immediate));
+    }
+
+    [Fact]
+    public void UpdateSnippets_PerSnippetOverride_OverridesGlobalSetting()
+    {
+        var snippetService = new MockSnippetService();
+        var contextService = new MockContextFilterService();
+        // Global setting is case-sensitive
+        var settings = new AppSettings { EnableAbbreviationExpander = false, AbbreviationCaseSensitive = true };
+        var service = new AbbreviationExpanderService(snippetService, contextService, () => settings);
+
+        var itemInsensitive = new TriggerItem
+        {
+            Id = Guid.NewGuid(),
+            Name = "Insensitive Item",
+            ActionType = ActionType.Snippet,
+            IsEnabled = true,
+            Abbreviation = "caseoff",
+            AbbreviationMode = AbbreviationTriggerMode.Immediate,
+            AbbreviationCaseSensitive = false // Explicitly case-insensitive override
+        };
+
+        var itemSensitive = new TriggerItem
+        {
+            Id = Guid.NewGuid(),
+            Name = "Sensitive Item",
+            ActionType = ActionType.Snippet,
+            IsEnabled = true,
+            Abbreviation = "caseon",
+            AbbreviationMode = AbbreviationTriggerMode.Immediate,
+            AbbreviationCaseSensitive = true // Explicitly case-sensitive override
+        };
+
+        service.UpdateSnippets([itemInsensitive, itemSensitive]);
+
+        // itemInsensitive matches even with uppercase
+        Assert.NotNull(service.MatchSuffix("CASEOFF", AbbreviationTriggerMode.Immediate));
+        Assert.NotNull(service.MatchSuffix("caseoff", AbbreviationTriggerMode.Immediate));
+
+        // itemSensitive only matches exact casing
+        Assert.NotNull(service.MatchSuffix("caseon", AbbreviationTriggerMode.Immediate));
+        Assert.Null(service.MatchSuffix("CASEON", AbbreviationTriggerMode.Immediate));
     }
 
     private class MockSnippetService : ISnippetService

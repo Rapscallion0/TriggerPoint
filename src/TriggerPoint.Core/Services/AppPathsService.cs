@@ -23,6 +23,9 @@ public class AppPathsService : IAppPathsService
     public string LogsDirectory { get; }
     public string UpdateDirectory { get; }
     public string VaultKeyFilePath { get; }
+    public string ProductivityFilePath { get; }
+    public string ClipboardHistoryFilePath { get; }
+    public string ClipboardClipsDirectory { get; }
 
     public AppPathsService(string[]? args = null, string? baseAppDirectory = null, string? customAppDataPath = null)
     {
@@ -70,6 +73,9 @@ public class AppPathsService : IAppPathsService
         LogsDirectory = Path.Combine(BaseDataDirectory, "logs");
         UpdateDirectory = Path.Combine(BaseDataDirectory, "update");
         VaultKeyFilePath = Path.Combine(BaseDataDirectory, "vault.key");
+        ProductivityFilePath = Path.Combine(BaseDataDirectory, "productivity.json");
+        ClipboardHistoryFilePath = Path.Combine(BaseDataDirectory, "clipboard_history.json");
+        ClipboardClipsDirectory = Path.Combine(BaseDataDirectory, "clips");
 
         SetProcessEnvironmentVariables(baseAppDirectory);
     }
@@ -81,6 +87,7 @@ public class AppPathsService : IAppPathsService
             Directory.CreateDirectory(BaseDataDirectory);
             Directory.CreateDirectory(BackupsDirectory);
             Directory.CreateDirectory(LogsDirectory);
+            Directory.CreateDirectory(ClipboardClipsDirectory);
         }
         catch
         {

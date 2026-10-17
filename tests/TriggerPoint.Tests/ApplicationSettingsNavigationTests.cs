@@ -100,11 +100,23 @@ public class ApplicationSettingsNavigationTests
         }
     }
 
+    [Theory]
+    [InlineData("clipboard")]
+    [InlineData("history")]
+    [InlineData("clip")]
+    [InlineData("retention")]
+    [InlineData("paste")]
+    public void MatchesCategory_ClipboardQueries_MatchCorrectly(string query)
+    {
+        bool matches = ApplicationSettingsWindow.MatchesCategory(ApplicationSettingsWindow.SettingsCategory.Clipboard, query);
+        Assert.True(matches);
+    }
+
     [Fact]
-    public void CategoryKeywords_CoversAllSixCategoriesWithSubstantialKeywords()
+    public void CategoryKeywords_CoversAllCategoriesWithSubstantialKeywords()
     {
         var allCategories = Enum.GetValues<ApplicationSettingsWindow.SettingsCategory>();
-        Assert.Equal(6, allCategories.Length);
+        Assert.Equal(8, allCategories.Length);
 
         foreach (var cat in allCategories)
         {

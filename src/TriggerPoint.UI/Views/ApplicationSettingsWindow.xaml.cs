@@ -1,11 +1,13 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Win32;
 using Serilog;
 using TriggerPoint.Core.Contracts;
@@ -44,10 +46,14 @@ public partial class ApplicationSettingsWindow : Window
         System,
         Logging,
         Updates,
-        Data
+        Data,
+        Productivity,
+        Clipboard
     }
 
     private SettingsCategory _selectedCategory = SettingsCategory.Appearance;
+    private readonly IProductivityService? _productivityService;
+    private readonly IClipboardHistoryService? _clipboardService;
 
     public bool TreeDataChanged { get; private set; }
 
@@ -56,19 +62,27 @@ public partial class ApplicationSettingsWindow : Window
         ILogManagerService logManagerService,
         IUpdateService? updateService = null,
         SettingsCategory initialCategory = SettingsCategory.Appearance,
-        IAppPathsService? pathsService = null)
+        IAppPathsService? pathsService = null,
+        IProductivityService? productivityService = null,
+        IClipboardHistoryService? clipboardService = null)
     {
         InitializeComponent();
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _logManagerService = logManagerService ?? throw new ArgumentNullException(nameof(logManagerService));
-        _pathsService = pathsService;
-        _updateService = updateService ?? new GitHubUpdateService(repository, pathsService);
+        _pathsService = pathsService ?? (Application.Current as App)?.ServiceProvider?.GetService<IAppPathsService>();
+        _updateService = updateService ?? new GitHubUpdateService(repository, _pathsService);
+        _productivityService = productivityService ?? (Application.Current as App)?.ServiceProvider?.GetService<IProductivityService>();
+        _clipboardService = clipboardService ?? (Application.Current as App)?.ClipboardHistoryService;
         _selectedCategory = initialCategory;
 
         Loaded += async (s, e) =>
         {
             SelectCategory(initialCategory);
             await LoadCurrentSettingsAsync();
+            if (HourlyChartCanvas != null)
+            {
+                HourlyChartCanvas.SizeChanged += (sender, args) => RefreshProductivityUi();
+            }
         };
 
         ThemeManager.ThemeChanged += (s, theme) =>
@@ -100,6 +114,16 @@ public partial class ApplicationSettingsWindow : Window
         base.OnSourceInitialized(e);
         CenterOnOwnerOrActiveMonitor();
         ThemeManager.ApplyWindowIcons(this);
+        try
+        {
+            var handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            if (handle != IntPtr.Zero)
+            {
+                NativeMethods.BringWindowToTop(handle);
+                NativeMethods.SetForegroundWindow(handle);
+            }
+        }
+        catch { }
     }
 
     private void CenterOnOwnerOrActiveMonitor()
@@ -286,17 +310,52 @@ public partial class ApplicationSettingsWindow : Window
             OpenSettingsHotkeyRecorder.Binding = _currentSettings.OpenSettingsHotkey;
             CommandPaletteHotkeyRecorder.Binding = _currentSettings.CommandPaletteHotkey;
             CheatSheetHotkeyRecorder.Binding = _currentSettings.CheatSheetHotkey;
+            GlobalClipboardHotkeyRecorder.Binding = _currentSettings.ClipboardHotkey;
+            ShowSnippetKeywordsInCommandPaletteCheck.IsChecked = _currentSettings.ShowSnippetKeywordsInCommandPalette;
             OpenSettingsHotkeyRecorder.BindingRecorded += (s, b) => CheckHotkeyConflicts();
             CommandPaletteHotkeyRecorder.BindingRecorded += (s, b) => CheckHotkeyConflicts();
             CheatSheetHotkeyRecorder.BindingRecorded += (s, b) => CheckHotkeyConflicts();
+            GlobalClipboardHotkeyRecorder.BindingRecorded += (s, b) =>
+            {
+                if (ClipboardHotkeyRecorder != null)
+                {
+                    ClipboardHotkeyRecorder.Binding = b;
+                }
+                CheckHotkeyConflicts();
+            };
             CheckHotkeyConflicts();
 
             // Populate Abbreviation Expander settings
             EnableAbbreviationExpanderCheck.IsChecked = _currentSettings.EnableAbbreviationExpander;
+            AbbreviationCaseSensitiveCheck.IsChecked = _currentSettings.AbbreviationCaseSensitive;
             AbbreviationSuppressInFullScreenGamesCheck.IsChecked = _currentSettings.AbbreviationSuppressInFullScreenGames;
             AbbreviationGlobalExcludedProcessesBox.Text = _currentSettings.AbbreviationGlobalExcludedProcesses != null
                 ? string.Join(", ", _currentSettings.AbbreviationGlobalExcludedProcesses)
                 : string.Empty;
+            EnableAbbreviationSoundFeedbackCheck.IsChecked = _currentSettings.EnableAbbreviationSoundFeedback;
+            AbbreviationSoundProfileCombo.SelectedIndex = _currentSettings.AbbreviationSound switch
+            {
+                AbbreviationSoundProfile.SoftChime => 1,
+                AbbreviationSoundProfile.ModernBlip => 2,
+                _ => 0
+            };
+            EnableAbbreviationVisualFeedbackCheck.IsChecked = _currentSettings.EnableAbbreviationVisualFeedback;
+
+            // Populate Clipboard History settings
+            EnableClipboardHistoryCheck.IsChecked = _currentSettings.EnableClipboardHistory;
+            ClipboardHotkeyRecorder.Binding = _currentSettings.ClipboardHotkey;
+            ClipboardHotkeyRecorder.BindingRecorded += (s, b) =>
+            {
+                if (GlobalClipboardHotkeyRecorder != null)
+                {
+                    GlobalClipboardHotkeyRecorder.Binding = b;
+                }
+                CheckHotkeyConflicts();
+            };
+            SelectComboByTag(ClipboardMaxItemsCombo, _currentSettings.ClipboardMaxItems);
+            SelectComboByTag(ClipboardRetentionDaysCombo, _currentSettings.ClipboardRetentionDays);
+            SelectComboByTag(ClipboardMaxItemSizeCombo, _currentSettings.ClipboardMaxItemSizeMb);
+            RefreshClipboardStorageText();
 
             // Populate Recycle Bin retention
             bool neverDelete = _currentSettings.RecycleBinRetentionDays == 0;
@@ -352,8 +411,9 @@ public partial class ApplicationSettingsWindow : Window
         var openHotkey = OpenSettingsHotkeyRecorder.Binding;
         var cmdHotkey = CommandPaletteHotkeyRecorder.Binding;
         var cheatSheetHotkey = CheatSheetHotkeyRecorder.Binding;
+        var clipHotkey = GlobalClipboardHotkeyRecorder?.Binding ?? ClipboardHotkeyRecorder.Binding;
 
-        var validation = HotkeyRegistryValidator.ValidateApplicationHotkeys(openHotkey, cmdHotkey, _allItems, cheatSheetHotkey);
+        var validation = HotkeyRegistryValidator.ValidateApplicationHotkeys(openHotkey, cmdHotkey, _allItems, cheatSheetHotkey, clipHotkey);
         if (!validation.IsValid)
         {
             ShortcutConflictWarningText.Text = validation.ErrorMessage;
@@ -640,8 +700,9 @@ public partial class ApplicationSettingsWindow : Window
             var openSettingsHotkey = OpenSettingsHotkeyRecorder.Binding;
             var cmdPaletteHotkey = CommandPaletteHotkeyRecorder.Binding;
             var cheatSheetHotkey = CheatSheetHotkeyRecorder.Binding;
+            var clipHotkey = GlobalClipboardHotkeyRecorder?.Binding ?? ClipboardHotkeyRecorder.Binding;
 
-            var validation = HotkeyRegistryValidator.ValidateApplicationHotkeys(openSettingsHotkey, cmdPaletteHotkey, _allItems, cheatSheetHotkey);
+            var validation = HotkeyRegistryValidator.ValidateApplicationHotkeys(openSettingsHotkey, cmdPaletteHotkey, _allItems, cheatSheetHotkey, clipHotkey);
             if (!validation.IsValid)
             {
                 CheckHotkeyConflicts();
@@ -727,17 +788,27 @@ public partial class ApplicationSettingsWindow : Window
             _currentSettings.OpenSettingsHotkey = openSettingsHotkey;
             _currentSettings.CommandPaletteHotkey = cmdPaletteHotkey;
             _currentSettings.CheatSheetHotkey = cheatSheetHotkey;
+            _currentSettings.ShowSnippetKeywordsInCommandPalette = ShowSnippetKeywordsInCommandPaletteCheck.IsChecked == true;
             _currentSettings.EnableBackdropEffects = EnableBackdropEffectsCheck.IsChecked == true;
             _currentSettings.EnableUiAnimations = EnableUiAnimationsCheck.IsChecked == true;
             _currentSettings.RecycleBinRetentionDays = recycleDays;
 
             // Abbreviation Expander settings
             _currentSettings.EnableAbbreviationExpander = EnableAbbreviationExpanderCheck.IsChecked == true;
+            _currentSettings.AbbreviationCaseSensitive = AbbreviationCaseSensitiveCheck.IsChecked == true;
             _currentSettings.AbbreviationSuppressInFullScreenGames = AbbreviationSuppressInFullScreenGamesCheck.IsChecked == true;
             _currentSettings.AbbreviationGlobalExcludedProcesses = AbbreviationGlobalExcludedProcessesBox.Text
                 .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
+            _currentSettings.EnableAbbreviationSoundFeedback = EnableAbbreviationSoundFeedbackCheck.IsChecked == true;
+            _currentSettings.AbbreviationSound = AbbreviationSoundProfileCombo.SelectedIndex switch
+            {
+                1 => AbbreviationSoundProfile.SoftChime,
+                2 => AbbreviationSoundProfile.ModernBlip,
+                _ => AbbreviationSoundProfile.SubtleClick
+            };
+            _currentSettings.EnableAbbreviationVisualFeedback = EnableAbbreviationVisualFeedbackCheck.IsChecked == true;
 
             // Update settings
             _currentSettings.UpdateFrequency = UpdateFrequencyCombo.SelectedIndex switch
@@ -751,6 +822,23 @@ public partial class ApplicationSettingsWindow : Window
             };
             _currentSettings.SilentInstallUpdates = SilentInstallUpdatesCheck.IsChecked == true;
             _currentSettings.IncludePreReleases = IncludePreReleasesCheck.IsChecked == true;
+
+            // Clipboard history settings
+            _currentSettings.EnableClipboardHistory = EnableClipboardHistoryCheck.IsChecked == true;
+            _currentSettings.ClipboardHotkey = clipHotkey;
+            if (ClipboardMaxItemsCombo.SelectedItem is ComboBoxItem maxItem && int.TryParse(maxItem.Tag?.ToString(), out int maxVal))
+            {
+                _currentSettings.ClipboardMaxItems = maxVal;
+            }
+            if (ClipboardRetentionDaysCombo.SelectedItem is ComboBoxItem retItem && int.TryParse(retItem.Tag?.ToString(), out int retVal))
+            {
+                _currentSettings.ClipboardRetentionDays = retVal;
+            }
+            if (ClipboardMaxItemSizeCombo.SelectedItem is ComboBoxItem sizeItem && int.TryParse(sizeItem.Tag?.ToString(), out int sizeVal))
+            {
+                _currentSettings.ClipboardMaxItemSizeMb = sizeVal;
+            }
+            _clipboardService?.ReloadSettings();
 
             // 1. Persist to appsettings.json
             await _repository.SaveSettingsAsync(_currentSettings);
@@ -1472,6 +1560,8 @@ public partial class ApplicationSettingsWindow : Window
                 nameof(NavLoggingBtn) => SettingsCategory.Logging,
                 nameof(NavUpdatesBtn) => SettingsCategory.Updates,
                 nameof(NavDataBtn) => SettingsCategory.Data,
+                nameof(NavProductivityBtn) => SettingsCategory.Productivity,
+                nameof(NavClipboardBtn) => SettingsCategory.Clipboard,
                 _ => SettingsCategory.Appearance
             };
 
@@ -1495,6 +1585,8 @@ public partial class ApplicationSettingsWindow : Window
         NavLoggingBtn.Tag = category == SettingsCategory.Logging ? "Selected" : null;
         NavUpdatesBtn.Tag = category == SettingsCategory.Updates ? "Selected" : null;
         NavDataBtn.Tag = category == SettingsCategory.Data ? "Selected" : null;
+        NavProductivityBtn.Tag = category == SettingsCategory.Productivity ? "Selected" : null;
+        NavClipboardBtn.Tag = category == SettingsCategory.Clipboard ? "Selected" : null;
 
         // Toggle category panels
         CategoryAppearancePanel.Visibility = category == SettingsCategory.Appearance ? Visibility.Visible : Visibility.Collapsed;
@@ -1503,6 +1595,8 @@ public partial class ApplicationSettingsWindow : Window
         CategoryLoggingPanel.Visibility = category == SettingsCategory.Logging ? Visibility.Visible : Visibility.Collapsed;
         CategoryUpdatesPanel.Visibility = category == SettingsCategory.Updates ? Visibility.Visible : Visibility.Collapsed;
         CategoryDataPanel.Visibility = category == SettingsCategory.Data ? Visibility.Visible : Visibility.Collapsed;
+        CategoryProductivityPanel.Visibility = category == SettingsCategory.Productivity ? Visibility.Visible : Visibility.Collapsed;
+        CategoryClipboardPanel.Visibility = category == SettingsCategory.Clipboard ? Visibility.Visible : Visibility.Collapsed;
 
         NoSearchResultsPanel.Visibility = Visibility.Collapsed;
 
@@ -1532,6 +1626,16 @@ public partial class ApplicationSettingsWindow : Window
             case SettingsCategory.Data:
                 CategoryBreadcrumbText.Text = "Settings > Backup & Data Management";
                 CategorySubtitleText.Text = "Export and import your TriggerPoint actions, folders, and application settings";
+                break;
+            case SettingsCategory.Productivity:
+                CategoryBreadcrumbText.Text = "Settings > Productivity & Statistics";
+                CategorySubtitleText.Text = "Keystrokes saved, time reclaimed, and automation productivity insights";
+                RefreshProductivityUi();
+                break;
+            case SettingsCategory.Clipboard:
+                CategoryBreadcrumbText.Text = "Settings > Clipboard History";
+                CategorySubtitleText.Text = "Smart clipboard capture, storage retention, and unformatted paste";
+                RefreshClipboardStorageText();
                 break;
         }
     }
@@ -1579,7 +1683,9 @@ public partial class ApplicationSettingsWindow : Window
         [SettingsCategory.System] = ["system", "startup", "login", "windows", "minimized", "tray", "system tray", "hide window", "crosshair", "targeting", "toast", "toasts", "notification", "notifications", "monitor", "display", "active monitor", "primary monitor", "screen", "location", "placement", "validate", "path", "revert", "confirm", "unsaved", "explorer", "context menu", "right-click", "add to triggerpoint", "shell"],
         [SettingsCategory.Logging] = ["serilog", "log", "logs", "logging", "diagnostics", "minimum log level", "retention", "days", "split", "threshold", "mb", "folder", "open logs", "verbose", "debug", "information", "warning", "error", "fatal"],
         [SettingsCategory.Updates] = ["update", "updates", "maintenance", "check for updates", "version", "latest", "frequency", "startup", "daily", "weekly", "monthly", "manual", "silent install", "restart", "pre-release", "beta", "preview", "ignored", "ignore", "release"],
-        [SettingsCategory.Data] = ["backup", "data", "management", "recycle", "recycle bin", "retention", "purge", "empty", "delete", "telemetry", "export", "import", "restore", "json", "actions", "folders"]
+        [SettingsCategory.Data] = ["backup", "data", "management", "recycle", "recycle bin", "retention", "purge", "empty", "delete", "telemetry", "export", "import", "restore", "json", "actions", "folders"],
+        [SettingsCategory.Productivity] = ["productivity", "savings", "stats", "statistics", "keystrokes", "hours", "saved", "roi", "wpm", "speed", "analytics", "dashboard", "expansions", "volume"],
+        [SettingsCategory.Clipboard] = ["clipboard", "clip", "history", "paste", "copy", "retention", "images", "purge", "storage", "clips", "unformatted"]
     };
 
     internal static bool MatchesCategory(SettingsCategory cat, string query)
@@ -1609,6 +1715,8 @@ public partial class ApplicationSettingsWindow : Window
         NavLoggingBtn.Tag = null;
         NavUpdatesBtn.Tag = null;
         NavDataBtn.Tag = null;
+        NavProductivityBtn.Tag = null;
+        NavClipboardBtn.Tag = null;
 
         int matchCount = 0;
 
@@ -1618,6 +1726,8 @@ public partial class ApplicationSettingsWindow : Window
         bool matchLog = MatchesCategory(SettingsCategory.Logging, query);
         bool matchUpd = MatchesCategory(SettingsCategory.Updates, query);
         bool matchData = MatchesCategory(SettingsCategory.Data, query);
+        bool matchProd = MatchesCategory(SettingsCategory.Productivity, query);
+        bool matchClip = MatchesCategory(SettingsCategory.Clipboard, query);
 
         CategoryAppearancePanel.Visibility = matchApp ? Visibility.Visible : Visibility.Collapsed;
         CategoryShortcutsPanel.Visibility = matchShort ? Visibility.Visible : Visibility.Collapsed;
@@ -1625,6 +1735,8 @@ public partial class ApplicationSettingsWindow : Window
         CategoryLoggingPanel.Visibility = matchLog ? Visibility.Visible : Visibility.Collapsed;
         CategoryUpdatesPanel.Visibility = matchUpd ? Visibility.Visible : Visibility.Collapsed;
         CategoryDataPanel.Visibility = matchData ? Visibility.Visible : Visibility.Collapsed;
+        CategoryProductivityPanel.Visibility = matchProd ? Visibility.Visible : Visibility.Collapsed;
+        CategoryClipboardPanel.Visibility = matchClip ? Visibility.Visible : Visibility.Collapsed;
 
         if (matchApp) matchCount++;
         if (matchShort) matchCount++;
@@ -1632,6 +1744,16 @@ public partial class ApplicationSettingsWindow : Window
         if (matchLog) matchCount++;
         if (matchUpd) matchCount++;
         if (matchData) matchCount++;
+        if (matchProd)
+        {
+            matchCount++;
+            RefreshProductivityUi();
+        }
+        if (matchClip)
+        {
+            matchCount++;
+            RefreshClipboardStorageText();
+        }
 
         if (matchCount == 0)
         {
@@ -1646,6 +1768,275 @@ public partial class ApplicationSettingsWindow : Window
             CategoryBreadcrumbText.Text = $"Search Results for \"{query}\" ({matchCount} {(matchCount == 1 ? "category" : "categories")})";
             CategorySubtitleText.Text = "Showing matching settings categories below";
         }
+    }
+
+    #endregion
+
+    #region Productivity & Savings Dashboard
+
+    private void ProductivityHorizon_Checked(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        RefreshProductivityUi();
+    }
+
+    private void ProductivityWpmBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        UpdateConfiguredWpm();
+    }
+
+    private void ProductivityWpmBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            UpdateConfiguredWpm();
+        }
+    }
+
+    private void UpdateConfiguredWpm()
+    {
+        if (int.TryParse(ProductivityWpmBox.Text?.Trim(), out int wpm) && wpm >= 10 && wpm <= 200)
+        {
+            _productivityService?.SetTypingSpeedWpm(wpm);
+        }
+        else
+        {
+            ProductivityWpmBox.Text = (_productivityService?.GetTypingSpeedWpm() ?? 40).ToString();
+        }
+        RefreshProductivityUi();
+    }
+
+    private void RefreshProductivityUi()
+    {
+        if (CategoryProductivityPanel == null || CategoryProductivityPanel.Visibility != Visibility.Visible) return;
+
+        var window = ProductivityTimeWindow.Today;
+        if (Horizon7DaysRadio?.IsChecked == true) window = ProductivityTimeWindow.Last7Days;
+        else if (Horizon30DaysRadio?.IsChecked == true) window = ProductivityTimeWindow.Last30Days;
+        else if (Horizon1YearRadio?.IsChecked == true) window = ProductivityTimeWindow.LastYear;
+        else if (HorizonAllTimeRadio?.IsChecked == true) window = ProductivityTimeWindow.AllTime;
+
+        int wpm = _productivityService?.GetTypingSpeedWpm() ?? 40;
+        if (ProductivityWpmBox != null && !ProductivityWpmBox.IsFocused)
+        {
+            ProductivityWpmBox.Text = wpm.ToString();
+        }
+
+        var metrics = _productivityService?.GetMetrics(window, wpm) ?? new ProductivityDashboardMetrics();
+
+        if (MetricKeystrokesSavedText != null) MetricKeystrokesSavedText.Text = metrics.TotalKeystrokesSaved.ToString("N0");
+        if (MetricHoursSavedText != null) MetricHoursSavedText.Text = $"{metrics.HoursSaved:0.#} hrs";
+        if (MetricTypingWpmSubtext != null) MetricTypingWpmSubtext.Text = $"@ {wpm} WPM";
+        if (MetricSnippetsExpandedText != null) MetricSnippetsExpandedText.Text = metrics.TotalSnippetsExpanded.ToString("N0");
+        if (MetricHotkeysFiredText != null) MetricHotkeysFiredText.Text = metrics.TotalHotkeysTriggered.ToString("N0");
+
+        if (TopSnippetsByCountItemsControl != null)
+        {
+            TopSnippetsByCountItemsControl.ItemsSource = metrics.TopSnippetsByCount;
+            if (NoSnippetsByCountText != null)
+            {
+                NoSnippetsByCountText.Visibility = metrics.TopSnippetsByCount.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            }
+        }
+
+        if (TopSnippetsByVolumeItemsControl != null)
+        {
+            TopSnippetsByVolumeItemsControl.ItemsSource = metrics.TopSnippetsByVolume;
+            if (NoSnippetsByVolumeText != null)
+            {
+                NoSnippetsByVolumeText.Visibility = metrics.TopSnippetsByVolume.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            }
+        }
+
+        DrawHourlyChart(metrics.HourlyDistribution);
+    }
+
+    private void DrawHourlyChart(int[] hourlyCounts)
+    {
+        if (HourlyChartCanvas == null) return;
+        HourlyChartCanvas.Children.Clear();
+
+        double canvasWidth = HourlyChartCanvas.ActualWidth > 0 ? HourlyChartCanvas.ActualWidth : 480;
+        double canvasHeight = HourlyChartCanvas.ActualHeight > 0 ? HourlyChartCanvas.ActualHeight : 64;
+
+        int max = hourlyCounts.Length > 0 ? hourlyCounts.Max() : 0;
+        int peakHour = -1;
+        if (max > 0)
+        {
+            peakHour = Array.IndexOf(hourlyCounts, max);
+        }
+
+        if (PeakHourSummaryText != null)
+        {
+            if (max > 0 && peakHour >= 0)
+            {
+                string peakHourFormatted = DateTime.Today.AddHours(peakHour).ToString("h tt");
+                PeakHourSummaryText.Text = $"Peak hour: {peakHourFormatted} ({max:N0} actions)";
+            }
+            else
+            {
+                PeakHourSummaryText.Text = "No activity in this period";
+            }
+        }
+
+        double barSpacing = 2.0;
+        double totalSpacing = barSpacing * 23;
+        double barWidth = Math.Max(2.0, (canvasWidth - totalSpacing) / 24.0);
+
+        for (int h = 0; h < 24; h++)
+        {
+            int count = h < hourlyCounts.Length ? hourlyCounts[h] : 0;
+            double barHeight = max > 0 ? Math.Max(3.0, (count / (double)max) * (canvasHeight - 6.0)) : 3.0;
+            double x = h * (barWidth + barSpacing);
+            double y = canvasHeight - barHeight;
+
+            bool isPeak = count > 0 && count == max;
+            var brush = isPeak
+                ? (TryFindResource("AccentBrush") as Brush ?? Brushes.CornflowerBlue)
+                : (count > 0 
+                    ? (TryFindResource("TextSecondaryBrush") as Brush ?? Brushes.Gray)
+                    : (TryFindResource("BorderBrush") as Brush ?? Brushes.DarkGray));
+
+            var rect = new System.Windows.Shapes.Rectangle
+            {
+                Width = barWidth,
+                Height = barHeight,
+                RadiusX = 2,
+                RadiusY = 2,
+                Fill = brush,
+                ToolTip = $"{DateTime.Today.AddHours(h):h tt} - {count:N0} actions"
+            };
+
+            Canvas.SetLeft(rect, x);
+            Canvas.SetTop(rect, y);
+            HourlyChartCanvas.Children.Add(rect);
+        }
+    }
+
+    private async void ResetProductivityStatsBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (ModernMessageDialog.ShowConfirm(this, "Reset Productivity Statistics",
+            "Are you sure you want to reset all lifetime and time-windowed productivity statistics?\n\nThis will clear all recorded keystrokes saved, counts, and history and cannot be undone.",
+            "Reset Statistics", "Cancel", isDestructive: true))
+        {
+            if (_productivityService != null)
+            {
+                await _productivityService.ResetMetricsAsync();
+            }
+            RefreshProductivityUi();
+            SettingsStatusText.Text = "Productivity statistics reset.";
+        }
+    }
+
+    private void PreviewSoundBtn_Click(object sender, RoutedEventArgs e)
+    {
+        var profile = AbbreviationSoundProfileCombo.SelectedIndex switch
+        {
+            1 => AbbreviationSoundProfile.SoftChime,
+            2 => AbbreviationSoundProfile.ModernBlip,
+            _ => AbbreviationSoundProfile.SubtleClick
+        };
+        PlayFeedbackSound(profile);
+    }
+
+    public static void PlayFeedbackSound(AbbreviationSoundProfile profile)
+    {
+        Task.Run(() =>
+        {
+            try
+            {
+                switch (profile)
+                {
+                    case AbbreviationSoundProfile.SubtleClick:
+                        Console.Beep(1200, 20);
+                        break;
+                    case AbbreviationSoundProfile.SoftChime:
+                        Console.Beep(880, 30);
+                        Console.Beep(1320, 40);
+                        break;
+                    case AbbreviationSoundProfile.ModernBlip:
+                        Console.Beep(1760, 25);
+                        break;
+                    case AbbreviationSoundProfile.None:
+                    default:
+                        break;
+                }
+            }
+            catch
+            {
+                try { System.Media.SystemSounds.Asterisk.Play(); } catch { }
+            }
+        });
+    }
+    #endregion
+
+    #region Clipboard History Helpers
+
+    private static void SelectComboByTag(ComboBox combo, int value)
+    {
+        foreach (ComboBoxItem item in combo.Items)
+        {
+            if (int.TryParse(item.Tag?.ToString(), out int tag) && tag == value)
+            {
+                combo.SelectedItem = item;
+                return;
+            }
+        }
+        if (combo.Items.Count > 0) combo.SelectedIndex = 0;
+    }
+
+    private void OpenClipsFolderBtn_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (_pathsService != null && Directory.Exists(_pathsService.ClipboardClipsDirectory))
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = _pathsService.ClipboardClipsDirectory,
+                    UseShellExecute = true
+                });
+            }
+        }
+        catch { }
+    }
+
+    private void PurgeClipboardBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_clipboardService == null) return;
+        var confirm = ModernMessageDialog.ShowConfirm(this, "Purge Clipboard History",
+            "Are you sure you want to purge unpinned clipboard history?\n\nPinned clips and images will be preserved.",
+            primaryText: "Purge",
+            secondaryText: "Cancel",
+            isDestructive: true);
+        if (confirm)
+        {
+            _clipboardService.PurgeHistory(olderThanDays: 0, keepPinned: true);
+            RefreshClipboardStorageText();
+            SettingsStatusText.Text = "Clipboard history purged.";
+        }
+    }
+
+    private void RefreshClipboardStorageText()
+    {
+        if (ClipboardStorageUsedText == null) return;
+        if (_clipboardService != null)
+        {
+            long bytes = _clipboardService.GetTotalStorageBytes();
+            ClipboardStorageUsedText.Text = FormatStorageBytes(bytes);
+        }
+        else
+        {
+            ClipboardStorageUsedText.Text = "0 KB";
+        }
+    }
+
+    private static string FormatStorageBytes(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        if (bytes < 1024L * 1024L * 1024L) return $"{bytes / (1024.0 * 1024.0):F2} MB";
+        return $"{bytes / (1024.0 * 1024.0 * 1024.0):F2} GB";
     }
 
     #endregion
