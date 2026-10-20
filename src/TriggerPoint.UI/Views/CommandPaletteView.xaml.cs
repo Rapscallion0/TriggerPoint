@@ -13,11 +13,13 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
+using System.Windows.Media.Imaging;
 using TriggerPoint.Core.Contracts;
 using TriggerPoint.Core.Models;
 using TriggerPoint.Core.Services;
 using TriggerPoint.Infrastructure.Services;
 using TriggerPoint.Infrastructure.Win32;
+using TriggerPoint.UI.Theme;
 using ModifierKeys = System.Windows.Input.ModifierKeys;
 
 namespace TriggerPoint.UI.Views;
@@ -111,6 +113,34 @@ public class PaletteItemViewModel
         }
     }
 
+    public int? FastSelectionNumber { get; set; }
+    public string FastSelectionBadgeText => FastSelectionNumber.HasValue ? FastSelectionNumber.Value.ToString() : string.Empty;
+    public Visibility HasFastSelection => FastSelectionNumber.HasValue ? Visibility.Visible : Visibility.Collapsed;
+    public string FastSelectionTooltip => FastSelectionNumber.HasValue ? $"Fast select (Alt+{FastSelectionNumber.Value} or Ctrl+{FastSelectionNumber.Value})" : string.Empty;
+
+    public string? RowTooltip
+    {
+        get
+        {
+            if (IsClipboardItem && ClipboardItem != null)
+            {
+                if (ClipboardItem.Type == ClipboardItemType.FileList && ClipboardItem.FilePaths != null && ClipboardItem.FilePaths.Count > 0)
+                {
+                    return string.Join(Environment.NewLine, ClipboardItem.FilePaths.Select((f, idx) => $"{idx + 1}. {f}"));
+                }
+                if (ClipboardItem.Type == ClipboardItemType.Image)
+                {
+                    return $"Image {ClipboardItem.ImageWidth}×{ClipboardItem.ImageHeight} ({ClipboardItem.FormattedSize})\nPress Space to QuickLook";
+                }
+                if (!string.IsNullOrWhiteSpace(ClipboardItem.PlainText))
+                {
+                    return ClipboardItem.PlainText.Length > 500 ? ClipboardItem.PlainText[..500] + "..." : ClipboardItem.PlainText;
+                }
+            }
+            return SubtitleTooltip;
+        }
+    }
+
     public string Name => Item?.Name ?? string.Empty;
     public string Description => Item?.Description ?? string.Empty;
 
@@ -126,7 +156,7 @@ public class PaletteItemViewModel
                 return ClipboardItem.Type switch
                 {
                     ClipboardItemType.Image => $"Image • {ClipboardItem.ImageWidth}×{ClipboardItem.ImageHeight} • {ClipboardItem.FormattedSize} • Captured {rel}{proc}",
-                    ClipboardItemType.FileList => $"{ClipboardItem.FilePaths?.Count ?? 0} file(s) • {ClipboardItem.FormattedSize} • Captured {rel}{proc}",
+                    ClipboardItemType.FileList => FormatFileListSecondaryDetail(ClipboardItem, rel, proc),
                     ClipboardItemType.RichText => $"Rich Formatted Text • {ClipboardItem.FormattedSize} • Captured {rel}{proc}",
                     _ => $"{ClipboardItem.FormattedSize} • Captured {rel}{proc}"
                 };
@@ -432,7 +462,10 @@ public class PaletteItemViewModel
     public ImageSource? AppIconSource { get; }
     public bool HasAppIcon => AppIconSource != null;
     public Visibility AppIconVisibility => HasAppIcon ? Visibility.Visible : Visibility.Collapsed;
-    public Visibility StandaloneIconVisibility => HasAppIcon ? Visibility.Collapsed : Visibility.Visible;
+    public ImageSource? ClipboardThumbnailSource { get; }
+    public bool HasClipboardThumbnail => ClipboardThumbnailSource != null;
+    public Visibility ClipboardThumbnailVisibility => HasClipboardThumbnail ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility StandaloneIconVisibility => (HasAppIcon || HasClipboardThumbnail) ? Visibility.Collapsed : Visibility.Visible;
 
     public Visibility IsFolder => (Item != null && Item.ActionType == ActionType.Folder && !IsSectionHeader && !IsServiceItem && !IsClipboardItem) ? Visibility.Visible : Visibility.Collapsed;
 
@@ -462,7 +495,9 @@ public class PaletteItemViewModel
             {
                 if (ClipboardItem.Type == ClipboardItemType.FileList && ClipboardItem.FilePaths != null)
                 {
-                    return string.Join(" • ", ClipboardItem.FilePaths.Take(3).Select(Path.GetFileName));
+                    if (ClipboardItem.FilePaths.Count == 1)
+                        return ClipboardItem.FilePaths[0];
+                    return $"{ClipboardItem.FilePaths.Count} files: " + string.Join(" • ", ClipboardItem.FilePaths);
                 }
                 return ClipboardItem.PreviewText;
             }
@@ -590,6 +625,41 @@ public class PaletteItemViewModel
         SectionHeaderText = string.Empty;
         HeaderBorderThickness = new Thickness(0);
         HighlightedNameSegments = BuildHighlightedSegments(clipItem.DisplayTitle, matchedIndices);
+
+        if (clipItem.Type == ClipboardItemType.Image && !string.IsNullOrEmpty(clipItem.ImagePath) && File.Exists(clipItem.ImagePath))
+        {
+            try
+            {
+                var bi = new System.Windows.Media.Imaging.BitmapImage();
+                bi.BeginInit();
+                bi.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                bi.DecodePixelWidth = 56;
+                bi.UriSource = new Uri(clipItem.ImagePath, UriKind.Absolute);
+                bi.EndInit();
+                bi.Freeze();
+                ClipboardThumbnailSource = bi;
+            }
+            catch { }
+        }
+    }
+
+    private static string FormatFileListSecondaryDetail(ClipboardHistoryItem clip, string rel, string proc)
+    {
+        if (clip.FilePaths == null || clip.FilePaths.Count == 0)
+            return $"0 files • {clip.FormattedSize} • Captured {rel}{proc}";
+
+        if (clip.FilePaths.Count == 1)
+        {
+            string? dir = clip.PrimaryDirectoryPath;
+            return !string.IsNullOrEmpty(dir)
+                ? $"📁 {dir} • {clip.FormattedSize} • Captured {rel}{proc}"
+                : $"{clip.FormattedSize} • Captured {rel}{proc}";
+        }
+
+        string summary = clip.PrimaryDirectoryPath != null
+            ? $"📁 {clip.PrimaryDirectoryPath} ({clip.FilePaths.Count} files)"
+            : $"{clip.FilePaths.Count} files across multiple locations";
+        return $"{summary} • {clip.FormattedSize} • Captured {rel}{proc}";
     }
 
     private PaletteItemViewModel(string sectionHeader, bool hasTopDivider)
@@ -1426,6 +1496,19 @@ public partial class CommandPaletteView : Window
                 _activeCalcVm = null;
             }
 
+            int fastIndex = 1;
+            foreach (var item in vms)
+            {
+                if (item.IsSelectable && fastIndex <= 9)
+                {
+                    item.FastSelectionNumber = fastIndex++;
+                }
+                else
+                {
+                    item.FastSelectionNumber = null;
+                }
+            }
+
             ResultsListBox.ItemsSource = vms;
 
             bool hasSelectable = vms.Any(x => x.IsSelectable);
@@ -1852,6 +1935,7 @@ public partial class CommandPaletteView : Window
 
         if (isCalcMode)
         {
+            UpdatePreviewStrip(null);
             if (_activeCalcResult != null)
             {
                 PreviewDetailText.Text = !string.IsNullOrWhiteSpace(_activeCalcResult.Description)
@@ -1871,14 +1955,24 @@ public partial class CommandPaletteView : Window
 
         if (ResultsListBox.SelectedItem is PaletteItemViewModel vm && vm.IsSelectable)
         {
-            PreviewDetailText.Text = vm.DetailPreviewText;
-            PreviewDetailText.ToolTip = !string.IsNullOrWhiteSpace(vm.DetailPreviewText) ? vm.DetailPreviewText : null;
+            UpdatePreviewStrip(vm);
 
             // Contextual footer hints
             if (vm.IsClipboardItem && vm.ClipboardItem != null)
             {
                 string pinAction = vm.ClipboardItem.IsPinned ? "Unpin" : "Pin";
-                FooterHintsText.Text = $"Enter Paste   •   Shift+Enter Paste Plain Text   •   Ctrl+P {pinAction}   •   Del Remove";
+                if (vm.ClipboardItem.Type == ClipboardItemType.FileList)
+                {
+                    FooterHintsText.Text = $"Enter Paste   •   Shift+Enter Reveal in Explorer   •   Ctrl+P {pinAction}   •   Del Remove";
+                }
+                else if (vm.ClipboardItem.Type == ClipboardItemType.Image)
+                {
+                    FooterHintsText.Text = $"Enter Paste   •   Space QuickLook   •   Ctrl+P {pinAction}   •   Del Remove";
+                }
+                else
+                {
+                    FooterHintsText.Text = $"Enter Paste   •   Shift+Enter Paste Plain Text   •   Ctrl+P {pinAction}   •   Del Remove";
+                }
             }
             else if (vm.IsServiceItem && vm.ServiceItem != null)
             {
@@ -1957,10 +2051,261 @@ public partial class CommandPaletteView : Window
         }
         else
         {
-            PreviewDetailText.Text = "Select an action to view details";
-            PreviewDetailText.ToolTip = null;
+            UpdatePreviewStrip(null);
             FooterHintsText.Text = "Enter Run   •   Ctrl+Enter Run as Admin   •   Alt+Enter Edit in Action Manager";
         }
+    }
+
+    private enum PreviewStripMode { Standard, File, Image, RichText }
+
+    private void SetPreviewMode(PreviewStripMode mode)
+    {
+        if (StandardPreviewGrid == null) return;
+        StandardPreviewGrid.Visibility = mode == PreviewStripMode.Standard ? Visibility.Visible : Visibility.Collapsed;
+        FilePreviewGrid.Visibility = mode == PreviewStripMode.File ? Visibility.Visible : Visibility.Collapsed;
+        ImagePreviewGrid.Visibility = mode == PreviewStripMode.Image ? Visibility.Visible : Visibility.Collapsed;
+        RichTextPreviewGrid.Visibility = mode == PreviewStripMode.RichText ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void UpdatePreviewStrip(PaletteItemViewModel? vm)
+    {
+        if (vm == null || !vm.IsSelectable)
+        {
+            SetPreviewMode(PreviewStripMode.Standard);
+            if (PreviewDetailText != null)
+            {
+                PreviewDetailText.Text = "Select an action to view details";
+                PreviewDetailText.ToolTip = null;
+            }
+            return;
+        }
+
+        if (vm.IsClipboardItem && vm.ClipboardItem != null)
+        {
+            if (vm.ClipboardItem.Type == ClipboardItemType.FileList)
+            {
+                SetPreviewMode(PreviewStripMode.File);
+                if (FilePreviewCountText != null)
+                {
+                    FilePreviewCountText.Text = vm.ClipboardItem.FilesSummaryText;
+                }
+                if (FilePreviewPathText != null)
+                {
+                    string primaryPath = vm.ClipboardItem.PrimaryDirectoryPath ?? (vm.ClipboardItem.FilePaths != null ? string.Join(", ", vm.ClipboardItem.FilePaths) : string.Empty);
+                    FilePreviewPathText.Text = primaryPath;
+                    FilePreviewPathText.ToolTip = vm.ClipboardItem.FilePaths != null ? string.Join(Environment.NewLine, vm.ClipboardItem.FilePaths) : primaryPath;
+                }
+                return;
+            }
+
+            if (vm.ClipboardItem.Type == ClipboardItemType.Image)
+            {
+                SetPreviewMode(PreviewStripMode.Image);
+                if (ImagePreviewThumbnail != null)
+                {
+                    ImagePreviewThumbnail.Source = vm.ClipboardThumbnailSource;
+                }
+                if (ImagePreviewMetaText != null)
+                {
+                    ImagePreviewMetaText.Text = $"{vm.ClipboardItem.ImageWidth}×{vm.ClipboardItem.ImageHeight} • {vm.ClipboardItem.FormattedSize}";
+                }
+                return;
+            }
+
+            if (vm.ClipboardItem.Type == ClipboardItemType.RichText && !string.IsNullOrWhiteSpace(vm.ClipboardItem.RichText))
+            {
+                SetPreviewMode(PreviewStripMode.RichText);
+                LoadRtfPreview(vm.ClipboardItem.RichText, vm.ClipboardItem.PlainText);
+                return;
+            }
+        }
+
+        SetPreviewMode(PreviewStripMode.Standard);
+        if (PreviewDetailText != null)
+        {
+            PreviewDetailText.Text = vm.DetailPreviewText;
+            PreviewDetailText.ToolTip = !string.IsNullOrWhiteSpace(vm.DetailPreviewText) ? vm.DetailPreviewText : null;
+        }
+    }
+
+    private void LoadRtfPreview(string rtfText, string? fallbackPlainText)
+    {
+        if (RichTextPreviewBox == null) return;
+        try
+        {
+            using var ms = new System.IO.MemoryStream(System.Text.Encoding.UTF8.GetBytes(rtfText));
+            var range = new TextRange(RichTextPreviewBox.Document.ContentStart, RichTextPreviewBox.Document.ContentEnd);
+            range.Load(ms, DataFormats.Rtf);
+            SanitizeFlowDocumentColors(RichTextPreviewBox.Document);
+        }
+        catch
+        {
+            RichTextPreviewBox.Document.Blocks.Clear();
+            if (!string.IsNullOrEmpty(fallbackPlainText))
+            {
+                RichTextPreviewBox.Document.Blocks.Add(new Paragraph(new Run(fallbackPlainText)));
+            }
+        }
+    }
+
+    private void SanitizeFlowDocumentColors(FlowDocument doc)
+    {
+        bool isDark = ThemeManager.CurrentTheme == AppTheme.Dark;
+        if (!isDark) return;
+
+        var darkForeground = (Brush)FindResource("TextPrimaryBrush");
+        foreach (var block in doc.Blocks)
+        {
+            if (block is Paragraph p)
+            {
+                foreach (var inline in p.Inlines)
+                {
+                    if (inline.Foreground is SolidColorBrush scb && scb.Color.R < 60 && scb.Color.G < 60 && scb.Color.B < 60)
+                    {
+                        inline.Foreground = darkForeground;
+                    }
+                }
+            }
+        }
+    }
+
+    private void RevealInExplorerBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (ResultsListBox.SelectedItem is PaletteItemViewModel vm && vm.ClipboardItem != null)
+        {
+            RevealClipboardItem(vm.ClipboardItem);
+        }
+    }
+
+    private void QuickLookRevealBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (ResultsListBox.SelectedItem is PaletteItemViewModel vm && vm.ClipboardItem != null)
+        {
+            RevealClipboardItem(vm.ClipboardItem);
+        }
+    }
+
+    private void RevealClipboardItem(ClipboardHistoryItem item)
+    {
+        try
+        {
+            string? targetPath = null;
+            if (item.Type == ClipboardItemType.FileList && item.FilePaths != null && item.FilePaths.Count > 0)
+            {
+                targetPath = item.FilePaths.FirstOrDefault(f => System.IO.File.Exists(f) || System.IO.Directory.Exists(f));
+            }
+            else if (item.Type == ClipboardItemType.Image && !string.IsNullOrWhiteSpace(item.ImagePath) && System.IO.File.Exists(item.ImagePath))
+            {
+                targetPath = item.ImagePath;
+            }
+
+            if (!string.IsNullOrWhiteSpace(targetPath))
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = $"/select,\"{targetPath}\"",
+                    UseShellExecute = true
+                });
+                ShowInlineFeedback("Revealed in File Explorer 📁");
+            }
+            else if (item.Type == ClipboardItemType.FileList)
+            {
+                string? dir = item.PrimaryDirectoryPath;
+                if (!string.IsNullOrWhiteSpace(dir) && System.IO.Directory.Exists(dir))
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "explorer.exe",
+                        Arguments = $"\"{dir}\"",
+                        UseShellExecute = true
+                    });
+                    ShowInlineFeedback("Revealed in File Explorer 📁");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowInlineFeedback($"Could not reveal file: {ex.Message}");
+        }
+    }
+
+    private void CopyFilePathBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (ResultsListBox.SelectedItem is PaletteItemViewModel vm && vm.ClipboardItem != null && vm.ClipboardItem.Type == ClipboardItemType.FileList)
+        {
+            var files = vm.ClipboardItem.FilePaths;
+            if (files != null && files.Count > 0)
+            {
+                Clipboard.SetText(string.Join(Environment.NewLine, files));
+                ShowInlineFeedback($"Copied {files.Count} file path(s) to clipboard 📋");
+            }
+        }
+    }
+
+    private void CopyImageBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (ResultsListBox.SelectedItem is PaletteItemViewModel vm && vm.ClipboardItem != null && vm.ClipboardItem.Type == ClipboardItemType.Image)
+        {
+            if (!string.IsNullOrEmpty(vm.ClipboardItem.ImagePath) && File.Exists(vm.ClipboardItem.ImagePath))
+            {
+                try
+                {
+                    var bi = new BitmapImage();
+                    bi.BeginInit();
+                    bi.UriSource = new Uri(vm.ClipboardItem.ImagePath);
+                    bi.CacheOption = BitmapCacheOption.OnLoad;
+                    bi.EndInit();
+                    bi.Freeze();
+                    Clipboard.SetImage(bi);
+                    ShowInlineFeedback("Image copied to clipboard 📋");
+                }
+                catch (Exception ex)
+                {
+                    ShowInlineFeedback($"Failed to copy image: {ex.Message}");
+                }
+            }
+        }
+    }
+
+    private void EnlargeImageBtn_Click(object sender, RoutedEventArgs e)
+    {
+        OpenImageQuickLook();
+    }
+
+    private void OpenImageQuickLook()
+    {
+        if (ResultsListBox.SelectedItem is PaletteItemViewModel vm && vm.ClipboardItem != null && vm.ClipboardItem.Type == ClipboardItemType.Image)
+        {
+            if (!string.IsNullOrEmpty(vm.ClipboardItem.ImagePath) && File.Exists(vm.ClipboardItem.ImagePath))
+            {
+                try
+                {
+                    var bitmap = new BitmapImage();
+                    bitmap.BeginInit();
+                    bitmap.UriSource = new Uri(vm.ClipboardItem.ImagePath);
+                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                    bitmap.EndInit();
+                    bitmap.Freeze();
+
+                    QuickLookImage.Source = bitmap;
+                    QuickLookTitleText.Text = $"{vm.ClipboardItem.DisplayTitle} ({vm.ClipboardItem.ImageWidth}×{vm.ClipboardItem.ImageHeight}, {vm.ClipboardItem.FormattedSize})";
+
+                    QuickLookRevealBtn.Visibility = Visibility.Visible;
+                    ImageQuickLookOverlay.Visibility = Visibility.Visible;
+                }
+                catch (Exception ex)
+                {
+                    ShowInlineFeedback($"Could not preview image: {ex.Message}");
+                }
+            }
+        }
+    }
+
+    private void CloseQuickLookBtn_Click(object sender, RoutedEventArgs e)
+    {
+        ImageQuickLookOverlay.Visibility = Visibility.Collapsed;
+        QuickLookImage.Source = null;
     }
 
     private void Window_PreviewKeyUp(object sender, KeyEventArgs e)
@@ -2031,12 +2376,37 @@ public partial class CommandPaletteView : Window
             }
         }
 
+        // Image QuickLook Overlay Escape / Space
+        if (ImageQuickLookOverlay.Visibility == Visibility.Visible)
+        {
+            if (key == Key.Escape || key == Key.Space)
+            {
+                CloseQuickLookBtn_Click(sender, e);
+                e.Handled = true;
+                return;
+            }
+        }
+
         // Toggle Help Overlay
         if (key == Key.F1 || (key == Key.OemQuestion && (Keyboard.Modifiers & ModifierKeys.Shift) != 0 && SearchTextBox.SelectionLength == 0 && string.IsNullOrWhiteSpace(SearchTextBox.Text)))
         {
             ToggleHelpOverlay();
             e.Handled = true;
             return;
+        }
+
+        // QuickLook preview for image clipboard items (Spacebar outside of text input)
+        if (key == Key.Space && ImageQuickLookOverlay.Visibility != Visibility.Visible)
+        {
+            if (ResultsListBox.SelectedItem is PaletteItemViewModel sel && sel.IsClipboardItem && sel.ClipboardItem?.Type == ClipboardItemType.Image)
+            {
+                if (!SearchTextBox.IsFocused || SearchTextBox.Text.Length == 0)
+                {
+                    OpenImageQuickLook();
+                    e.Handled = true;
+                    return;
+                }
+            }
         }
 
         // Autocomplete Popup Navigation
@@ -2199,36 +2569,76 @@ public partial class CommandPaletteView : Window
                 }
             }
 
-            if (key >= Key.D1 && key <= Key.D7)
+            if (key >= Key.D1 && key <= Key.D9)
             {
-                _activeFilter = key switch
+                bool isClipMode = _activeFilter == CommandPaletteFilterType.Clipboard || (SearchTextBox?.Text?.Trim().StartsWith("@clip", StringComparison.OrdinalIgnoreCase) == true);
+                int digit = key - Key.D1 + 1;
+
+                if (isClipMode)
                 {
-                    Key.D2 => CommandPaletteFilterType.App,
-                    Key.D3 => CommandPaletteFilterType.Snippet,
-                    Key.D4 => CommandPaletteFilterType.Workflow,
-                    Key.D5 => CommandPaletteFilterType.Folder,
-                    Key.D6 => CommandPaletteFilterType.Service,
-                    Key.D7 => CommandPaletteFilterType.Clipboard,
-                    _ => CommandPaletteFilterType.All
-                };
-                FilterResults();
-                e.Handled = true;
-                return;
+                    var items = ResultsListBox.ItemsSource as IList<PaletteItemViewModel>;
+                    var target = items?.FirstOrDefault(x => x.FastSelectionNumber == digit);
+                    if (target != null)
+                    {
+                        ResultsListBox.SelectedItem = target;
+                        ExecuteCurrentSelection(DetermineOverride());
+                        e.Handled = true;
+                        return;
+                    }
+                }
+
+                if (digit <= 7)
+                {
+                    _activeFilter = key switch
+                    {
+                        Key.D2 => CommandPaletteFilterType.App,
+                        Key.D3 => CommandPaletteFilterType.Snippet,
+                        Key.D4 => CommandPaletteFilterType.Workflow,
+                        Key.D5 => CommandPaletteFilterType.Folder,
+                        Key.D6 => CommandPaletteFilterType.Service,
+                        Key.D7 => CommandPaletteFilterType.Clipboard,
+                        _ => CommandPaletteFilterType.All
+                    };
+                    FilterResults();
+                    e.Handled = true;
+                    return;
+                }
             }
         }
 
-        if ((Keyboard.Modifiers & ModifierKeys.Alt) != 0 && key == Key.U)
+        // Fast Selection (Alt+1..9) and Alt+U (Calculator Units)
+        if ((Keyboard.Modifiers & ModifierKeys.Alt) != 0 && (Keyboard.Modifiers & ModifierKeys.Control) == 0)
         {
-            if (CalculatorUnitsOverlay.Visibility == Visibility.Visible)
+            if (key == Key.U)
             {
-                CloseCalculatorUnitsOverlay();
+                if (CalculatorUnitsOverlay.Visibility == Visibility.Visible)
+                {
+                    CloseCalculatorUnitsOverlay();
+                }
+                else if (_activeCalcVm != null || _activeCalcResult != null)
+                {
+                    CalcResultMoreUnitsBtn_Click(sender, e);
+                }
+                e.Handled = true;
+                return;
             }
-            else if (_activeCalcVm != null || _activeCalcResult != null)
+
+            int digit = -1;
+            if (key >= Key.D1 && key <= Key.D9) digit = key - Key.D1 + 1;
+            else if (key >= Key.NumPad1 && key <= Key.NumPad9) digit = key - Key.NumPad1 + 1;
+
+            if (digit >= 1 && digit <= 9)
             {
-                CalcResultMoreUnitsBtn_Click(sender, e);
+                var items = ResultsListBox.ItemsSource as IList<PaletteItemViewModel>;
+                var target = items?.FirstOrDefault(x => x.FastSelectionNumber == digit);
+                if (target != null)
+                {
+                    ResultsListBox.SelectedItem = target;
+                    ExecuteCurrentSelection(DetermineOverride());
+                    e.Handled = true;
+                    return;
+                }
             }
-            e.Handled = true;
-            return;
         }
 
         if (key == Key.Delete)
@@ -2266,7 +2676,7 @@ public partial class CommandPaletteView : Window
             return;
         }
 
-        if (key == Key.Back && string.IsNullOrEmpty(SearchTextBox.Text) && _currentScopeFolderId.HasValue)
+        if (key == Key.Back && string.IsNullOrEmpty(SearchTextBox?.Text) && _currentScopeFolderId.HasValue)
         {
             ExitFolderScope();
             e.Handled = true;
@@ -2707,6 +3117,11 @@ public partial class CommandPaletteView : Window
             if (FolderExecutionConfirmOverlay != null)
             {
                 FolderExecutionConfirmOverlay.Visibility = Visibility.Collapsed;
+            }
+            if (ImageQuickLookOverlay != null)
+            {
+                ImageQuickLookOverlay.Visibility = Visibility.Collapsed;
+                QuickLookImage.Source = null;
             }
             SetFilterPillCtrlHintsVisibility(Visibility.Collapsed);
             Close();

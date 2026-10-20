@@ -30,6 +30,8 @@ public partial class SnippetEditorControl : UserControl
     private DispatcherTimer? _previewDebounceTimer;
     private DispatcherTimer? _warningTimer;
     private List<string> _availableVariables = [];
+    private string _initialRtf = string.Empty;
+    private bool _isRichTextModified;
 
     public event EventHandler? SnippetChanged;
 
@@ -96,33 +98,26 @@ public partial class SnippetEditorControl : UserControl
             SetAvailableVariables(availableVariables);
 
             _currentContentType = contentType;
-            PlainTextTemplate = template ?? string.Empty;
+            _initialRtf = rtf ?? string.Empty;
+            _isRichTextModified = false;
 
             if (contentType == SnippetContentType.RichText)
             {
                 if (!string.IsNullOrEmpty(rtf))
                 {
                     LoadRtfIntoDocumentWithPills(SnippetRichTextBox.Document, rtf);
-                }
-                else if (!string.IsNullOrEmpty(template))
-                {
-                    LoadPlainTextIntoDocument(SnippetRichTextBox.Document, template);
+                    PlainTextTemplate = RichTextService.ExtractPlainText(SnippetRichTextBox.Document);
                 }
                 else
                 {
-                    SnippetRichTextBox.Document.Blocks.Clear();
+                    PlainTextTemplate = template ?? string.Empty;
+                    LoadPlainTextIntoDocument(SnippetRichTextBox.Document, PlainTextTemplate);
                 }
             }
             else
             {
-                if (!string.IsNullOrEmpty(rtf))
-                {
-                    LoadRtfIntoDocumentWithPills(SnippetRichTextBox.Document, rtf);
-                }
-                else
-                {
-                    SnippetRichTextBox.Document.Blocks.Clear();
-                }
+                PlainTextTemplate = template ?? string.Empty;
+                LoadPlainTextIntoDocument(SnippetRichTextBox.Document, PlainTextTemplate);
             }
 
             SetFormatMode(contentType, notify: false);
@@ -184,7 +179,9 @@ public partial class SnippetEditorControl : UserControl
         if (_currentContentType == SnippetContentType.RichText)
         {
             string plain = RichTextService.ExtractPlainText(SnippetRichTextBox.Document);
-            string rtf = RichTextService.SaveToRtf(SnippetRichTextBox.Document);
+            string rtf = (!_isRichTextModified && !string.IsNullOrEmpty(_initialRtf))
+                ? _initialRtf
+                : RichTextService.SaveToRtf(SnippetRichTextBox.Document);
             return (plain, rtf);
         }
         else
@@ -270,9 +267,9 @@ public partial class SnippetEditorControl : UserControl
     {
         if (_currentContentType == SnippetContentType.PlainText) return;
 
-        // When switching from Rich to Plain, extract plain text from RichTextBox
+        // When switching from Rich to Plain, extract plain text from RichTextBox and sync
         var plainText = RichTextService.ExtractPlainText(SnippetRichTextBox.Document);
-        if (!string.IsNullOrEmpty(plainText) && string.IsNullOrEmpty(PlainTextTemplate))
+        if (!string.Equals(PlainTextTemplate, plainText, StringComparison.Ordinal))
         {
             PlainTextTemplate = plainText;
         }
@@ -285,11 +282,20 @@ public partial class SnippetEditorControl : UserControl
     {
         if (_currentContentType == SnippetContentType.RichText) return;
 
-        // When switching from Plain to Rich, load plain text into RichTextBox if currently empty
-        var richPlain = RichTextService.ExtractPlainText(SnippetRichTextBox.Document);
-        if (string.IsNullOrEmpty(richPlain) && !string.IsNullOrEmpty(PlainTextTemplate))
+        // When switching from Plain to Rich, sync plain text into RichTextBox if text changed
+        var currentRichPlain = RichTextService.ExtractPlainText(SnippetRichTextBox.Document);
+        if (!string.Equals(currentRichPlain, PlainTextTemplate, StringComparison.Ordinal))
         {
-            LoadPlainTextIntoDocument(SnippetRichTextBox.Document, PlainTextTemplate);
+            _isUpdatingRichText = true;
+            try
+            {
+                LoadPlainTextIntoDocument(SnippetRichTextBox.Document, PlainTextTemplate);
+            }
+            finally
+            {
+                _isUpdatingRichText = false;
+            }
+            _isRichTextModified = true;
         }
 
         SetFormatMode(SnippetContentType.RichText);
@@ -1815,6 +1821,7 @@ public partial class SnippetEditorControl : UserControl
     private void SnippetRichTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         if (_isUpdatingRichText || _isUpdatingUi) return;
+        _isRichTextModified = true;
         AutoConvertTypedTokens(SnippetRichTextBox);
         CheckInlineAutocomplete(SnippetRichTextBox);
         UpdateContextualTokenAssistant();
@@ -1979,12 +1986,14 @@ public partial class SnippetEditorControl : UserControl
                     }
                 }
 
-                var evaluatedRtf = await PlaceholderParser.EvaluateAsync(
+                var (evaluatedRtf, _, _, _) = RichTextService.EvaluateFlowDocument(
                     rtf,
-                    clipboardProvider: () => Task.FromResult(previewClip),
-                    promptResponses: previewPrompts,
-                    activeWindowTitle: "Active Application",
-                    activeProcessName: "notepad.exe");
+                    plain,
+                    previewPrompts,
+                    () => Task.FromResult(previewClip),
+                    DateTime.Now,
+                    "Active Application",
+                    "notepad.exe");
 
                 foreach (var v in _availableVariables)
                 {

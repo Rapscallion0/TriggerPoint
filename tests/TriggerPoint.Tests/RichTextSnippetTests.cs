@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Documents;
 using System.Windows.Media;
+using TriggerPoint.Core.Contracts;
 using TriggerPoint.Core.Models;
 using TriggerPoint.Infrastructure.Services;
 using Xunit;
@@ -489,6 +490,279 @@ public class RichTextSnippetTests
             Assert.Contains("Item 2", html);
             Assert.Contains("Centered text", html);
         });
+    }
+
+    [Fact]
+    public void RichTextService_EvaluateFlowDocument_WithUserExactRtf_SubstitutesTokensAndCursor()
+    {
+        RunOnStaThread(() =>
+        {
+            string userRtf = "{\\rtf1\\ansi\\ansicpg1252\\uc1\\htmautsp\\deff2{\\fonttbl{\\f0\\fcharset0 Times New Roman;}{\\f2\\fcharset0 Georgia;}{\\f3\\fcharset0 Segoe UI, Aptos, Arial, sans-serif;}}{\\colortbl\\red0\\green0\\blue0;\\red255\\green255\\blue255;\\red26\\green35\\blue126;}\\loch\\hich\\dbch\\pard\\plain\\ltrpar\\itap0{\\lang1033\\fs24\\f2\\cf0 \\cf0\\qj{\\f2 {\\loch\\f3\\b\\fs20\\cf2\\ltrch [Kevin] }{\\ltrch \\{cursor\\}}{\\loch\\f3\\b\\fs20\\cf2\\ltrch  }{\\ltrch \\{datetime:yyyy-MM-dd HH:mm\\}}\\li0\\ri0\\sa0\\sb0\\fi0\\ql\\par}\r\n}\r\n}";
+            string plainFallback = "[Kevin] {cursor} {datetime:yyyy-MM-dd HH:mm}";
+
+            var testDoc = new FlowDocument();
+            RichTextService.LoadFromRtf(testDoc, userRtf);
+
+            // Verify our FindText logic on testDoc
+            RichTextService.ReplaceTextInDocument(testDoc, "{cursor}", "");
+            RichTextService.ReplaceTextInDocument(testDoc, "{datetime:yyyy-MM-dd HH:mm}", "2026-10-20 15:30");
+
+            var plain = RichTextService.ExtractPlainText(testDoc);
+            // Now test EvaluateFlowDocument
+            var refDate = new DateTime(2026, 10, 20, 15, 30, 0);
+            var (evalRtf, evalHtml, evalPlain, caretOffset) = RichTextService.EvaluateFlowDocument(
+                userRtf,
+                plainFallback,
+                promptResponses: null,
+                clipboardProvider: null,
+                referenceTime: refDate,
+                activeWindowTitle: "Test Window",
+                activeProcessName: "test.exe");
+
+            Assert.DoesNotContain("{cursor}", evalPlain);
+            Assert.DoesNotContain("{datetime:yyyy-MM-dd HH:mm}", evalPlain);
+            Assert.Contains("2026-10-20 15:30", evalPlain);
+            Assert.Contains("[Kevin]  2026-10-20 15:30", evalPlain);
+        });
+    }
+
+    [Fact]
+    public void SnippetEditorControl_SwitchingPlainToRichAndBack_PreservesCleanState()
+    {
+        RunOnStaThread(() =>
+        {
+            if (Application.Current == null)
+            {
+                new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+            }
+            if (!Application.Current!.Resources.MergedDictionaries.Any(d => d.Source?.OriginalString?.Contains("ThemeResources.xaml") == true))
+            {
+                Application.Current!.Resources.MergedDictionaries.Add(new ResourceDictionary
+                {
+                    Source = new Uri("pack://application:,,,/TriggerPoint;component/Theme/ThemeResources.xaml", UriKind.Absolute)
+                });
+            }
+
+            var editor = new TriggerPoint.UI.Controls.SnippetEditorControl();
+            string initialTemplate = "[KS:{datetime:MM-dd}] {cursor}";
+            editor.Initialize(SnippetContentType.PlainText, initialTemplate, string.Empty);
+
+            var originalItem = new TriggerItem
+            {
+                Id = Guid.NewGuid(),
+                Name = "Test",
+                ActionType = ActionType.Snippet,
+                Payload = new ActionPayload
+                {
+                    SnippetContentType = SnippetContentType.PlainText,
+                    SnippetTemplate = initialTemplate,
+                    SnippetRtf = string.Empty
+                }
+            };
+            var currentItem = originalItem.Clone();
+
+            // Switch to Rich
+            // Simulate click on Rich segment
+            var richMethod = typeof(TriggerPoint.UI.Controls.SnippetEditorControl)
+                .GetMethod("SnippetFormatRichSegment_Click", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            richMethod!.Invoke(editor, [null!, null!]);
+
+            // Switch back to Plain
+            var plainMethod = typeof(TriggerPoint.UI.Controls.SnippetEditorControl)
+                .GetMethod("SnippetFormatPlainSegment_Click", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            plainMethod!.Invoke(editor, [null!, null!]);
+
+            var (plain, rtf) = editor.GetSnippetPayload();
+            currentItem.Payload.SnippetContentType = editor.ContentType;
+            currentItem.Payload.SnippetTemplate = plain;
+            currentItem.Payload.SnippetRtf = rtf;
+
+            string originalJson = System.Text.Json.JsonSerializer.Serialize(originalItem);
+            string currentJson = System.Text.Json.JsonSerializer.Serialize(currentItem);
+
+            Assert.Equal(originalJson, currentJson);
+
+            // Now test starting from RichText:
+            string userRtf = "{\\rtf1\\ansi\\ansicpg1252\\uc1\\htmautsp\\deff2{\\fonttbl{\\f0\\fcharset0 Times New Roman;}{\\f2\\fcharset0 Georgia;}{\\f3\\fcharset0 Segoe UI, Aptos, Arial, sans-serif;}}{\\colortbl\\red0\\green0\\blue0;\\red255\\green255\\blue255;\\red26\\green35\\blue126;}\\loch\\hich\\dbch\\pard\\plain\\ltrpar\\itap0{\\lang1033\\fs24\\f2\\cf0 \\cf0\\qj{\\f2 {\\loch\\f3\\b\\fs20\\cf2\\ltrch [Kevin] }{\\ltrch \\{cursor\\}}{\\loch\\f3\\b\\fs20\\cf2\\ltrch  }{\\ltrch \\{datetime:yyyy-MM-dd HH:mm\\}}\\li0\\ri0\\sa0\\sb0\\fi0\\ql\\par}\r\n}\r\n}";
+            string richPlain = "[Kevin] {cursor} {datetime:yyyy-MM-dd HH:mm}";
+            var richItem = new TriggerItem
+            {
+                Id = Guid.NewGuid(),
+                Name = "Rich Test",
+                ActionType = ActionType.Snippet,
+                Payload = new ActionPayload
+                {
+                    SnippetContentType = SnippetContentType.RichText,
+                    SnippetTemplate = richPlain,
+                    SnippetRtf = userRtf
+                }
+            };
+            var currentRich = richItem.Clone();
+            editor.Initialize(SnippetContentType.RichText, richPlain, userRtf);
+
+            // Switch to Plain
+            plainMethod!.Invoke(editor, [null!, null!]);
+            Assert.Equal(richPlain, editor.PlainTextTemplate);
+
+            // Switch back to Rich
+            richMethod!.Invoke(editor, [null!, null!]);
+
+            var (plain2, rtf2) = editor.GetSnippetPayload();
+            currentRich.Payload.SnippetContentType = editor.ContentType;
+            currentRich.Payload.SnippetTemplate = plain2;
+            currentRich.Payload.SnippetRtf = rtf2;
+
+            Assert.Equal(richItem.Payload.SnippetTemplate, currentRich.Payload.SnippetTemplate);
+            Assert.Equal(richItem.Payload.SnippetRtf, currentRich.Payload.SnippetRtf);
+
+            // Test 3: Modifying Plain text propagates to Rich editor upon mode switch
+            editor.Initialize(SnippetContentType.PlainText, "Initial Plain", string.Empty);
+            editor.PlainTextTemplate = "Modified Plain Text";
+            richMethod.Invoke(editor, [null!, null!]);
+            var (richAfterPlainEdit, _) = editor.GetSnippetPayload();
+            Assert.Equal("Modified Plain Text", richAfterPlainEdit);
+
+            // Test 4: Modifying Rich text propagates plain text upon switching to Plain
+            editor.Initialize(SnippetContentType.RichText, "Initial Rich", userRtf);
+            editor.LoadPlainTextIntoDocument(editor.SnippetRichTextBox.Document, "Modified Rich Content");
+            plainMethod.Invoke(editor, [null!, null!]);
+            Assert.Equal("Modified Rich Content", editor.PlainTextTemplate);
+        });
+    }
+
+    [Fact]
+    public void SettingsWindow_SwitchingSnippetPlainToRichAndBack_RestoresCleanSaveState()
+    {
+        RunOnStaThread(() =>
+        {
+            if (Application.Current == null)
+            {
+                new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+            }
+            if (!Application.Current!.Resources.MergedDictionaries.Any(d => d.Source?.OriginalString?.Contains("ThemeResources.xaml") == true))
+            {
+                Application.Current!.Resources.MergedDictionaries.Add(new ResourceDictionary
+                {
+                    Source = new Uri("pack://application:,,,/TriggerPoint;component/Theme/ThemeResources.xaml", UriKind.Absolute)
+                });
+            }
+
+            var tempDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "TP_SnippetDirtyTest_" + Guid.NewGuid());
+            System.IO.Directory.CreateDirectory(tempDir);
+            try
+            {
+                var repo = new TriggerPoint.Infrastructure.Persistence.JsonConfigRepository(tempDir);
+                var snippetItem = new TriggerItem
+                {
+                    Id = Guid.NewGuid(),
+                    Name = "Sample Snippet",
+                    ActionType = ActionType.Snippet,
+                    Payload = new ActionPayload
+                    {
+                        SnippetContentType = SnippetContentType.PlainText,
+                        SnippetTemplate = "[Kevin] {cursor} {datetime:yyyy-MM-dd HH:mm}",
+                        SnippetRtf = string.Empty
+                    }
+                };
+                repo.SaveAsync(new[] { snippetItem }).GetAwaiter().GetResult();
+
+                using var listener = new TriggerPoint.Infrastructure.Win32.Win32HotkeyListener();
+                var window = new TriggerPoint.UI.Views.SettingsWindow(repo, listener, new DummyActionExecutor());
+                window.SelectTreeItem(snippetItem);
+
+                // Initially clean
+                Assert.False(window.SaveBtn.IsEnabled);
+
+                // Switch to Rich format
+                window.SnippetEditor.SnippetFormatRichSegment.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                // Changing format makes form dirty
+                Assert.True(window.SaveBtn.IsEnabled);
+
+                // Switch back to Plain format without making edits
+                window.SnippetEditor.SnippetFormatPlainSegment.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                // Form should be clean again
+                Assert.False(window.SaveBtn.IsEnabled);
+
+                // Clean up window before test ends
+                typeof(TriggerPoint.UI.Views.SettingsWindow)
+                    .GetMethod("SetDirty", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                    ?.Invoke(window, new object[] { false });
+                window.Close();
+            }
+            finally
+            {
+                if (System.IO.Directory.Exists(tempDir))
+                {
+                    try { System.IO.Directory.Delete(tempDir, true); } catch { }
+                }
+            }
+        });
+    }
+
+    [Theory]
+    [InlineData("Hello World", true, true, "Hello World")]
+    [InlineData("[Kevin] ", true, true, "[Kevin]&nbsp;")]
+    [InlineData(" [Kevin]", true, true, "&nbsp;[Kevin]")]
+    [InlineData(" with deliberate ", false, false, " with deliberate ")]
+    [InlineData(" ", true, true, "&nbsp;")]
+    [InlineData("  ", true, true, "&nbsp;&nbsp;")]
+    [InlineData("<tag> & 'quote'", false, false, "&lt;tag&gt; &amp; &#39;quote&#39;")]
+    public void RichTextService_HtmlEncodePreservingWhitespace_EncodesCorrectly(string input, bool isFirst, bool isLast, string expected)
+    {
+        var actual = RichTextService.HtmlEncodePreservingWhitespace(input, isFirst, isLast);
+        Assert.Equal(expected, actual);
+    }
+
+    [Fact]
+    public void RichTextService_ConvertFlowDocumentToClipboardHtml_PreservesTrailingWhitespaceAndStyle()
+    {
+        RunOnStaThread(() =>
+        {
+            var doc = new FlowDocument();
+            var p = new Paragraph(new Run("[Kevin] "));
+            doc.Blocks.Add(p);
+
+            var html = RichTextService.ConvertFlowDocumentToClipboardHtml(doc);
+
+            Assert.Contains("white-space: pre-wrap", html);
+            Assert.Contains("[Kevin]&nbsp;", html);
+        });
+    }
+
+    [Fact]
+    public void RichTextService_EvaluateFlowDocument_PreservesCaretOffsetForTrailingSpaces()
+    {
+        RunOnStaThread(() =>
+        {
+            // Snippet with [Kevin] {cursor} 
+            var doc = new FlowDocument();
+            var p = new Paragraph();
+            p.Inlines.Add(new Run("[Kevin] {cursor} "));
+            doc.Blocks.Add(p);
+
+            var rtf = RichTextService.SaveToRtf(doc);
+            var (evalRtf, evalHtml, evalPlain, caretOffset) = RichTextService.EvaluateFlowDocument(
+                rtf,
+                "[Kevin] {cursor} ",
+                null,
+                null,
+                DateTime.Now);
+
+            Assert.Equal(1, caretOffset);
+            Assert.DoesNotContain("{cursor}", evalPlain);
+            Assert.DoesNotContain("{cursor}", evalHtml);
+            Assert.Contains("[Kevin] &nbsp;", evalHtml);
+            Assert.Contains("white-space: pre-wrap", evalHtml);
+            Assert.Equal("[Kevin]  ", evalPlain);
+        });
+    }
+
+    private class DummyActionExecutor : TriggerPoint.Core.Contracts.IActionExecutor
+    {
+        public event EventHandler<string>? StatusChanged { add { } remove { } }
+        public event EventHandler<(TriggerItem item, string message)>? ExecutionSucceeded { add { } remove { } }
+        public event EventHandler<(TriggerItem item, string message)>? ExecutionFailed { add { } remove { } }
+        public System.Threading.Tasks.Task ExecuteAsync(TriggerItem item, ExecutionOverride executionOverride = ExecutionOverride.Standard, IntPtr? targetHwnd = null) => System.Threading.Tasks.Task.CompletedTask;
     }
 }
 

@@ -145,8 +145,13 @@ public class AbbreviationExpanderService : IAbbreviationExpanderService
         var settings = _settingsProvider?.Invoke();
         bool globalDefaultCaseSensitive = settings?.AbbreviationCaseSensitive ?? true;
 
+        int snippetCount = 0;
+        int caseSensitiveCount = 0;
+        int caseInsensitiveCount = 0;
+
         lock (_lock)
         {
+            _buffer = string.Empty;
             _trie.Clear();
             if (items != null)
             {
@@ -158,10 +163,16 @@ public class AbbreviationExpanderService : IAbbreviationExpanderService
                     {
                         bool isCaseSensitive = item.AbbreviationCaseSensitive ?? globalDefaultCaseSensitive;
                         _trie.Insert(item.Abbreviation.Trim(), item, isCaseSensitive);
+                        snippetCount++;
+                        if (isCaseSensitive) caseSensitiveCount++;
+                        else caseInsensitiveCount++;
                     }
                 }
             }
         }
+
+        _logger.Information("Updated abbreviation expander with {Count} snippets ({Sensitive} case-sensitive, {Insensitive} case-insensitive, GlobalDefaultCaseSensitive={GlobalDefault}). Running={Running}",
+            snippetCount, caseSensitiveCount, caseInsensitiveCount, globalDefaultCaseSensitive, IsRunning);
 
         if (settings != null && settings.EnableAbbreviationExpander && !IsRunning)
         {
@@ -289,8 +300,19 @@ public class AbbreviationExpanderService : IAbbreviationExpanderService
         {
             var keyState = new byte[256];
             NativeMethods.GetKeyboardState(keyState);
+
+            // In low-level keyboard hooks (WH_KEYBOARD_LL), GetKeyboardState reflects the calling
+            // thread message queue rather than the active foreground window. Explicitly sync physical modifier states.
+            if ((NativeMethods.GetKeyState(0x10) & 0x8000) != 0) keyState[0x10] = 0x80; // VK_SHIFT
+            if ((NativeMethods.GetKeyState(0x14) & 1) != 0) keyState[0x14] = 0x01; // VK_CAPITAL (CapsLock toggle)
+            if ((NativeMethods.GetKeyState(0xA0) & 0x8000) != 0) keyState[0xA0] = 0x80; // VK_LSHIFT
+            if ((NativeMethods.GetKeyState(0xA1) & 0x8000) != 0) keyState[0xA1] = 0x80; // VK_RSHIFT
+
             var sb = new StringBuilder(4);
-            var hkl = NativeMethods.GetKeyboardLayout(0);
+            var fgHwnd = NativeMethods.GetForegroundWindow();
+            uint fgThread = fgHwnd != IntPtr.Zero ? NativeMethods.GetWindowThreadProcessId(fgHwnd, out _) : 0;
+            var hkl = fgThread != 0 ? NativeMethods.GetKeyboardLayout(fgThread) : NativeMethods.GetKeyboardLayout(0);
+
             int convResult = NativeMethods.ToUnicodeEx(vkCode, scanCode, keyState, sb, sb.Capacity, 0, hkl);
             if (convResult > 0 && sb.Length > 0)
             {
@@ -338,6 +360,8 @@ public class AbbreviationExpanderService : IAbbreviationExpanderService
 
         if (matchedItem != null && backspaceCount > 0)
         {
+            _logger.Information("Abbreviation matched: '{Abbr}' for snippet '{Name}' (Mode={Mode}, Backspaces={Backspaces})",
+                matchedItem.Abbreviation, matchedItem.Name, matchedItem.AbbreviationMode, backspaceCount);
             _buffer = string.Empty;
             TriggerExpansion(matchedItem, backspaceCount, settings);
         }

@@ -1018,7 +1018,7 @@
                                  </Border>
 
                                  <!-- Mode B: Standard Interactive Action Row -->
-                                 <Grid Visibility="{Binding ActionVisibility}">
+                                 <Grid Visibility="{Binding ActionVisibility}" ToolTip="{Binding RowTooltip}">
                                      <Grid.ColumnDefinitions>
                                          <ColumnDefinition Width="Auto"/> <!-- Left Icon -->
                                          <ColumnDefinition Width="*"/>    <!-- Name & Description -->
@@ -1045,7 +1045,7 @@
                                                      SnapsToDevicePixels="True">
                                                  <TextBlock Text="⚡" 
                                                             FontSize="7" 
-                                                            FontWeight="Bold"
+                                                            FontWeight="Bold" 
                                                             HorizontalAlignment="Center" 
                                                             VerticalAlignment="Center"
                                                             Foreground="{DynamicResource ShellBrush}"
@@ -1061,6 +1061,20 @@
                                                     VerticalAlignment="Center"
                                                     Foreground="{Binding IconBrush}"
                                                     Visibility="{Binding StandaloneIconVisibility}"/>
+
+                                         <!-- Mode 3: Clipboard Image Thumbnail -->
+                                         <Border Visibility="{Binding ClipboardThumbnailVisibility}" 
+                                                 Width="24" Height="24" 
+                                                 CornerRadius="3" 
+                                                 ClipToBounds="True" 
+                                                 Background="{DynamicResource BgSecondaryBrush}"
+                                                 BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                                 BorderThickness="1">
+                                             <Image Source="{Binding ClipboardThumbnailSource}"
+                                                    Stretch="UniformToFill"
+                                                    RenderOptions.BitmapScalingMode="HighQuality"
+                                                    SnapsToDevicePixels="True"/>
+                                         </Border>
                                      </Grid>
 
                                      <!-- Center: Highlighted Title & Detail -->
@@ -1204,6 +1218,23 @@
                                                          FontWeight="SemiBold"
                                                          Foreground="{DynamicResource AccentBrush}"/>
                                           </Border>
+
+                                         <!-- Fast Selection Number Badge (1-9) -->
+                                         <Border CornerRadius="3"
+                                                 BorderThickness="1"
+                                                 BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                                 Background="{DynamicResource BgInputBrush}"
+                                                 Padding="4.5,1"
+                                                 Margin="0,0,6,0"
+                                                 ToolTip="{Binding FastSelectionTooltip}"
+                                                 Visibility="{Binding HasFastSelection}"
+                                                 VerticalAlignment="Center">
+                                             <TextBlock Text="{Binding FastSelectionBadgeText}"
+                                                        FontSize="9.5"
+                                                        FontWeight="Bold"
+                                                        FontFamily="{StaticResource CodeFont}"
+                                                        Foreground="{DynamicResource AccentBrush}"/>
+                                         </Border>
 
                                          <!-- Folder Drill-Down Chevron (Clickable for mouse users) -->
                                          <Button Visibility="{Binding IsFolder}"
@@ -1894,27 +1925,190 @@
             <Border Grid.Row="3"
                     BorderBrush="{DynamicResource BorderSubtleBrush}"
                     BorderThickness="0,1,0,0"
-                    Margin="0,6,0,0"
-                    Padding="4,6,4,2">
+                    Margin="0,5,0,0"
+                    Padding="4,4,4,2">
                 <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
+                    <!-- Mode A: Standard Single-Line Text Preview -->
+                    <Grid x:Name="StandardPreviewGrid" Visibility="Visible">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
 
-                    <TextBlock Grid.Column="0" 
-                               Text="PREVIEW: " 
-                               FontSize="10" 
-                               FontWeight="Bold" 
-                               Foreground="{DynamicResource TextMutedBrush}" 
-                               VerticalAlignment="Center"/>
-                    <TextBlock Grid.Column="1" 
-                               x:Name="PreviewDetailText"
-                               Text="Select an action to view details" 
-                               FontSize="11" 
-                               Foreground="{DynamicResource TextSecondaryBrush}" 
-                               TextTrimming="CharacterEllipsis" 
-                               VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="0" 
+                                   Text="PREVIEW: " 
+                                   FontSize="10" 
+                                   FontWeight="Bold" 
+                                   Foreground="{DynamicResource TextMutedBrush}" 
+                                   VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" 
+                                   x:Name="PreviewDetailText"
+                                   Text="Select an action to view details" 
+                                   FontSize="11" 
+                                   Foreground="{DynamicResource TextSecondaryBrush}" 
+                                   TextTrimming="CharacterEllipsis" 
+                                   VerticalAlignment="Center"/>
+                    </Grid>
+
+                    <!-- Mode B: Multi-File / Single-File Path & Reveal Preview -->
+                    <Grid x:Name="FilePreviewGrid" Visibility="Collapsed">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0" 
+                                   Text="FILE: " 
+                                   FontSize="10" 
+                                   FontWeight="Bold" 
+                                   Foreground="{DynamicResource ShellBrush}" 
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,6,0"/>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock x:Name="FilePreviewCountText"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextPrimaryBrush}"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,8,0"/>
+                            <TextBlock x:Name="FilePreviewPathText"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                       TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="RevealInExplorerBtn"
+                                    Click="RevealInExplorerBtn_Click"
+                                    ToolTip="Reveal file or containing folder in Windows Explorer"
+                                    Background="{DynamicResource BgInputBrush}"
+                                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                    BorderThickness="1"
+                                    Foreground="{DynamicResource TextPrimaryBrush}"
+                                    FontSize="10"
+                                    FontWeight="SemiBold"
+                                    Cursor="Hand"
+                                    Padding="7,2"
+                                    Margin="4,0,0,0">
+                                <TextBlock Text="📁 Reveal" VerticalAlignment="Center"/>
+                            </Button>
+
+                            <Button x:Name="CopyFilePathBtn"
+                                    Click="CopyFilePathBtn_Click"
+                                    ToolTip="Copy full path(s) to clipboard"
+                                    Background="{DynamicResource BgInputBrush}"
+                                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                    BorderThickness="1"
+                                    Foreground="{DynamicResource TextSecondaryBrush}"
+                                    FontSize="10"
+                                    Cursor="Hand"
+                                    Padding="7,2"
+                                    Margin="4,0,0,0">
+                                <TextBlock Text="📋 Copy Path" VerticalAlignment="Center"/>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Mode C: Image Preview Strip (Thumbnail, Dimensions, Size, QuickLook) -->
+                    <Grid x:Name="ImagePreviewGrid" Visibility="Collapsed">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" 
+                                Width="26" Height="26" 
+                                CornerRadius="3" 
+                                ClipToBounds="True" 
+                                Background="{DynamicResource BgSecondaryBrush}"
+                                BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                BorderThickness="1"
+                                Margin="0,0,8,0">
+                            <Image x:Name="ImagePreviewThumbnail"
+                                   Stretch="UniformToFill"
+                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                   SnapsToDevicePixels="True"/>
+                        </Border>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="IMAGE: " 
+                                       FontSize="10" 
+                                       FontWeight="Bold" 
+                                       Foreground="{DynamicResource AccentBrush}" 
+                                       VerticalAlignment="Center"/>
+                            <TextBlock x:Name="ImagePreviewMetaText"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="EnlargeImageBtn"
+                                    Click="EnlargeImageBtn_Click"
+                                    ToolTip="Open enlarged QuickLook preview modal (or press Space)"
+                                    Background="{DynamicResource BgInputBrush}"
+                                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                    BorderThickness="1"
+                                    Foreground="{DynamicResource TextPrimaryBrush}"
+                                    FontSize="10"
+                                    FontWeight="SemiBold"
+                                    Cursor="Hand"
+                                    Padding="7,2"
+                                    Margin="4,0,0,0">
+                                <TextBlock Text="🔍 QuickLook (Space)" VerticalAlignment="Center"/>
+                            </Button>
+
+                            <Button x:Name="CopyImageBtn"
+                                    Click="CopyImageBtn_Click"
+                                    ToolTip="Copy image to clipboard"
+                                    Background="{DynamicResource BgInputBrush}"
+                                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                    BorderThickness="1"
+                                    Foreground="{DynamicResource TextSecondaryBrush}"
+                                    FontSize="10"
+                                    Cursor="Hand"
+                                    Padding="7,2"
+                                    Margin="4,0,0,0">
+                                <TextBlock Text="📋 Copy Image" VerticalAlignment="Center"/>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Mode D: Rich Text (RTF) Formatted Preview -->
+                    <Grid x:Name="RichTextPreviewGrid" Visibility="Collapsed">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0" 
+                                   Text="FORMATTED: " 
+                                   FontSize="10" 
+                                   FontWeight="Bold" 
+                                   Foreground="{DynamicResource SnippetBrush}" 
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,6,0"/>
+
+                        <Border Grid.Column="1" 
+                                Background="{DynamicResource BgInputBrush}" 
+                                CornerRadius="4" 
+                                Padding="6,2"
+                                BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                BorderThickness="1">
+                            <RichTextBox x:Name="RichTextPreviewBox"
+                                         IsReadOnly="True"
+                                         IsDocumentEnabled="False"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         Foreground="{DynamicResource TextPrimaryBrush}"
+                                         VerticalScrollBarVisibility="Auto"
+                                         MaxHeight="46"/>
+                        </Border>
+                    </Grid>
                 </Grid>
             </Border>
 
@@ -2851,6 +3045,114 @@
                                 </Button>
                             </StackPanel>
                         </Grid>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- Overlay: Image QuickLook Enlarged Preview Modal -->
+            <Grid Grid.Row="0" Grid.RowSpan="5" 
+                  x:Name="ImageQuickLookOverlay" 
+                  Panel.ZIndex="110"
+                  Background="#D9000000"
+                  Visibility="Collapsed">
+                <Border BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Background="{DynamicResource BgSecondaryBrush}"
+                        Padding="16,12"
+                        Margin="24"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        MaxWidth="720"
+                        MaxHeight="460">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/> <!-- Title & Controls Header -->
+                            <RowDefinition Height="*"/>    <!-- Centered Image Display -->
+                            <RowDefinition Height="Auto"/> <!-- Footer Hint -->
+                        </Grid.RowDefinitions>
+
+                        <!-- Header -->
+                        <Grid Grid.Row="0" Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="🖼️ " FontSize="14" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="QuickLookTitleText"
+                                           FontSize="13" 
+                                           FontWeight="SemiBold" 
+                                           Foreground="{DynamicResource TextPrimaryBrush}"
+                                           TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button x:Name="QuickLookRevealBtn"
+                                        Click="QuickLookRevealBtn_Click"
+                                        ToolTip="Reveal image in File Explorer"
+                                        Background="{DynamicResource BgInputBrush}"
+                                        BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                        BorderThickness="1"
+                                        Foreground="{DynamicResource TextPrimaryBrush}"
+                                        FontSize="10.5"
+                                        Cursor="Hand"
+                                        Padding="8,2"
+                                        Margin="0,0,6,0">
+                                    <TextBlock Text="📁 Reveal"/>
+                                </Button>
+
+                                <Button x:Name="QuickLookCopyBtn"
+                                        Click="CopyImageBtn_Click"
+                                        ToolTip="Copy image to clipboard"
+                                        Background="{DynamicResource BgInputBrush}"
+                                        BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                        BorderThickness="1"
+                                        Foreground="{DynamicResource TextPrimaryBrush}"
+                                        FontSize="10.5"
+                                        Cursor="Hand"
+                                        Padding="8,2"
+                                        Margin="0,0,8,0">
+                                    <TextBlock Text="📋 Copy Image"/>
+                                </Button>
+
+                                <Button x:Name="CloseQuickLookBtn" 
+                                        Click="CloseQuickLookBtn_Click" 
+                                        Background="Transparent" 
+                                        BorderThickness="0" 
+                                        Cursor="Hand" 
+                                        Padding="6,2"
+                                        ToolTip="Close preview (Esc or Space)">
+                                    <TextBlock Text="✕" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/>
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Image Container -->
+                        <Border Grid.Row="1" 
+                                Background="{DynamicResource BgInputBrush}" 
+                                BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="8"
+                                ClipToBounds="True">
+                            <Image x:Name="QuickLookImage"
+                                   Stretch="Uniform"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                   SnapsToDevicePixels="True"/>
+                        </Border>
+
+                        <!-- Footer -->
+                        <TextBlock Grid.Row="2"
+                                   Text="Press Space or Esc to close preview"
+                                   FontSize="10"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,8,0,0"/>
                     </Grid>
                 </Border>
             </Grid>

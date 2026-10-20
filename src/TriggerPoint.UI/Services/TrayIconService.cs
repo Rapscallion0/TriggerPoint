@@ -28,8 +28,10 @@ public class TrayIconService : IDisposable
     private readonly Action? _checkForUpdatesAction;
 
     private readonly Action? _openCheatSheetAction;
+    private readonly Action? _openClipboardAction;
     private readonly ToolStripMenuItem _settingsMenuItem;
     private readonly ToolStripMenuItem _paletteMenuItem;
+    private readonly ToolStripMenuItem? _clipboardMenuItem;
     private readonly ToolStripMenuItem? _cheatSheetMenuItem;
     private readonly ToolStripMenuItem? _updatesMenuItem;
     private readonly ToolStripMenuItem _snoozeMenuItem;
@@ -46,7 +48,10 @@ public class TrayIconService : IDisposable
         string? openSettingsHotkeyText = "Ctrl+Alt+T",
         Action? checkForUpdatesAction = null,
         Action? openCheatSheetAction = null,
-        string? cheatSheetHotkeyText = "Ctrl+Shift+/")
+        string? cheatSheetHotkeyText = "Ctrl+Shift+/",
+        Action? openClipboardAction = null,
+        string? clipboardHotkeyText = "Ctrl+Shift+V",
+        bool enableClipboardHistory = true)
     {
         _shortcutListener = shortcutListener;
         _openSettingsAction = openSettingsAction;
@@ -56,6 +61,7 @@ public class TrayIconService : IDisposable
         _openAppSettingsAction = openAppSettingsAction;
         _checkForUpdatesAction = checkForUpdatesAction;
         _openCheatSheetAction = openCheatSheetAction;
+        _openClipboardAction = openClipboardAction;
 
         _notifyIcon = new NotifyIcon
         {
@@ -85,6 +91,15 @@ public class TrayIconService : IDisposable
 
         _paletteMenuItem = new ToolStripMenuItem(FormatPaletteMenuText(commandPaletteHotkeyText), null, (s, e) => _openPaletteAction());
         contextMenu.Items.Add(_paletteMenuItem);
+
+        if (_openClipboardAction != null)
+        {
+            _clipboardMenuItem = new ToolStripMenuItem(FormatClipboardMenuText(clipboardHotkeyText), null, (s, e) => _openClipboardAction())
+            {
+                Visible = enableClipboardHistory
+            };
+            contextMenu.Items.Add(_clipboardMenuItem);
+        }
 
         if (_openCheatSheetAction != null)
         {
@@ -261,6 +276,22 @@ public class TrayIconService : IDisposable
         return string.IsNullOrWhiteSpace(hotkeyDisplayText)
             ? "Action Manager"
             : $"Action Manager ({hotkeyDisplayText})";
+    }
+
+    public void UpdateClipboardHistoryHotkey(string? hotkeyDisplayText, bool isEnabled = true)
+    {
+        if (_clipboardMenuItem != null)
+        {
+            _clipboardMenuItem.Text = FormatClipboardMenuText(hotkeyDisplayText);
+            _clipboardMenuItem.Visible = isEnabled;
+        }
+    }
+
+    public static string FormatClipboardMenuText(string? hotkeyDisplayText)
+    {
+        return string.IsNullOrWhiteSpace(hotkeyDisplayText)
+            ? "Clipboard History"
+            : $"Clipboard History ({hotkeyDisplayText})";
     }
 
     public void UpdateCheatSheetHotkey(string? hotkeyDisplayText)

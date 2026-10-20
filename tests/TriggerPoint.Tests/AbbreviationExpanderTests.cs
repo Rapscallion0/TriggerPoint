@@ -325,6 +325,74 @@ public class AbbreviationExpanderTests
         Assert.Null(service.MatchSuffix("CASEON", AbbreviationTriggerMode.Immediate));
     }
 
+    [Fact]
+    public void UpdateSnippets_DynamicCaseSensitivitySwitching_TakesImmediateEffect()
+    {
+        var snippetService = new MockSnippetService();
+        var contextService = new MockContextFilterService();
+        var settings = new AppSettings { EnableAbbreviationExpander = false, AbbreviationCaseSensitive = true };
+        var service = new AbbreviationExpanderService(snippetService, contextService, () => settings);
+
+        var item = new TriggerItem
+        {
+            Id = Guid.NewGuid(),
+            Name = "Dynamic Item",
+            ActionType = ActionType.Snippet,
+            IsEnabled = true,
+            Abbreviation = "@SDI",
+            AbbreviationMode = AbbreviationTriggerMode.Delimiter,
+            AbbreviationCaseSensitive = null // Initially inherits global (true)
+        };
+
+        service.UpdateSnippets([item]);
+
+        // Initially case-sensitive: "@SDI" matches, "@sdi" does not
+        Assert.NotNull(service.MatchSuffix("@SDI", AbbreviationTriggerMode.Delimiter));
+        Assert.Null(service.MatchSuffix("@sdi", AbbreviationTriggerMode.Delimiter));
+
+        // Switch item to Always Case-insensitive (false)
+        item.AbbreviationCaseSensitive = false;
+        service.UpdateSnippets([item]);
+
+        // Now both match immediately without app restart
+        Assert.NotNull(service.MatchSuffix("@SDI", AbbreviationTriggerMode.Delimiter));
+        Assert.NotNull(service.MatchSuffix("@sdi", AbbreviationTriggerMode.Delimiter));
+        Assert.NotNull(service.MatchSuffix("leading @sdi", AbbreviationTriggerMode.Delimiter));
+
+        // Switch item back to Always Case-sensitive (true)
+        item.AbbreviationCaseSensitive = true;
+        service.UpdateSnippets([item]);
+
+        Assert.NotNull(service.MatchSuffix("@SDI", AbbreviationTriggerMode.Delimiter));
+        Assert.Null(service.MatchSuffix("@sdi", AbbreviationTriggerMode.Delimiter));
+    }
+
+    [Fact]
+    public void AbbreviationTrie_SymbolsAndUppercase_MatchesCorrectly()
+    {
+        var trie = new AbbreviationTrie();
+        var item = new TriggerItem
+        {
+            Id = Guid.NewGuid(),
+            Name = "Short Date + Initial",
+            ActionType = ActionType.Snippet,
+            Abbreviation = "@SDI",
+            AbbreviationMode = AbbreviationTriggerMode.Delimiter
+        };
+
+        // Case-sensitive insert
+        trie.Insert("@SDI", item, isCaseSensitive: true);
+        Assert.NotNull(trie.MatchSuffix("@SDI", AbbreviationTriggerMode.Delimiter));
+        Assert.Null(trie.MatchSuffix("@sdi", AbbreviationTriggerMode.Delimiter));
+
+        // Case-insensitive insert
+        trie.Clear();
+        trie.Insert("@SDI", item, isCaseSensitive: false);
+        Assert.NotNull(trie.MatchSuffix("@SDI", AbbreviationTriggerMode.Delimiter));
+        Assert.NotNull(trie.MatchSuffix("@sdi", AbbreviationTriggerMode.Delimiter));
+        Assert.NotNull(trie.MatchSuffix("@Sdi", AbbreviationTriggerMode.Delimiter));
+    }
+
     private class MockSnippetService : ISnippetService
     {
         public Task InjectSnippetAsync(string template, IntPtr targetHwnd, SnippetContentType contentType = SnippetContentType.PlainText, string? rtfContent = null)

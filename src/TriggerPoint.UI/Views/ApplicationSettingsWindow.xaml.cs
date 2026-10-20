@@ -842,6 +842,7 @@ public partial class ApplicationSettingsWindow : Window
 
             // 1. Persist to appsettings.json
             await _repository.SaveSettingsAsync(_currentSettings);
+            (Application.Current as App)?.UpdateCachedSettings(_currentSettings);
 
             // 2. Dynamically apply log level at runtime without app restart
             _logManagerService.UpdateLogLevel(level);

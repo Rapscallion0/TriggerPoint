@@ -516,7 +516,10 @@ public partial class App : Application
             openSettingsHotkeyText: appSettings.OpenSettingsHotkey?.DisplayText ?? "Ctrl+Alt+T",
             checkForUpdatesAction: () => Dispatcher.Invoke(async () => await PerformManualUpdateCheckAsync()),
             openCheatSheetAction: () => Dispatcher.Invoke(() => OpenCheatSheetHud()),
-            cheatSheetHotkeyText: appSettings.CheatSheetHotkey?.DisplayText ?? "Ctrl+Shift+/");
+            cheatSheetHotkeyText: appSettings.CheatSheetHotkey?.DisplayText ?? "Ctrl+Shift+/",
+            openClipboardAction: () => Dispatcher.Invoke(() => OpenCommandPalette(initialFilter: CommandPaletteFilterType.Clipboard)),
+            clipboardHotkeyText: appSettings.ClipboardHotkey?.DisplayText ?? "Ctrl+Shift+V",
+            enableClipboardHistory: appSettings.EnableClipboardHistory);
 
         if (TryExtractAddActionPath(startupArgs, out var addPath))
         {
@@ -1090,6 +1093,7 @@ public partial class App : Application
             _cachedSettings = settings;
             PaletteItemViewModel.DefaultAbbreviationCaseSensitive = settings.AbbreviationCaseSensitive;
             var items = await _repository.LoadAsync();
+            _cachedItems = items;
             var allItems = new List<TriggerItem>(items);
             allItems.AddRange(CreateVirtualApplicationItems(settings));
             _shortcutListener.RegisterAll(allItems);
@@ -1105,11 +1109,44 @@ public partial class App : Application
             _trayIconService?.UpdateCommandPaletteHotkey(settings.CommandPaletteHotkey?.DisplayText);
             _trayIconService?.UpdateOpenSettingsHotkey(settings.OpenSettingsHotkey?.DisplayText);
             _trayIconService?.UpdateCheatSheetHotkey(settings.CheatSheetHotkey?.DisplayText);
+            _trayIconService?.UpdateClipboardHistoryHotkey(settings.ClipboardHotkey?.DisplayText, settings.EnableClipboardHistory);
         }
         catch (Exception ex)
         {
             Log.Warning(ex, "Failed to reload application settings and hotkeys.");
         }
+    }
+
+    public void UpdateCachedSettings(AppSettings settings)
+    {
+        _cachedSettings = settings;
+        PaletteItemViewModel.DefaultAbbreviationCaseSensitive = settings.AbbreviationCaseSensitive;
+        if (_abbreviationExpander != null)
+        {
+            if (settings.EnableAbbreviationExpander)
+            {
+                if (!_abbreviationExpander.IsRunning)
+                {
+                    _abbreviationExpander.Start();
+                }
+                var itemsToUpdate = (_cachedItems != null && _cachedItems.Count > 0)
+                    ? _cachedItems
+                    : (_repository != null ? _repository.LoadAsync().GetAwaiter().GetResult() : []);
+                if (itemsToUpdate != null && itemsToUpdate.Count > 0)
+                {
+                    _abbreviationExpander.UpdateSnippets(itemsToUpdate);
+                }
+            }
+            else if (_abbreviationExpander.IsRunning)
+            {
+                _abbreviationExpander.Stop();
+            }
+        }
+    }
+
+    public void SetCachedItems(IReadOnlyList<TriggerItem> items)
+    {
+        _cachedItems = items;
     }
 
     private void OnSecondInstanceSignaled(string message)

@@ -485,11 +485,11 @@ public static class RichTextService
     public static (string evaluatedRtf, string evaluatedHtml, string evaluatedPlainText, int caretOffset) EvaluateFlowDocument(
         string rtfContent,
         string plainTextFallback,
-        IReadOnlyDictionary<string, string>? promptResponses,
-        Func<Task<string>>? clipboardProvider,
-        DateTime? referenceTime,
-        string? activeWindowTitle,
-        string? activeProcessName)
+        IReadOnlyDictionary<string, string>? promptResponses = null,
+        Func<Task<string>>? clipboardProvider = null,
+        DateTime? referenceTime = null,
+        string? activeWindowTitle = null,
+        string? activeProcessName = null)
     {
         Func<(string, string, string, int)> evalAction = () =>
         {
@@ -597,44 +597,110 @@ public static class RichTextService
 
     /// <summary>
     /// Replaces occurrences of search text within a FlowDocument while preserving formatting.
+    /// Accurately finds tokens inside single text runs as well as tokens split across run elements.
     /// </summary>
     public static void ReplaceTextInDocument(FlowDocument doc, string searchText, string replacement)
     {
         if (string.IsNullOrEmpty(searchText)) return;
 
-        // Traverse all text pointers to find and replace
-        for (TextPointer start = doc.ContentStart.GetInsertionPosition(LogicalDirection.Forward);
-             start != null && start.CompareTo(doc.ContentEnd) < 0;
-             start = start.GetNextInsertionPosition(LogicalDirection.Forward))
+        TextPointer searchPtr = doc.ContentStart;
+        while (searchPtr != null && searchPtr.CompareTo(doc.ContentEnd) < 0)
         {
-            string textRun = start.GetTextInRun(LogicalDirection.Forward);
-            int index = textRun.IndexOf(searchText, StringComparison.OrdinalIgnoreCase);
-            if (index >= 0)
-            {
-                TextPointer matchStart = start.GetPositionAtOffset(index);
-                TextPointer matchEnd = start.GetPositionAtOffset(index + searchText.Length);
+            var matchRange = FindTextInRange(searchPtr, doc.ContentEnd, searchText);
+            if (matchRange == null) break;
 
+            matchRange.Text = replacement;
+            searchPtr = matchRange.End;
+        }
+    }
+
+    private static TextRange? FindTextInRange(TextPointer startPos, TextPointer endPos, string searchText)
+    {
+        for (TextPointer start = startPos;
+             start != null && start.CompareTo(endPos) < 0;
+             start = start.GetNextContextPosition(LogicalDirection.Forward))
+        {
+            if (start.GetPointerContext(LogicalDirection.Forward) != TextPointerContext.Text)
+                continue;
+
+            string textInRun = start.GetTextInRun(LogicalDirection.Forward);
+            int idx = textInRun.IndexOf(searchText, StringComparison.OrdinalIgnoreCase);
+            if (idx >= 0)
+            {
+                TextPointer matchStart = start.GetPositionAtOffset(idx);
+                TextPointer matchEnd = start.GetPositionAtOffset(idx + searchText.Length);
                 if (matchStart != null && matchEnd != null)
                 {
-                    var range = new TextRange(matchStart, matchEnd);
-                    range.Text = replacement;
-                    // Restart search from start of modified range
-                    start = doc.ContentStart.GetInsertionPosition(LogicalDirection.Forward);
-                    if (start == null) break;
+                    return new TextRange(matchStart, matchEnd);
+                }
+            }
+
+            // Cross-run search if token might be split across runs
+            string firstChar = searchText[..1];
+            if (textInRun.Length > 0 && textInRun.EndsWith(firstChar, StringComparison.OrdinalIgnoreCase))
+            {
+                int candidateIdx = textInRun.LastIndexOf(firstChar, StringComparison.OrdinalIgnoreCase);
+                while (candidateIdx >= 0)
+                {
+                    var (matched, endPtr) = TryMatchAcrossRuns(start.GetPositionAtOffset(candidateIdx), searchText);
+                    if (matched && endPtr != null)
+                    {
+                        return new TextRange(start.GetPositionAtOffset(candidateIdx), endPtr);
+                    }
+                    if (candidateIdx == 0) break;
+                    candidateIdx = textInRun.LastIndexOf(firstChar, candidateIdx - 1, StringComparison.OrdinalIgnoreCase);
                 }
             }
         }
+        return null;
+    }
+
+    private static (bool Matched, TextPointer? End) TryMatchAcrossRuns(TextPointer startPtr, string searchText)
+    {
+        TextPointer current = startPtr;
+        int matchedChars = 0;
+
+        while (current != null && matchedChars < searchText.Length)
+        {
+            if (current.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text)
+            {
+                string text = current.GetTextInRun(LogicalDirection.Forward);
+                int needed = searchText.Length - matchedChars;
+                int consume = Math.Min(needed, text.Length);
+
+                if (!string.Equals(text[..consume], searchText.Substring(matchedChars, consume), StringComparison.OrdinalIgnoreCase))
+                {
+                    return (false, null);
+                }
+
+                matchedChars += consume;
+                current = current.GetPositionAtOffset(consume);
+                if (matchedChars == searchText.Length)
+                {
+                    return (true, current);
+                }
+            }
+            else
+            {
+                current = current.GetNextContextPosition(LogicalDirection.Forward);
+            }
+        }
+
+        return (matchedChars == searchText.Length, current);
     }
 
     /// <summary>
     /// Converts a FlowDocument into clean HTML and wraps it in Windows CF_HTML format.
+    /// Preserves exact whitespace and non-breaking spaces so browser engines (e.g. Gmail) do not collapse spaces before block tags.
     /// </summary>
     public static string ConvertFlowDocumentToClipboardHtml(FlowDocument doc)
     {
-        var sb = new StringBuilder();
-        sb.Append("<div style=\"font-family: 'Segoe UI', Arial, sans-serif; font-size: 11pt;\">");
+        FlowDocument targetDoc = HasInlineContainers(doc) ? FlattenInlineContainersForExport(doc) : doc;
 
-        foreach (var block in doc.Blocks)
+        var sb = new StringBuilder();
+        sb.Append("<div style=\"font-family: 'Segoe UI', Arial, sans-serif; font-size: 11pt; white-space: pre-wrap;\">");
+
+        foreach (var block in targetDoc.Blocks)
         {
             ConvertBlockToHtml(block, sb);
         }
@@ -648,21 +714,24 @@ public static class RichTextService
         switch (block)
         {
             case Paragraph p:
-                sb.Append("<p style=\"margin: 0 0 6px 0;");
+                sb.Append("<p style=\"margin: 0 0 6px 0; white-space: pre-wrap;");
                 if (p.TextAlignment == TextAlignment.Center) sb.Append(" text-align: center;");
                 else if (p.TextAlignment == TextAlignment.Right) sb.Append(" text-align: right;");
                 sb.Append("\">");
 
-                foreach (var inline in p.Inlines)
+                var inlineList = p.Inlines.ToList();
+                for (int i = 0; i < inlineList.Count; i++)
                 {
-                    ConvertInlineToHtml(inline, sb);
+                    bool isFirst = (i == 0);
+                    bool isLast = (i == inlineList.Count - 1);
+                    ConvertInlineToHtml(inlineList[i], sb, isFirst, isLast);
                 }
                 sb.Append("</p>");
                 break;
 
             case List list:
                 var isNumbered = list.MarkerStyle == TextMarkerStyle.Decimal;
-                sb.Append(isNumbered ? "<ol style=\"margin: 0 0 6px 0; padding-left: 24px;\">" : "<ul style=\"margin: 0 0 6px 0; padding-left: 24px;\">");
+                sb.Append(isNumbered ? "<ol style=\"margin: 0 0 6px 0; padding-left: 24px; white-space: pre-wrap;\">" : "<ul style=\"margin: 0 0 6px 0; padding-left: 24px; white-space: pre-wrap;\">");
 
                 foreach (var item in list.ListItems)
                 {
@@ -671,9 +740,12 @@ public static class RichTextService
                     {
                         if (b is Paragraph para)
                         {
-                            foreach (var inline in para.Inlines)
+                            var pInlines = para.Inlines.ToList();
+                            for (int i = 0; i < pInlines.Count; i++)
                             {
-                                ConvertInlineToHtml(inline, sb);
+                                bool isFirst = (i == 0);
+                                bool isLast = (i == pInlines.Count - 1);
+                                ConvertInlineToHtml(pInlines[i], sb, isFirst, isLast);
                             }
                         }
                         else
@@ -696,7 +768,7 @@ public static class RichTextService
         }
     }
 
-    private static void ConvertInlineToHtml(Inline inline, StringBuilder sb)
+    private static void ConvertInlineToHtml(Inline inline, StringBuilder sb, bool isFirstInBlock = false, bool isLastInBlock = false)
     {
         switch (inline)
         {
@@ -705,19 +777,65 @@ public static class RichTextService
                 break;
 
             case Run run:
-                AppendStyledInline(run, WebUtility.HtmlEncode(run.Text), sb, () => { });
+                AppendStyledInline(run, HtmlEncodePreservingWhitespace(run.Text, isFirstInBlock, isLastInBlock), sb, () => { });
+                break;
+
+            case InlineUIContainer uic:
+                string tokenStr = uic.Tag as string ?? string.Empty;
+                AppendStyledInline(uic, HtmlEncodePreservingWhitespace(tokenStr, isFirstInBlock, isLastInBlock), sb, () => { });
                 break;
 
             case Span span:
                 AppendStyledInline(span, null, sb, () =>
                 {
-                    foreach (var child in span.Inlines)
+                    var childList = span.Inlines.ToList();
+                    for (int j = 0; j < childList.Count; j++)
                     {
-                        ConvertInlineToHtml(child, sb);
+                        bool first = isFirstInBlock && (j == 0);
+                        bool last = isLastInBlock && (j == childList.Count - 1);
+                        ConvertInlineToHtml(childList[j], sb, first, last);
                     }
                 });
                 break;
         }
+    }
+
+    /// <summary>
+    /// Encodes text for HTML while preserving leading, trailing, and consecutive whitespace
+    /// so that browser HTML parsers (like Gmail) do not collapse spaces before block tags.
+    /// </summary>
+    public static string HtmlEncodePreservingWhitespace(string text, bool isFirstInBlock = false, bool isLastInBlock = false)
+    {
+        if (string.IsNullOrEmpty(text)) return string.Empty;
+
+        var encoded = WebUtility.HtmlEncode(text);
+        if (!encoded.Contains(' ')) return encoded;
+
+        var sb = new StringBuilder(encoded.Length + 16);
+        for (int i = 0; i < encoded.Length; i++)
+        {
+            if (encoded[i] == ' ')
+            {
+                bool isLeadingInBlock = isFirstInBlock && (i == 0);
+                bool isTrailingInBlock = isLastInBlock && (i == encoded.Length - 1);
+                bool isConsecutive = (i > 0 && encoded[i - 1] == ' ');
+
+                if (isLeadingInBlock || isTrailingInBlock || isConsecutive)
+                {
+                    sb.Append("&nbsp;");
+                }
+                else
+                {
+                    sb.Append(' ');
+                }
+            }
+            else
+            {
+                sb.Append(encoded[i]);
+            }
+        }
+
+        return sb.ToString();
     }
 
     private static void AppendStyledInline(

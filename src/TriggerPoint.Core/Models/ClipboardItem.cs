@@ -32,11 +32,59 @@ public sealed class ClipboardHistoryItem
     public string DisplayTitle => Type switch
     {
         ClipboardItemType.Image => $"Image ({ImageWidth}×{ImageHeight})",
-        ClipboardItemType.FileList => FilePaths != null && FilePaths.Count > 0
-            ? $"{FilePaths.Count} file(s): {System.IO.Path.GetFileName(FilePaths[0])}"
-            : "Files",
+        ClipboardItemType.FileList => FormatFileListTitle(),
         _ => string.IsNullOrWhiteSpace(PreviewText) ? "Empty Text" : PreviewText
     };
+
+    [JsonIgnore]
+    public string? PrimaryDirectoryPath
+    {
+        get
+        {
+            if (FilePaths == null || FilePaths.Count == 0) return null;
+            try
+            {
+                var dir = System.IO.Path.GetDirectoryName(FilePaths[0]);
+                if (FilePaths.Count == 1) return dir;
+                bool allSame = FilePaths.TrueForAll(f => string.Equals(System.IO.Path.GetDirectoryName(f), dir, StringComparison.OrdinalIgnoreCase));
+                return allSame ? dir : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+    }
+
+    [JsonIgnore]
+    public string FilesSummaryText
+    {
+        get
+        {
+            if (FilePaths == null || FilePaths.Count == 0) return "No files";
+            if (FilePaths.Count == 1)
+            {
+                return FilePaths[0];
+            }
+            string dir = PrimaryDirectoryPath ?? $"{FilePaths.Count} files across multiple locations";
+            return $"{FilePaths.Count} files • {dir}";
+        }
+    }
+
+    private string FormatFileListTitle()
+    {
+        if (FilePaths == null || FilePaths.Count == 0) return "Files";
+        if (FilePaths.Count == 1)
+        {
+            string name = System.IO.Path.GetFileName(FilePaths[0]);
+            return string.IsNullOrEmpty(name) ? FilePaths[0] : name;
+        }
+        if (FilePaths.Count == 2)
+        {
+            return $"{System.IO.Path.GetFileName(FilePaths[0])}, {System.IO.Path.GetFileName(FilePaths[1])}";
+        }
+        return $"{System.IO.Path.GetFileName(FilePaths[0])}, {System.IO.Path.GetFileName(FilePaths[1])} (+{FilePaths.Count - 2} more)";
+    }
 
     [JsonIgnore]
     public string FormattedSize

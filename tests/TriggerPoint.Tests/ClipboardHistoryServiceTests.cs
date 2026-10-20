@@ -261,4 +261,62 @@ public class ClipboardHistoryServiceTests : IDisposable
         Assert.True(bytes > 0);
         Assert.Equal(bytes, service.GetTotalStorageBytes());
     }
+
+    [Fact]
+    public void ClipboardHistoryItem_FileList_DisplayTitle_FormatsSingleAndMultipleFiles()
+    {
+        // Single file
+        var single = new ClipboardHistoryItem
+        {
+            Type = ClipboardItemType.FileList,
+            FilePaths = [@"C:\Users\Documents\Report.docx"]
+        };
+        Assert.Equal("Report.docx", single.DisplayTitle);
+
+        // Two files
+        var two = new ClipboardHistoryItem
+        {
+            Type = ClipboardItemType.FileList,
+            FilePaths = [@"C:\Users\Documents\Report.docx", @"C:\Users\Documents\Summary.xlsx"]
+        };
+        Assert.Equal("Report.docx, Summary.xlsx", two.DisplayTitle);
+
+        // Three or more files
+        var three = new ClipboardHistoryItem
+        {
+            Type = ClipboardItemType.FileList,
+            FilePaths = [@"C:\Users\Documents\Report.docx", @"C:\Users\Documents\Summary.xlsx", @"C:\Users\Documents\Notes.txt", @"C:\Users\Documents\Data.csv"]
+        };
+        Assert.Equal("Report.docx, Summary.xlsx (+2 more)", three.DisplayTitle);
+    }
+
+    [Fact]
+    public void ClipboardHistoryItem_FileList_DirectoryAndSummary_ResolvesDirectory()
+    {
+        // Same directory
+        var sameDir = new ClipboardHistoryItem
+        {
+            Type = ClipboardItemType.FileList,
+            FilePaths = [@"C:\Users\Documents\Report.docx", @"C:\Users\Documents\Summary.xlsx"]
+        };
+        Assert.Equal(@"C:\Users\Documents", sameDir.PrimaryDirectoryPath);
+        Assert.Equal(@"2 files • C:\Users\Documents", sameDir.FilesSummaryText);
+
+        // Different directories
+        var diffDir = new ClipboardHistoryItem
+        {
+            Type = ClipboardItemType.FileList,
+            FilePaths = [@"C:\FolderA\File1.txt", @"D:\FolderB\File2.txt"]
+        };
+        Assert.Null(diffDir.PrimaryDirectoryPath);
+        Assert.Equal("2 files • 2 files across multiple locations", diffDir.FilesSummaryText);
+    }
+
+    [Fact]
+    public void TrayIconService_FormatClipboardMenuText_FormatsCorrectly()
+    {
+        Assert.Equal("Clipboard History (Ctrl+Shift+V)", TriggerPoint.UI.Services.TrayIconService.FormatClipboardMenuText("Ctrl+Shift+V"));
+        Assert.Equal("Clipboard History", TriggerPoint.UI.Services.TrayIconService.FormatClipboardMenuText(null));
+        Assert.Equal("Clipboard History", TriggerPoint.UI.Services.TrayIconService.FormatClipboardMenuText(""));
+    }
 }

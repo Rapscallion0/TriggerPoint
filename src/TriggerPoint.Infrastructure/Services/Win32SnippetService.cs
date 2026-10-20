@@ -300,7 +300,9 @@ public class Win32SnippetService : ISnippetService
         SendPasteCommand();
 
         // Give target application time to consume clipboard before repositioning or restoring
-        await Task.Delay(40).ConfigureAwait(false);
+        bool isBrowser = IsBrowserWindow(targetHwnd);
+        int settleDelayMs = isBrowser ? 90 : 40;
+        await Task.Delay(settleDelayMs).ConfigureAwait(false);
 
         // Reposition caret if {cursor} was present
         if (caretOffset > 0)
@@ -393,7 +395,12 @@ public class Win32SnippetService : ISnippetService
         // Simulate Ctrl + V
         SendPasteCommand();
 
-        await Task.Delay(40).ConfigureAwait(false);
+        // Give target application time to consume clipboard before repositioning or restoring.
+        // Web browsers (such as Gmail in Chrome) require a settle window (~100ms) when pasting
+        // rich HTML or replacing highlighted selections before simulated caret navigation.
+        bool isBrowserRich = IsBrowserWindow(targetHwnd);
+        int settleDelayRichMs = isBrowserRich ? 100 : 40;
+        await Task.Delay(settleDelayRichMs).ConfigureAwait(false);
 
         // Reposition caret if {cursor} was present
         if (caretOffset > 0)
@@ -444,13 +451,48 @@ public class Win32SnippetService : ISnippetService
         }
 
         // Strategy 2: Attempt Windows UI Automation TextPattern - instantaneous (0ms)
-        if (TryRepositionCaretViaUia(caretOffset))
+        // Web browsers (Chrome, Edge, Firefox, Brave, etc.) manage asynchronous DOM selection
+        // where UIA TextPattern falsely reports success on stale selections during/after paste.
+        // We bypass UIA for browsers so simulated Left Arrow keys navigate reliably.
+        if (!IsBrowserWindow(targetHwnd) && TryRepositionCaretViaUia(caretOffset))
         {
             return;
         }
 
         // Strategy 3: Graceful fallback to simulated Left Arrow keys
         SendLeftArrowKeys(caretOffset);
+    }
+
+    private static bool IsBrowserWindow(IntPtr hWnd)
+    {
+        if (hWnd == IntPtr.Zero) return false;
+
+        try
+        {
+            string procName = NativeMethods.GetProcessNameForWindow(hWnd) ?? string.Empty;
+            if (procName.Equals("chrome", StringComparison.OrdinalIgnoreCase) ||
+                procName.Equals("msedge", StringComparison.OrdinalIgnoreCase) ||
+                procName.Equals("firefox", StringComparison.OrdinalIgnoreCase) ||
+                procName.Equals("brave", StringComparison.OrdinalIgnoreCase) ||
+                procName.Equals("opera", StringComparison.OrdinalIgnoreCase) ||
+                procName.Equals("vivaldi", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            string className = NativeMethods.GetWindowClassName(hWnd);
+            if (className.Contains("Chrome_WidgetWin", StringComparison.OrdinalIgnoreCase) ||
+                className.Contains("MozillaWindowClass", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        catch
+        {
+            // Ignore window inspection exceptions
+        }
+
+        return false;
     }
 
     private bool TryRepositionCaretViaWin32Edit(IntPtr targetHwnd, int caretOffset)

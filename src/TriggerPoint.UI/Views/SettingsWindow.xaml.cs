@@ -609,11 +609,27 @@ public partial class SettingsWindow : Window
                 _ = _repository.SaveSettingsAsync(_appSettings);
             }
         };
-        SnippetEditor.SnippetChanged += (s, e) => OnFormEdited();
+        SnippetEditor.SnippetChanged += (s, e) =>
+        {
+            OnFormEdited();
+            if (!_isUpdatingForm && _selectedItem?.ActionType == ActionType.Snippet)
+            {
+                _selectedItem.Payload.SnippetContentType = SnippetEditor.ContentType;
+                var (plain, rtf) = SnippetEditor.GetSnippetPayload();
+                _selectedItem.Payload.SnippetTemplate = plain;
+                _selectedItem.Payload.SnippetRtf = rtf;
+            }
+        };
         if (SnippetAbbreviationBox != null)
         {
             SnippetAbbreviationBox.TextChanged += (s, e) =>
             {
+                if (!_isUpdatingForm && _selectedItem?.ActionType == ActionType.Snippet)
+                {
+                    string rawAbbr = SnippetAbbreviationBox.Text.Trim();
+                    _selectedItem.Abbreviation = string.IsNullOrEmpty(rawAbbr) ? null : rawAbbr;
+                    _abbreviationExpander?.UpdateSnippets(_items);
+                }
                 OnFormEdited();
                 UpdateSnippetAbbreviationConflictDiagnostics();
             };
@@ -622,6 +638,11 @@ public partial class SettingsWindow : Window
         {
             SnippetModeImmediateRadio.Checked += (s, e) =>
             {
+                if (!_isUpdatingForm && _selectedItem?.ActionType == ActionType.Snippet)
+                {
+                    _selectedItem.AbbreviationMode = AbbreviationTriggerMode.Immediate;
+                    _abbreviationExpander?.UpdateSnippets(_items);
+                }
                 OnFormEdited();
                 UpdateSnippetAbbreviationConflictDiagnostics();
             };
@@ -630,6 +651,11 @@ public partial class SettingsWindow : Window
         {
             SnippetModeDelimiterRadio.Checked += (s, e) =>
             {
+                if (!_isUpdatingForm && _selectedItem?.ActionType == ActionType.Snippet)
+                {
+                    _selectedItem.AbbreviationMode = AbbreviationTriggerMode.Delimiter;
+                    _abbreviationExpander?.UpdateSnippets(_items);
+                }
                 OnFormEdited();
                 UpdateSnippetAbbreviationConflictDiagnostics();
             };
@@ -638,6 +664,28 @@ public partial class SettingsWindow : Window
         {
             SnippetAbbreviationCaseSensitiveCombo.SelectionChanged += (s, e) =>
             {
+                if (!_isUpdatingForm && _selectedItem?.ActionType == ActionType.Snippet)
+                {
+                    if (SnippetAbbreviationCaseSensitiveCombo.SelectedItem is ComboBoxItem cbi)
+                    {
+                        _selectedItem.AbbreviationCaseSensitive = cbi.Tag?.ToString() switch
+                        {
+                            "sensitive" => true,
+                            "insensitive" => false,
+                            _ => null
+                        };
+                    }
+                    else
+                    {
+                        _selectedItem.AbbreviationCaseSensitive = SnippetAbbreviationCaseSensitiveCombo.SelectedIndex switch
+                        {
+                            1 => true,
+                            2 => false,
+                            _ => null
+                        };
+                    }
+                    _abbreviationExpander?.UpdateSnippets(_items);
+                }
                 OnFormEdited();
                 UpdateSnippetAbbreviationConflictDiagnostics();
             };
@@ -873,6 +921,7 @@ public partial class SettingsWindow : Window
         try
         {
             _appSettings = await _repository.LoadSettingsAsync();
+            (Application.Current as App)?.UpdateCachedSettings(_appSettings);
             UpdateSnippetAbbreviationGlobalWarning();
             UpdateSnippetAbbreviationCaseSensitiveLabel();
             if (Application.Current is App app)
@@ -1073,6 +1122,30 @@ public partial class SettingsWindow : Window
                 {
                     StripStepAndPromptFieldIds(steps);
                 }
+                if (item.ActionType == ActionType.Snippet)
+                {
+                    bool isPlain = false;
+                    if (payload["SnippetContentType"] is System.Text.Json.Nodes.JsonValue ctv)
+                    {
+                        if (ctv.TryGetValue<int>(out var ctInt) && ctInt == (int)SnippetContentType.PlainText)
+                        {
+                            isPlain = true;
+                        }
+                        else if (ctv.TryGetValue<string>(out var ctStr) && string.Equals(ctStr, "PlainText", StringComparison.OrdinalIgnoreCase))
+                        {
+                            isPlain = true;
+                        }
+                    }
+                    if (isPlain)
+                    {
+                        payload["SnippetRtf"] = string.Empty;
+                    }
+                    if (payload["SnippetTemplate"] is System.Text.Json.Nodes.JsonValue tVal &&
+                        tVal.TryGetValue<string>(out var tStr) && tStr != null)
+                    {
+                        payload["SnippetTemplate"] = tStr.Replace("\r\n", "\n");
+                    }
+                }
             }
             return obj.ToJsonString();
         }
@@ -1187,10 +1260,30 @@ public partial class SettingsWindow : Window
         }
         else if (choice == SavePromptChoice.Save)
         {
+            AllowedProcessesTagInput?.CommitPendingInput();
+            ExcludedProcessesTagInput?.CommitPendingInput();
+            AllowedUrlsTagInput?.CommitPendingInput();
+            ExcludedUrlsTagInput?.CommitPendingInput();
             CommitCurrentFormChanges();
-            _ = SaveConfigurationCoreAsync();
-            SetDirty(false);
-            return true;
+
+            try
+            {
+                _repository.SaveAsync(_items).GetAwaiter().GetResult();
+                RegisterShortcuts();
+                _abbreviationExpander?.UpdateSnippets(_items);
+                (Application.Current as App)?.SetCachedItems(_items);
+                if (_selectedItem != null)
+                {
+                    _originalItemSnapshot = _selectedItem.Clone();
+                }
+                SetDirty(false);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to save configuration from prompt.");
+                return false;
+            }
         }
         return true;
     }
@@ -1635,12 +1728,32 @@ public partial class SettingsWindow : Window
             if (SnippetAbbreviationCaseSensitiveCombo != null)
             {
                 UpdateSnippetAbbreviationCaseSensitiveLabel();
-                SnippetAbbreviationCaseSensitiveCombo.SelectedIndex = item.AbbreviationCaseSensitive switch
+                string targetTag = item.AbbreviationCaseSensitive switch
                 {
-                    true => 1,
-                    false => 2,
-                    _ => 0
+                    true => "sensitive",
+                    false => "insensitive",
+                    _ => "default"
                 };
+
+                bool found = false;
+                foreach (var itemObj in SnippetAbbreviationCaseSensitiveCombo.Items)
+                {
+                    if (itemObj is ComboBoxItem cbi && string.Equals(cbi.Tag?.ToString(), targetTag, StringComparison.OrdinalIgnoreCase))
+                    {
+                        SnippetAbbreviationCaseSensitiveCombo.SelectedItem = cbi;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found)
+                {
+                    SnippetAbbreviationCaseSensitiveCombo.SelectedIndex = item.AbbreviationCaseSensitive switch
+                    {
+                        true => 1,
+                        false => 2,
+                        _ => 0
+                    };
+                }
             }
             UpdateSnippetAbbreviationGlobalWarning();
             UpdateSnippetAbbreviationConflictDiagnostics();
@@ -2073,7 +2186,16 @@ public partial class SettingsWindow : Window
                     ? AbbreviationTriggerMode.Immediate
                     : AbbreviationTriggerMode.Delimiter;
             }
-            if (SnippetAbbreviationCaseSensitiveCombo != null)
+            if (SnippetAbbreviationCaseSensitiveCombo?.SelectedItem is ComboBoxItem cbi)
+            {
+                _selectedItem.AbbreviationCaseSensitive = cbi.Tag?.ToString() switch
+                {
+                    "sensitive" => true,
+                    "insensitive" => false,
+                    _ => null
+                };
+            }
+            else if (SnippetAbbreviationCaseSensitiveCombo != null)
             {
                 _selectedItem.AbbreviationCaseSensitive = SnippetAbbreviationCaseSensitiveCombo.SelectedIndex switch
                 {
@@ -2304,7 +2426,8 @@ public partial class SettingsWindow : Window
 
     private async Task<bool> SaveConfigurationCoreAsync()
     {
-        var currentVm = FindViewModel(_selectedItem);
+        var itemToSave = _selectedItem;
+        var currentVm = FindViewModel(itemToSave);
         if (currentVm?.IsRecycledItem == true || currentVm?.IsRecycleBinRoot == true)
         {
             SetDirty(false);
@@ -2328,15 +2451,18 @@ public partial class SettingsWindow : Window
             await _repository.SaveAsync(_items);
             RegisterShortcuts();
             _abbreviationExpander?.UpdateSnippets(_items);
+            (Application.Current as App)?.SetCachedItems(_items);
             RefreshTreeConflictStates();
             StatusText.Text = $"Saved and registered {_items.Count} items at {DateTime.Now:HH:mm:ss}";
-            if (_selectedItem != null)
+            if (itemToSave != null)
             {
-                _originalItemSnapshot = _selectedItem.Clone();
+                _originalItemSnapshot = itemToSave.Clone();
             }
             _newUnsavedItemId = null;
             RefreshTreeBrokenStates();
             SetDirty(false);
+            _logger.Information("Saved configuration successfully. Item='{Name}', Abbr='{Abbr}', Mode={Mode}, CaseSensitive={Case}",
+                itemToSave?.Name, itemToSave?.Abbreviation, itemToSave?.AbbreviationMode, itemToSave?.AbbreviationCaseSensitive);
             return true;
         }
         catch (Exception ex)
@@ -2421,6 +2547,7 @@ public partial class SettingsWindow : Window
         try
         {
             _appSettings = await _repository.LoadSettingsAsync();
+            (Application.Current as App)?.UpdateCachedSettings(_appSettings);
             TriggerTreeItemViewModel.ShowShortcuts = _appSettings.ShowShortcutsInTree;
             UpdateToggleShortcutsButtonUi();
             RegisterShortcuts();
@@ -2462,6 +2589,7 @@ public partial class SettingsWindow : Window
         try
         {
             _appSettings = await _repository.LoadSettingsAsync();
+            (Application.Current as App)?.UpdateCachedSettings(_appSettings);
             TriggerTreeItemViewModel.ShowShortcuts = _appSettings.ShowShortcutsInTree;
             UpdateToggleShortcutsButtonUi();
             RegisterShortcuts();
@@ -3749,6 +3877,7 @@ public partial class SettingsWindow : Window
             SnippetEditor.Initialize(SnippetContentType.PlainText, string.Empty, string.Empty);
             if (SnippetAbbreviationBox != null) SnippetAbbreviationBox.Text = string.Empty;
             if (SnippetModeDelimiterRadio != null) SnippetModeDelimiterRadio.IsChecked = true;
+            if (SnippetAbbreviationCaseSensitiveCombo != null) SnippetAbbreviationCaseSensitiveCombo.SelectedIndex = 0;
             if (SnippetAbbreviationGroup != null) SnippetAbbreviationGroup.Visibility = Visibility.Collapsed;
             AllowedProcessesTagInput.SetTags(new List<string>());
             ExcludedProcessesTagInput.SetTags(new List<string>());
@@ -5811,10 +5940,7 @@ public partial class SettingsWindow : Window
         {
             _ = _repository.SaveAsync(_items);
         }
-        if (_appSettings != null)
-        {
-            _ = _repository.SaveSettingsAsync(_appSettings);
-        }
+
 
         // Minimize/Hide to tray instead of closing
         e.Cancel = true;

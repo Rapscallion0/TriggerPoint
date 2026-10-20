@@ -648,12 +648,12 @@ public class ClipboardHistoryService : IClipboardHistoryService
             // Restore focus to target window if specified
             if (targetHwnd.HasValue && targetHwnd.Value != IntPtr.Zero)
             {
-                NativeMethods.SetForegroundWindow(targetHwnd.Value);
-                await Task.Delay(50).ConfigureAwait(false);
+                await RestoreFocusToWindowAsync(targetHwnd.Value).ConfigureAwait(false);
             }
 
-            // Give clipboard a moment to settle
-            await Task.Delay(30).ConfigureAwait(false);
+            // Give clipboard a moment to settle and release any lingering modifier keys (e.g. Shift from Shift+Enter)
+            ReleaseLingeringModifiers();
+            await Task.Delay(35).ConfigureAwait(false);
 
             // Send Ctrl + V
             SendPasteCommand();
@@ -672,6 +672,67 @@ public class ClipboardHistoryService : IClipboardHistoryService
             _logger.Error(ex, "Error while pasting clipboard history item.");
             _suppressNextCapture = false;
             return false;
+        }
+    }
+
+    private static async Task RestoreFocusToWindowAsync(IntPtr hWnd)
+    {
+        if (hWnd == IntPtr.Zero) return;
+
+        NativeMethods.AllowSetForegroundWindow(NativeMethods.ASFW_ANY);
+
+        uint targetThreadId = NativeMethods.GetWindowThreadProcessId(hWnd, out _);
+        uint currentThreadId = NativeMethods.GetCurrentThreadId();
+
+        if (targetThreadId != currentThreadId)
+        {
+            NativeMethods.AttachThreadInput(currentThreadId, targetThreadId, true);
+            NativeMethods.BringWindowToTop(hWnd);
+            NativeMethods.SetForegroundWindow(hWnd);
+            NativeMethods.AttachThreadInput(currentThreadId, targetThreadId, false);
+        }
+        else
+        {
+            NativeMethods.BringWindowToTop(hWnd);
+            NativeMethods.SetForegroundWindow(hWnd);
+        }
+
+        // Poll briefly until the target window becomes foreground or timeout
+        for (int i = 0; i < 6; i++)
+        {
+            if (NativeMethods.GetForegroundWindow() == hWnd)
+                break;
+            await Task.Delay(25).ConfigureAwait(false);
+        }
+
+        // Brief delay to let the target application stabilize focus
+        await Task.Delay(25).ConfigureAwait(false);
+    }
+
+    private void ReleaseLingeringModifiers()
+    {
+        var modifiers = new byte[] { NativeMethods.VK_CONTROL, NativeMethods.VK_SHIFT, NativeMethods.VK_MENU, NativeMethods.VK_LWIN, NativeMethods.VK_RWIN };
+        var inputs = new NativeMethods.INPUT[modifiers.Length];
+        for (int i = 0; i < modifiers.Length; i++)
+        {
+            inputs[i] = new NativeMethods.INPUT
+            {
+                type = NativeMethods.INPUT_KEYBOARD,
+                u = new NativeMethods.InputUnion
+                {
+                    ki = new NativeMethods.KEYBDINPUT
+                    {
+                        wVk = modifiers[i],
+                        dwFlags = NativeMethods.KEYEVENTF_KEYUP
+                    }
+                }
+            };
+        }
+        uint sent = NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
+        if (sent == 0)
+        {
+            int err = Marshal.GetLastWin32Error();
+            _logger.Warning("ReleaseLingeringModifiers SendInput failed with error {Err}", err);
         }
     }
 
