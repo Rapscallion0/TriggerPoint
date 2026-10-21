@@ -44,6 +44,10 @@ public class ScriptEngineTests
         public void ShowError(string title, string message) => Notifications.Add($"ERROR:{title}:{message}");
         public void ShowWarning(string title, string message) => Notifications.Add($"WARN:{title}:{message}");
         public void ShowInfo(string title, string message) => Notifications.Add($"INFO:{title}:{message}");
+        public void ShowActionToast(string title, string message, string actionButtonText, Action onAction, string? cancelButtonText = "Dismiss", Action? onCancel = null, bool keepOpenUntilHoverOrDismiss = false)
+        {
+            Notifications.Add($"ACTION:{title}:{message}:{actionButtonText}");
+        }
         public IToastProgressHandle ShowProgress(string title, string message, Action? onCancel = null, string cancelButtonText = "Cancel")
         {
             Notifications.Add($"PROGRESS:{title}:{message}");

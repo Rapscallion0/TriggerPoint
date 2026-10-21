@@ -142,6 +142,14 @@ public interface IToastNotificationService
     void ShowWarning(string title, string message);
     void ShowInfo(string title, string message);
     IToastProgressHandle? ShowProgress(string title, string message, Action? onCancel = null, string cancelButtonText = "Cancel");
+    void ShowActionToast(
+        string title, 
+        string message, 
+        string actionButtonText, 
+        Action onAction, 
+        string? cancelButtonText = "Dismiss", 
+        Action? onCancel = null,
+        bool keepOpenUntilHoverOrDismiss = false);
 }
 
 public interface IConfirmationDialogService

@@ -954,14 +954,11 @@
                                     <TextBlock Text="Menu Item Quick-Access Keys" FontWeight="SemiBold"/>
                                     <Button x:Name="AutoNumberInfoBtn" 
                                             Content="ⓘ" 
+                                            Style="{StaticResource LinkButtonStyle}"
                                             FontSize="12" 
                                             FontWeight="Bold"
-                                            Foreground="{DynamicResource AccentBrush}"
-                                            Background="Transparent"
-                                            BorderThickness="0"
                                             Padding="4,0"
                                             Margin="4,0,0,0"
-                                            Cursor="Hand"
                                             ToolTip="Click for details on auto-numbering modes and conflict resolution"
                                             Click="AutoNumberInfoBtn_Click"/>
                                 </StackPanel>
@@ -983,7 +980,13 @@
                                     <StackPanel>
                                         <Grid Margin="0,0,0,6">
                                             <TextBlock Text="Quick-Access Keys &amp; Modes" FontWeight="Bold" FontSize="12" Foreground="{DynamicResource AccentBrush}"/>
-                                            <Button Content="✕" HorizontalAlignment="Right" Background="Transparent" BorderThickness="0" Foreground="{DynamicResource TextMutedBrush}" Cursor="Hand" Click="CloseAutoNumberInfoCard_Click"/>
+                                            <Button Content="✕" 
+                                                    Style="{StaticResource GhostIconButtonStyle}"
+                                                    HorizontalAlignment="Right" 
+                                                    Width="20" Height="20"
+                                                    FontSize="10"
+                                                    ToolTip="Dismiss"
+                                                    Click="CloseAutoNumberInfoCard_Click"/>
                                         </Grid>
                                         <TextBlock Text="• Off: Only child items with an explicit Menu Quick-Key can be triggered by key." FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4" TextWrapping="Wrap"/>
                                         <TextBlock Text="• Smart Fill: User-defined quick-keys take priority. All unassigned child items are automatically assigned the next available key in sequence (1-9, A-Z) with no collisions." FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4" TextWrapping="Wrap"/>

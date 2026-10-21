@@ -242,6 +242,8 @@ public class SettingsIconAndThemeTests
                 winDark.Show();
                 winDark.UpdateLayout();
                 btnDark.ApplyTemplate();
+                (FindVisualChild<System.Windows.Controls.ContentPresenter>(btnDark))?.ApplyTemplate();
+                System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
 
                 Assert.IsType<SolidColorBrush>(tbDark.Foreground);
                 Assert.Equal(Color.FromRgb(242, 243, 245), ((SolidColorBrush)tbDark.Foreground).Color);
@@ -255,6 +257,8 @@ public class SettingsIconAndThemeTests
                 ThemeManager.ApplyTheme(AppTheme.Light);
                 winDark.UpdateLayout();
                 btnDark.ApplyTemplate();
+                (FindVisualChild<System.Windows.Controls.ContentPresenter>(btnDark))?.ApplyTemplate();
+                System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
 
                 Assert.IsType<SolidColorBrush>(tbDark.Foreground);
                 Assert.Equal(Color.FromRgb(15, 23, 42), ((SolidColorBrush)tbDark.Foreground).Color);

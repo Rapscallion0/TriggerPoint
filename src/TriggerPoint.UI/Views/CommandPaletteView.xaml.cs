@@ -877,6 +877,12 @@ public partial class CommandPaletteView : Window
         {
             AppSettingsUpdateBadge.Visibility = Visibility.Visible;
             AppSettingsBtn.ToolTip = $"Application Settings (Update v{App.LatestAvailableUpdate.LatestUpdate.Version} available)";
+
+            if (!_dismissedUpdateBannerSession && !App.LatestAvailableUpdate.IsIgnored)
+            {
+                UpdateBannerText.Text = $"TriggerPoint v{App.LatestAvailableUpdate.LatestUpdate.Version} is available!";
+                UpdateNotificationBanner.Visibility = Visibility.Visible;
+            }
         }
 
         Loaded += (s, e) =>
@@ -2985,6 +2991,20 @@ public partial class CommandPaletteView : Window
             ? ApplicationSettingsWindow.SettingsCategory.Updates
             : ApplicationSettingsWindow.SettingsCategory.Appearance;
         (Application.Current as App)?.ShowApplicationSettingsWindow(initialCategory);
+    }
+
+    private static bool _dismissedUpdateBannerSession = false;
+
+    private void UpdateBannerActionBtn_Click(object sender, RoutedEventArgs e)
+    {
+        SafeClose();
+        (Application.Current as App)?.ShowLatestUpdateDialog();
+    }
+
+    private void DismissUpdateBannerBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _dismissedUpdateBannerSession = true;
+        UpdateNotificationBanner.Visibility = Visibility.Collapsed;
     }
 
     private void ProductivityStatsBtn_Click(object sender, RoutedEventArgs e)

@@ -59,31 +59,62 @@ public partial class ServiceProgressHudWindow : Window, IToastProgressHandle
 
     private void Reposition()
     {
-        double dpiScale = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
+        // Measure visual tree to determine true content bounds for accurate centering
+        Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        double winWidth = ActualWidth > 0 ? ActualWidth : DesiredSize.Width;
+        double winHeight = ActualHeight > 0 ? ActualHeight : DesiredSize.Height;
+        if (winWidth <= 0) winWidth = MinWidth > 0 ? MinWidth : 400;
+        if (winHeight <= 0) winHeight = MinHeight > 0 ? MinHeight : 100;
 
+        IntPtr hMonitor = IntPtr.Zero;
         if (NativeMethods.GetCursorPos(out var pt))
         {
-            var hMon = NativeMethods.MonitorFromPoint(pt, NativeMethods.MONITOR_DEFAULTTONEAREST);
-            var mi = new NativeMethods.MONITORINFO { cbSize = Marshal.SizeOf<NativeMethods.MONITORINFO>() };
-            if (NativeMethods.GetMonitorInfo(hMon, ref mi))
-            {
-                double workLeft = mi.rcWork.Left / dpiScale;
-                double workWidth = (mi.rcWork.Right - mi.rcWork.Left) / dpiScale;
-                double workTop = mi.rcWork.Top / dpiScale;
-                double workHeight = (mi.rcWork.Bottom - mi.rcWork.Top) / dpiScale;
-
-                UpdateLayout();
-                double w = ActualWidth > 0 ? ActualWidth : 420;
-
-                Left = workLeft + ((workWidth - w) / 2.0);
-                Top = workTop + Math.Max(24.0, workHeight * 0.12);
-                return;
-            }
+            hMonitor = NativeMethods.MonitorFromPoint(pt, NativeMethods.MONITOR_DEFAULTTONEAREST);
         }
 
-        // Fallback to Primary Screen
-        Left = (SystemParameters.WorkArea.Width - (ActualWidth > 0 ? ActualWidth : 420)) / 2.0;
-        Top = Math.Max(24.0, SystemParameters.WorkArea.Height * 0.12);
+        double workLeft, workTop, workWidth, workHeight;
+        var primaryWorkArea = SystemParameters.WorkArea;
+
+        var monitorInfo = new NativeMethods.MONITORINFO { cbSize = Marshal.SizeOf<NativeMethods.MONITORINFO>() };
+        if (hMonitor != IntPtr.Zero && NativeMethods.GetMonitorInfo(hMonitor, ref monitorInfo))
+        {
+            bool isPrimary = (monitorInfo.dwFlags & 1) != 0;
+            if (isPrimary)
+            {
+                // Native WPF WorkArea is in DIPs, excludes taskbar, and is perfectly accurate for the primary display
+                workLeft = primaryWorkArea.Left;
+                workTop = primaryWorkArea.Top;
+                workWidth = primaryWorkArea.Width;
+                workHeight = primaryWorkArea.Height;
+            }
+            else
+            {
+                NativeMethods.GetMonitorDpi(hMonitor, out uint dpiX, out _);
+                double scale = dpiX > 0 ? (dpiX / 96.0) : 1.0;
+                workLeft = monitorInfo.rcWork.Left / scale;
+                workTop = monitorInfo.rcWork.Top / scale;
+                workWidth = (monitorInfo.rcWork.Right - monitorInfo.rcWork.Left) / scale;
+                workHeight = (monitorInfo.rcWork.Bottom - monitorInfo.rcWork.Top) / scale;
+            }
+        }
+        else
+        {
+            workLeft = primaryWorkArea.Left;
+            workTop = primaryWorkArea.Top;
+            workWidth = primaryWorkArea.Width;
+            workHeight = primaryWorkArea.Height;
+        }
+
+        double targetLeft = workLeft + Math.Max(0, (workWidth - winWidth) / 2.0);
+        double targetTop = workTop + Math.Max(0, (workHeight - winHeight) / 2.0);
+
+        if (targetLeft < workLeft) targetLeft = workLeft;
+        if (targetLeft + winWidth > workLeft + workWidth) targetLeft = workLeft + Math.Max(0, workWidth - winWidth);
+        if (targetTop < workTop) targetTop = workTop;
+        if (targetTop + winHeight > workTop + workHeight) targetTop = workTop + Math.Max(0, workHeight - winHeight);
+
+        Left = targetLeft;
+        Top = targetTop;
     }
 
     public void ReportSuccess(string message)

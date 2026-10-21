@@ -4,7 +4,7 @@
 ; =====================================================================
 
 #ifndef AppVersion
-#define AppVersion "2.2.5"
+#define AppVersion "2.2.6"
 #endif
 
 #ifndef PublishDir
@@ -64,7 +64,7 @@ Name: "{autoprograms}\TriggerPoint\Uninstall TriggerPoint"; Filename: "{uninstal
 Name: "{autodesktop}\TriggerPoint"; Filename: "{app}\TriggerPoint.exe"; IconFilename: "{app}\TriggerPoint.ico"; Tasks: desktopicon
 
 [Registry]
-Root: HKA; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "TriggerPoint"; ValueData: """{app}\TriggerPoint.exe"" --minimized"; Tasks: autostart; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "TriggerPoint"; ValueData: """{app}\TriggerPoint.exe"" --autostart --minimized"; Tasks: autostart; Flags: uninsdeletevalue
 Root: HKCU; Subkey: "Software\Classes\*\shell\TriggerPoint"; ValueType: string; ValueData: "Add to TriggerPoint"; Tasks: explorermenu; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\*\shell\TriggerPoint"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\TriggerPoint.exe"""; Tasks: explorermenu; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\*\shell\TriggerPoint\command"; ValueType: string; ValueData: """{app}\TriggerPoint.exe"" --add-action ""%1"""; Tasks: explorermenu; Flags: uninsdeletekey

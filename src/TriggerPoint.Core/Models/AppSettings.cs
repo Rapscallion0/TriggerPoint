@@ -105,6 +105,7 @@ public class AppSettings
     public string? IgnoredUpdateVersion { get; set; }
     public bool IncludePreReleases { get; set; } = false;
     public bool SilentInstallUpdates { get; set; } = true;
+    public bool ShowUpdateDialogOnStartup { get; set; } = true;
     public string? LastKnownAppVersion { get; set; }
 
     public void Normalize()

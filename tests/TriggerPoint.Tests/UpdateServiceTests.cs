@@ -425,6 +425,43 @@ public class UpdateServiceTests : IDisposable
         Assert.Equal(string.Empty, args);
     }
 
+    [Fact]
+    public async Task AppSettings_ShowUpdateDialogOnStartup_DefaultsToTrue_AndRoundTrips()
+    {
+        var settings = new AppSettings();
+        Assert.True(settings.ShowUpdateDialogOnStartup);
+
+        settings.ShowUpdateDialogOnStartup = false;
+        await _repo.SaveSettingsAsync(settings);
+
+        var loaded = await _repo.LoadSettingsAsync();
+        Assert.False(loaded.ShowUpdateDialogOnStartup);
+    }
+
+    [Theory]
+    [InlineData(new string[] { "--autostart" }, true)]
+    [InlineData(new string[] { "--minimized" }, true)]
+    [InlineData(new string[] { "--autostart", "--minimized" }, true)]
+    [InlineData(new string[] { "--AUTOSTART" }, true)]
+    [InlineData(new string[] { "--MINIMIZED" }, true)]
+    public void IsWindowsStartupLaunch_WithExplicitFlags_ReturnsTrue(string[] args, bool expected)
+    {
+        var settings = new AppSettings { RunAtStartup = false };
+        bool result = TriggerPoint.UI.App.IsWindowsStartupLaunch(args, settings);
+        Assert.Equal(expected, result);
+    }
+
+    [Fact]
+    public void IsWindowsStartupLaunch_ManualLaunchWithoutFlags_ReturnsFalseWhenUptimeHigh()
+    {
+        // When RunAtStartup is false, manual launch never identifies as autostart
+        var settings = new AppSettings { RunAtStartup = false };
+        string[] emptyArgs = [];
+
+        bool result = TriggerPoint.UI.App.IsWindowsStartupLaunch(emptyArgs, settings);
+        Assert.False(result);
+    }
+
     private class MockHttpMessageHandler : HttpMessageHandler
     {
         private readonly string _responseContent;

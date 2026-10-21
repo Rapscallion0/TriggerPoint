@@ -582,6 +582,9 @@ public class TreeDensityAndDisabledItemTests
                 win.UpdateLayout();
                 btnEnabled.ApplyTemplate();
                 btnDisabled.ApplyTemplate();
+                (FindVisualChild<ContentPresenter>(btnEnabled))?.ApplyTemplate();
+                (FindVisualChild<ContentPresenter>(btnDisabled))?.ApplyTemplate();
+                System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
 
                 // Inspect visual children of enabled button (may be TextBlock or AccessText depending on RecognizesAccessKey)
                 var tbEnabled = (DependencyObject?)FindVisualChild<TextBlock>(btnEnabled) ?? FindVisualChild<AccessText>(btnEnabled);

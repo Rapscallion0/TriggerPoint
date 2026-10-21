@@ -39,6 +39,82 @@ public class ToastNotificationService : IToastNotificationService
         ShowToast(ToastType.Information, title, message);
     }
 
+    public void ShowActionToast(
+        string title, 
+        string message, 
+        string actionButtonText, 
+        Action onAction, 
+        string? cancelButtonText = "Dismiss", 
+        Action? onCancel = null,
+        bool keepOpenUntilHoverOrDismiss = false)
+    {
+        if (Application.Current == null) return;
+
+        Application.Current.Dispatcher.InvokeAsync(async () =>
+        {
+            try
+            {
+                var placement = ToastMonitorPlacement.PrimaryMonitor;
+                if (_configRepository != null)
+                {
+                    try
+                    {
+                        var settings = await _configRepository.LoadSettingsAsync().ConfigureAwait(true);
+                        placement = settings.ToastPlacement;
+                    }
+                    catch { }
+                }
+
+                double verticalOffset = 0;
+                lock (_lock)
+                {
+                    _activeToasts.RemoveAll(t => !t.IsVisible && t.IsLoaded);
+                    while (_activeToasts.Count >= 3)
+                    {
+                        var oldest = _activeToasts[0];
+                        _activeToasts.RemoveAt(0);
+                        try { oldest.Close(); } catch { }
+                    }
+
+                    foreach (var active in _activeToasts)
+                    {
+                        double h = active.ActualHeight > 0 ? active.ActualHeight : 80;
+                        verticalOffset += h + 8;
+                    }
+                }
+
+                var toast = new ToastNotificationWindow(
+                    ToastType.Information,
+                    title,
+                    message,
+                    placement,
+                    verticalOffset,
+                    onCancel,
+                    cancelButtonText ?? "Dismiss",
+                    autoClose: !keepOpenUntilHoverOrDismiss,
+                    onPrimaryAction: onAction,
+                    primaryActionText: actionButtonText,
+                    keepOpenUntilHoverOrDismiss: keepOpenUntilHoverOrDismiss);
+
+                lock (_lock)
+                {
+                    _activeToasts.Add(toast);
+                }
+
+                toast.Closed += (s, e) =>
+                {
+                    lock (_lock)
+                    {
+                        _activeToasts.Remove(toast);
+                    }
+                };
+
+                toast.Show();
+            }
+            catch { }
+        });
+    }
+
     public IToastProgressHandle? ShowProgress(string title, string message, Action? onCancel = null, string cancelButtonText = "Cancel")
     {
         if (Application.Current == null) return null;

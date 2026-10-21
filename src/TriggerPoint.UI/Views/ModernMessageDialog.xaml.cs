@@ -90,15 +90,21 @@ public partial class ModernMessageDialog : Window
 
     private void CenterOnOwnerOrActiveScreen()
     {
-        double winWidth = ActualWidth > 0 ? ActualWidth : Width;
-        double winHeight = ActualHeight > 0 ? ActualHeight : Height;
-        if (winWidth <= 0) winWidth = 460;
-        if (winHeight <= 0) winHeight = 220;
+        // Measure visual tree to determine true content bounds for accurate centering
+        Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        double winWidth = ActualWidth > 0 ? ActualWidth : DesiredSize.Width;
+        double winHeight = ActualHeight > 0 ? ActualHeight : DesiredSize.Height;
+        if (winWidth <= 0) winWidth = MinWidth > 0 ? MinWidth : 420;
+        if (winHeight <= 0) winHeight = MinHeight > 0 ? MinHeight : 180;
+
+        if (Owner != null && Owner.IsLoaded && Owner.WindowState == WindowState.Normal)
+        {
+            Left = Owner.Left + (Owner.ActualWidth - winWidth) / 2.0;
+            Top = Owner.Top + (Owner.ActualHeight - winHeight) / 2.0;
+            return;
+        }
 
         IntPtr hMonitor = IntPtr.Zero;
-        double workLeft, workTop, workWidth, workHeight;
-        double dpiScale = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
-
         if (Owner != null && Owner.IsLoaded && Owner.WindowState != WindowState.Minimized)
         {
             var ownerHwnd = new WindowInteropHelper(Owner).Handle;
@@ -108,43 +114,46 @@ public partial class ModernMessageDialog : Window
             }
         }
 
-        if (hMonitor == IntPtr.Zero)
+        if (hMonitor == IntPtr.Zero && NativeMethods.GetCursorPos(out var pt))
         {
-            if (NativeMethods.GetCursorPos(out var pt))
-            {
-                hMonitor = NativeMethods.MonitorFromPoint(pt, NativeMethods.MONITOR_DEFAULTTONEAREST);
-            }
+            hMonitor = NativeMethods.MonitorFromPoint(pt, NativeMethods.MONITOR_DEFAULTTONEAREST);
         }
+
+        double workLeft, workTop, workWidth, workHeight;
+        var primaryWorkArea = SystemParameters.WorkArea;
 
         var monitorInfo = new NativeMethods.MONITORINFO { cbSize = Marshal.SizeOf<NativeMethods.MONITORINFO>() };
         if (hMonitor != IntPtr.Zero && NativeMethods.GetMonitorInfo(hMonitor, ref monitorInfo))
         {
-            workLeft = monitorInfo.rcWork.Left / dpiScale;
-            workTop = monitorInfo.rcWork.Top / dpiScale;
-            workWidth = (monitorInfo.rcWork.Right - monitorInfo.rcWork.Left) / dpiScale;
-            workHeight = (monitorInfo.rcWork.Bottom - monitorInfo.rcWork.Top) / dpiScale;
+            bool isPrimary = (monitorInfo.dwFlags & 1) != 0;
+            if (isPrimary)
+            {
+                // Native WPF WorkArea is in DIPs, excludes taskbar, and is perfectly accurate for the primary display
+                workLeft = primaryWorkArea.Left;
+                workTop = primaryWorkArea.Top;
+                workWidth = primaryWorkArea.Width;
+                workHeight = primaryWorkArea.Height;
+            }
+            else
+            {
+                NativeMethods.GetMonitorDpi(hMonitor, out uint dpiX, out _);
+                double scale = dpiX > 0 ? (dpiX / 96.0) : 1.0;
+                workLeft = monitorInfo.rcWork.Left / scale;
+                workTop = monitorInfo.rcWork.Top / scale;
+                workWidth = (monitorInfo.rcWork.Right - monitorInfo.rcWork.Left) / scale;
+                workHeight = (monitorInfo.rcWork.Bottom - monitorInfo.rcWork.Top) / scale;
+            }
         }
         else
         {
-            workLeft = SystemParameters.WorkArea.Left;
-            workTop = SystemParameters.WorkArea.Top;
-            workWidth = SystemParameters.WorkArea.Width;
-            workHeight = SystemParameters.WorkArea.Height;
+            workLeft = primaryWorkArea.Left;
+            workTop = primaryWorkArea.Top;
+            workWidth = primaryWorkArea.Width;
+            workHeight = primaryWorkArea.Height;
         }
 
-        double targetLeft;
-        double targetTop;
-
-        if (Owner != null && Owner.IsLoaded && Owner.WindowState == WindowState.Normal)
-        {
-            targetLeft = Owner.Left + (Owner.ActualWidth - winWidth) / 2.0;
-            targetTop = Owner.Top + (Owner.ActualHeight - winHeight) / 2.0;
-        }
-        else
-        {
-            targetLeft = workLeft + (workWidth - winWidth) / 2.0;
-            targetTop = workTop + (workHeight - winHeight) / 2.0;
-        }
+        double targetLeft = workLeft + Math.Max(0, (workWidth - winWidth) / 2.0);
+        double targetTop = workTop + Math.Max(0, (workHeight - winHeight) / 2.0);
 
         if (targetLeft < workLeft) targetLeft = workLeft;
         if (targetLeft + winWidth > workLeft + workWidth) targetLeft = workLeft + Math.Max(0, workWidth - winWidth);

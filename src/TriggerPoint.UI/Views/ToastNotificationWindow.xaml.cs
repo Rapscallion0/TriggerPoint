@@ -29,6 +29,9 @@ public partial class ToastNotificationWindow : Window
     public bool IsClosing => _isClosing;
 
     private readonly Action? _onCancel;
+    private readonly Action? _onPrimaryAction;
+    private readonly bool _keepOpenUntilHoverOrDismiss;
+    private bool _hasBeenHovered;
 
     public ToastNotificationWindow(
         ToastType type, 
@@ -38,11 +41,16 @@ public partial class ToastNotificationWindow : Window
         double verticalOffset = 0.0,
         Action? onCancel = null,
         string cancelButtonText = "Cancel",
-        bool autoClose = true)
+        bool autoClose = true,
+        Action? onPrimaryAction = null,
+        string? primaryActionText = null,
+        bool keepOpenUntilHoverOrDismiss = false)
     {
         _placement = placement;
         _verticalOffset = verticalOffset;
         _onCancel = onCancel;
+        _onPrimaryAction = onPrimaryAction;
+        _keepOpenUntilHoverOrDismiss = keepOpenUntilHoverOrDismiss;
 
         InitializeComponent();
 
@@ -50,15 +58,27 @@ public partial class ToastNotificationWindow : Window
         MessageText.Text = message;
         ApplyToastTypeStyle(type);
 
+        if (!string.IsNullOrWhiteSpace(primaryActionText) && onPrimaryAction != null)
+        {
+            PrimaryActionBtn.Visibility = Visibility.Visible;
+            PrimaryActionBtn.Content = primaryActionText;
+        }
+
         if (onCancel != null)
         {
             CancelActionBtn.Visibility = Visibility.Visible;
             CancelActionBtn.Content = cancelButtonText;
         }
 
-        if (autoClose)
+        if (autoClose && !keepOpenUntilHoverOrDismiss)
         {
             _timer.Interval = type == ToastType.Error ? TimeSpan.FromSeconds(5.0) : TimeSpan.FromSeconds(3.2);
+            _timer.Tick += (s, e) => Dismiss();
+        }
+        else if (keepOpenUntilHoverOrDismiss)
+        {
+            // Stay open indefinitely until hovered or dismissed.
+            // When mouse enters, _hasBeenHovered becomes true.
             _timer.Tick += (s, e) => Dismiss();
         }
     }
@@ -196,13 +216,50 @@ public partial class ToastNotificationWindow : Window
         BeginAnimation(OpacityProperty, fadeOut);
     }
 
+    private void PrimaryActionBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _onPrimaryAction?.Invoke();
+        Dismiss();
+    }
+
     private void DismissBtn_Click(object sender, RoutedEventArgs e)
     {
+        _onCancel?.Invoke();
         Dismiss();
+    }
+
+    private void Window_MouseEnter(object sender, MouseEventArgs e)
+    {
+        _hasBeenHovered = true;
+        _timer.Stop();
+    }
+
+    private void Window_MouseLeave(object sender, MouseEventArgs e)
+    {
+        if (_keepOpenUntilHoverOrDismiss && _hasBeenHovered)
+        {
+            // Give 4 seconds grace period after mouse leaves
+            _timer.Interval = TimeSpan.FromSeconds(4.0);
+            _timer.Start();
+        }
     }
 
     private void Window_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        // If clicking a button directly, let the button handle it
+        if (e.OriginalSource is DependencyObject dep)
+        {
+            var btn = VisualTreeHelper.GetParent(dep) as System.Windows.Controls.Primitives.ButtonBase;
+            if (btn != null || dep is System.Windows.Controls.Primitives.ButtonBase)
+            {
+                return;
+            }
+        }
+
+        if (_onPrimaryAction != null)
+        {
+            _onPrimaryAction.Invoke();
+        }
         Dismiss();
     }
 }

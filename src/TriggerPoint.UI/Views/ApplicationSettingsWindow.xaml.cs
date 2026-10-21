@@ -821,6 +821,7 @@ public partial class ApplicationSettingsWindow : Window
                 _ => UpdateCheckFrequency.Daily
             };
             _currentSettings.SilentInstallUpdates = SilentInstallUpdatesCheck.IsChecked == true;
+            _currentSettings.ShowUpdateDialogOnStartup = ShowUpdateDialogOnStartupCheck.IsChecked == true;
             _currentSettings.IncludePreReleases = IncludePreReleasesCheck.IsChecked == true;
 
             // Clipboard history settings
@@ -1190,7 +1191,7 @@ public partial class ApplicationSettingsWindow : Window
         try
         {
             var exePath = Environment.ProcessPath;
-            string args = startMinimized ? " --minimized" : "";
+            string args = " --autostart" + (startMinimized ? " --minimized" : "");
 
             if (enable && runAsAdmin)
             {
@@ -1355,6 +1356,7 @@ public partial class ApplicationSettingsWindow : Window
         };
 
         SilentInstallUpdatesCheck.IsChecked = _currentSettings.SilentInstallUpdates;
+        ShowUpdateDialogOnStartupCheck.IsChecked = _currentSettings.ShowUpdateDialogOnStartup;
         IncludePreReleasesCheck.IsChecked = _currentSettings.IncludePreReleases;
 
         // Ignored version banner

@@ -31,6 +31,7 @@ public class WorkflowVariablesTests
         public void ShowWarning(string title, string message) { }
         public void ShowInfo(string title, string message) { }
         public IToastProgressHandle ShowProgress(string title, string message, Action? onCancel = null, string cancelButtonText = "Cancel") => new DummyProgressHandle();
+        public void ShowActionToast(string title, string message, string actionButtonText, Action onAction, string? cancelButtonText = "Dismiss", Action? onCancel = null, bool keepOpenUntilHoverOrDismiss = false) { }
         private class DummyProgressHandle : IToastProgressHandle
         {
             public void Dispose() { }

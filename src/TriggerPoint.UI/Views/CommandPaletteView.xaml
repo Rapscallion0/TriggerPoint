@@ -538,28 +538,75 @@
                 <RowDefinition Height="Auto"/> <!-- Contextual Footer Bar -->
             </Grid.RowDefinitions>
 
-            <!-- Row 0: Search Input & Controls Box -->
-            <Border Grid.Row="0"
-                    x:Name="SearchBoxBorder"
-                    Panel.ZIndex="1"
-                    Background="{DynamicResource BgInputBrush}"
-                    CornerRadius="8"
-                    MinHeight="42"
-                    Height="42"
-                    Padding="10,0"
-                    Margin="0,0,0,7">
-                <Border.Style>
-                    <Style TargetType="Border">
-                        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
-                        <Setter Property="BorderThickness" Value="1"/>
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsKeyboardFocusWithin, ElementName=SearchTextBox}" Value="True">
-                                <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
-                                <Setter Property="BorderThickness" Value="1.5"/>
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </Border.Style>
+            <!-- Row 0: Optional Update Banner + Search Input & Controls Box -->
+            <StackPanel Grid.Row="0">
+                <!-- Optional Update Notification Banner -->
+                <Border x:Name="UpdateNotificationBanner"
+                        Visibility="Collapsed"
+                        Background="{DynamicResource BgTertiaryBrush}"
+                        BorderBrush="{DynamicResource AccentBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="10,6"
+                        Margin="0,0,0,8">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0" Text="✨" FontSize="13" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock x:Name="UpdateBannerText" 
+                                       Text="TriggerPoint update available!" 
+                                       FontSize="12" 
+                                       FontWeight="SemiBold" 
+                                       Foreground="{DynamicResource TextPrimaryBrush}" 
+                                       VerticalAlignment="Center"/>
+                            <Button x:Name="UpdateBannerActionBtn" 
+                                    Content="Review &amp; Update" 
+                                    Style="{StaticResource LinkButtonStyle}" 
+                                    FontSize="11.5" 
+                                    FontWeight="Bold"
+                                    Margin="8,0,0,0" 
+                                    Padding="6,1" 
+                                    Click="UpdateBannerActionBtn_Click"/>
+                        </StackPanel>
+
+                        <Button Grid.Column="2" 
+                                x:Name="DismissUpdateBannerBtn" 
+                                Content="✕" 
+                                Style="{StaticResource GhostIconButtonStyle}" 
+                                Width="20" Height="20" 
+                                FontSize="10" 
+                                ToolTip="Dismiss for this session" 
+                                Click="DismissUpdateBannerBtn_Click"/>
+                    </Grid>
+                </Border>
+
+                <!-- Search Input & Controls Box -->
+                <Border x:Name="SearchBoxBorder"
+                        Panel.ZIndex="1"
+                        Background="{DynamicResource BgInputBrush}"
+                        CornerRadius="8"
+                        MinHeight="42"
+                        Height="42"
+                        Padding="10,0"
+                        Margin="0,0,0,7">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+                            <Setter Property="BorderThickness" Value="1"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsKeyboardFocusWithin, ElementName=SearchTextBox}" Value="True">
+                                    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                    <Setter Property="BorderThickness" Value="1.5"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/> <!-- Back Button (Scoped) -->
@@ -712,6 +759,7 @@
                     </StackPanel>
                 </Grid>
             </Border>
+            </StackPanel>
 
             <!-- @ Filter Prefix Autocomplete Popup -->
             <Popup x:Name="PrefixAutoCompletePopup"
@@ -1238,12 +1286,10 @@
 
                                          <!-- Folder Drill-Down Chevron (Clickable for mouse users) -->
                                          <Button Visibility="{Binding IsFolder}"
+                                                 Style="{StaticResource GhostIconButtonStyle}"
                                                  Click="FolderChevron_Click"
                                                  ToolTip="Drill into folder"
-                                                 Background="Transparent"
-                                                 BorderThickness="0"
                                                  Padding="4,1"
-                                                 Cursor="Hand"
                                                  VerticalAlignment="Center">
                                              <TextBlock Text="›" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/>
                                          </Button>
@@ -2187,13 +2233,12 @@
                                            Foreground="{DynamicResource TextPrimaryBrush}"/>
                             </StackPanel>
                             <Button x:Name="CloseHelpBtn" 
+                                    Style="{StaticResource GhostIconButtonStyle}"
                                     Click="CloseHelpBtn_Click" 
                                     HorizontalAlignment="Right" 
-                                    Background="Transparent" 
-                                    BorderThickness="0" 
-                                    Cursor="Hand" 
-                                    Padding="6,2">
-                                <TextBlock Text="✕" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/>
+                                    Width="24" Height="24"
+                                    ToolTip="Close (Esc)">
+                                <TextBlock Text="✕" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/>
                             </Button>
                         </Grid>
 
@@ -2691,14 +2736,13 @@
                                            Margin="0,1,0,0"/>
                             </StackPanel>
                             <Button x:Name="CloseUnitsOverlayBtn" 
+                                    Style="{StaticResource GhostIconButtonStyle}"
                                     Click="CloseUnitsOverlayBtn_Click" 
                                     HorizontalAlignment="Right" 
                                     VerticalAlignment="Top"
-                                    Background="Transparent" 
-                                    BorderThickness="0" 
-                                    Cursor="Hand" 
-                                    Padding="6,2">
-                                <TextBlock Text="✕" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/>
+                                    Width="24" Height="24"
+                                    ToolTip="Close (Esc)">
+                                <TextBlock Text="✕" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/>
                             </Button>
                         </Grid>
 
@@ -3119,13 +3163,11 @@
                                 </Button>
 
                                 <Button x:Name="CloseQuickLookBtn" 
+                                        Style="{StaticResource GhostIconButtonStyle}"
                                         Click="CloseQuickLookBtn_Click" 
-                                        Background="Transparent" 
-                                        BorderThickness="0" 
-                                        Cursor="Hand" 
-                                        Padding="6,2"
+                                        Width="24" Height="24"
                                         ToolTip="Close preview (Esc or Space)">
-                                    <TextBlock Text="✕" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/>
+                                    <TextBlock Text="✕" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/>
                                 </Button>
                             </StackPanel>
                         </Grid>

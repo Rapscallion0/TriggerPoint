@@ -198,11 +198,9 @@ public partial class App : Application
             runningVersion = v.Trim().TrimStart('v', 'V');
         }
 
-        bool isVersionUpgrade = false;
         if (!string.IsNullOrWhiteSpace(appSettings.LastKnownAppVersion) &&
             !string.Equals(appSettings.LastKnownAppVersion, runningVersion, StringComparison.OrdinalIgnoreCase))
         {
-            isVersionUpgrade = true;
             Log.Information("Version upgrade detected: v{OldVersion} -> v{NewVersion}. Creating pre-upgrade backup.",
                 appSettings.LastKnownAppVersion, runningVersion);
             try
@@ -231,7 +229,7 @@ public partial class App : Application
             catch { }
         }
 
-        bool isPostUpdate = isVersionUpgrade || startupArgs.Any(a => string.Equals(a, "--post-update", StringComparison.OrdinalIgnoreCase));
+        bool isPostUpdate = startupArgs.Any(a => string.Equals(a, "--post-update", StringComparison.OrdinalIgnoreCase));
 
         // Self-elevation via Task Scheduler if RunAsAdminAtStartup is configured and currently running un-elevated
         if (appSettings.RunAsAdminAtStartup && 
@@ -514,7 +512,7 @@ public partial class App : Application
             openAppSettingsAction: () => Dispatcher.Invoke(async () => await ShowApplicationSettingsWindowAsync()),
             commandPaletteHotkeyText: appSettings.CommandPaletteHotkey?.DisplayText ?? "Ctrl+Shift+Space",
             openSettingsHotkeyText: appSettings.OpenSettingsHotkey?.DisplayText ?? "Ctrl+Alt+T",
-            checkForUpdatesAction: () => Dispatcher.Invoke(async () => await PerformManualUpdateCheckAsync()),
+            checkForUpdatesAction: () => Dispatcher.InvokeAsync(async () => await PerformManualUpdateCheckAsync()),
             openCheatSheetAction: () => Dispatcher.Invoke(() => OpenCheatSheetHud()),
             cheatSheetHotkeyText: appSettings.CheatSheetHotkey?.DisplayText ?? "Ctrl+Shift+/",
             openClipboardAction: () => Dispatcher.Invoke(() => OpenCommandPalette(initialFilter: CommandPaletteFilterType.Clipboard)),
@@ -611,10 +609,25 @@ public partial class App : Application
                             _settingsWindow?.NotifyUpdateAvailable(result);
                             _trayIconService?.SetUpdateAvailable(result);
 
-                            // Unobtrusive toast that notifies the user
-                            toastService.ShowSuccess(
-                                "TriggerPoint Update Available",
-                                $"Version v{result.LatestUpdate.Version} is available! Open Action Manager to review improvements.");
+                            bool isAutostart = IsWindowsStartupLaunch(startupArgs, appSettings);
+
+                            if (!isAutostart && appSettings.ShowUpdateDialogOnStartup)
+                            {
+                                // Manual application launch: prompt with update dialog box
+                                ShowLatestUpdateDialog();
+                            }
+                            else
+                            {
+                                // Windows autostart / restart (or dialog prompt disabled):
+                                // Keep toast open until hover or dismissed, with 1-click Review & Update
+                                toastService.ShowActionToast(
+                                    "TriggerPoint Update Available",
+                                    $"Version v{result.LatestUpdate.Version} is available! Click to review improvements.",
+                                    actionButtonText: "Review & Update",
+                                    onAction: () => ShowLatestUpdateDialog(),
+                                    cancelButtonText: "Dismiss",
+                                    keepOpenUntilHoverOrDismiss: true);
+                            }
                         });
                     }
                 }
@@ -1056,32 +1069,98 @@ public partial class App : Application
         if (_serviceProvider == null || _repository == null) return;
         var updateService = _serviceProvider.GetRequiredService<IUpdateService>();
         var toastService = _serviceProvider.GetRequiredService<IToastNotificationService>();
+        var pathsService = _serviceProvider.GetService<IAppPathsService>();
+
+        // Immediate visual progress indicator so the user knows their click was registered
+        using var progressHandle = toastService.ShowProgress("TriggerPoint Updates", "Checking GitHub Releases for updates...");
 
         try
         {
             var result = await updateService.CheckForUpdatesAsync(isManualCheck: true);
-            if (result.IsUpdateAvailable)
+
+            // Close progress indicator before showing result dialog
+            progressHandle?.Dispose();
+
+            if (result.IsUpdateAvailable && result.LatestUpdate != null)
             {
                 LatestAvailableUpdate = result;
                 _settingsWindow?.NotifyUpdateAvailable(result);
                 _trayIconService?.SetUpdateAvailable(result);
 
-                var dlg = new UpdateAvailableDialog(result, updateService, _repository);
-                dlg.ShowDialog();
+                var dlg = new UpdateAvailableDialog(result, updateService, _repository, pathsService);
+                dlg.Show();
+                dlg.Activate();
             }
             else if (result.IsSuccess)
             {
-                toastService.ShowSuccess("TriggerPoint", $"You're up to date! TriggerPoint v{updateService.GetCurrentVersion()} is the newest release.");
+                LatestAvailableUpdate = result;
+                bool viewNotes = ModernMessageDialog.ShowConfirm(
+                    null,
+                    "TriggerPoint is Up to Date",
+                    $"You are running TriggerPoint v{updateService.GetCurrentVersion()}.\nNo newer releases were found on GitHub.\n\nWould you like to view the latest release notes?",
+                    primaryText: "📋 View Release Notes",
+                    secondaryText: "Close");
+
+                if (viewNotes && result.LatestUpdate != null)
+                {
+                    var viewDlg = new UpdateAvailableDialog(result, updateService, _repository, pathsService, isViewOnly: true);
+                    viewDlg.Show();
+                    viewDlg.Activate();
+                }
             }
             else
             {
-                toastService.ShowWarning("Update Check", result.ErrorMessage ?? "Could not check for updates.");
+                ModernMessageDialog.ShowAlert(
+                    null,
+                    "Update Check Failed",
+                    result.ErrorMessage ?? "Could not connect to GitHub to check for updates.",
+                    ModernDialogType.Warning);
             }
         }
         catch (Exception ex)
         {
             Log.Warning(ex, "Failed to perform manual update check.");
+            progressHandle?.Dispose();
+            ModernMessageDialog.ShowAlert(
+                null,
+                "Update Check Error",
+                $"An unexpected error occurred while checking for updates:\n{ex.Message}",
+                ModernDialogType.Error);
         }
+    }
+
+    public void ShowLatestUpdateDialog()
+    {
+        if (LatestAvailableUpdate == null || _serviceProvider == null || _repository == null) return;
+        var updateService = _serviceProvider.GetService<IUpdateService>();
+        if (updateService == null) return;
+        var pathsService = _serviceProvider.GetService<IAppPathsService>();
+
+        Dispatcher.Invoke(() =>
+        {
+            var dlg = new UpdateAvailableDialog(LatestAvailableUpdate, updateService, _repository, pathsService);
+            dlg.Show();
+            dlg.Activate();
+        });
+    }
+
+    public static bool IsWindowsStartupLaunch(string[] startupArgs, AppSettings appSettings)
+    {
+        // 1. Explicit CLI arguments registered in Windows Startup or Task Scheduler
+        if (startupArgs.Any(a => string.Equals(a, "--autostart", StringComparison.OrdinalIgnoreCase) ||
+                                 string.Equals(a, "--minimized", StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        // 2. Safeguard for existing installs: If RunAtStartup is configured and system uptime is < 5 minutes,
+        // TriggerPoint was spawned as part of the Windows user session boot sequence.
+        if (appSettings.RunAtStartup && Environment.TickCount64 < 300_000)
+        {
+            return true;
+        }
+
+        return false;
     }
 
     public async Task ReloadApplicationSettingsAndHotkeysAsync()

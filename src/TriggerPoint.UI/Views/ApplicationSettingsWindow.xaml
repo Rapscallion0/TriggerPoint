@@ -1174,6 +1174,13 @@
                                               Margin="0,0,0,8"
                                               ToolTip="Applies updates quietly without showing the installer setup wizard pages"/>
 
+                                    <!-- Show Update Dialog on Manual Launch -->
+                                    <CheckBox x:Name="ShowUpdateDialogOnStartupCheck" 
+                                              Content="Prompt with update dialog when manually launching TriggerPoint" 
+                                              FontSize="13" 
+                                              Margin="0,0,0,8"
+                                              ToolTip="When TriggerPoint is launched manually and an update is available, displays the full update dialog. Automatically suppressed on Windows boot/restart in favor of the notification toast and Command Palette banner."/>
+
                                     <!-- Include Pre-release Builds -->
                                     <CheckBox x:Name="IncludePreReleasesCheck" 
                                               Content="Include Pre-Release / Beta versions" 
