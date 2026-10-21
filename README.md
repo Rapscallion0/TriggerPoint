@@ -5,9 +5,9 @@
 
 [![.NET](https://img.shields.io/badge/.NET-9.0--windows-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011%20x64-0078D6?logo=windows)](https://microsoft.com/windows)
-[![Version](https://img.shields.io/badge/Version-v2.2.6-blue.svg)](https://github.com/Rapscallion0/TriggerPoint/releases/tag/v2.2.0)
+[![Version](https://img.shields.io/badge/Version-v2.2.6-blue.svg)](https://github.com/Rapscallion0/TriggerPoint/releases/tag/v2.2.6)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-705%20Passed%20(100%25)-brightgreen)]()
+[![Tests](https://img.shields.io/badge/Tests-839%20Passed%20(100%25)-brightgreen)]()
 
 ---
 
@@ -54,6 +54,25 @@ Designed to stay out of your way, TriggerPoint runs quietly in your system tray 
 - Launch grouped actions directly under your mouse cursor with custom accelerator keys.
 - Organize shortcuts into folders and hierarchical launcher menus.
 - **Sequential Quick-Keys (`1–9`, `A–Z`)**: Auto-numbers popup menus up to 35 direct access keys with `Off`, `Smart Fill`, and `Strict Positional` modes.
+
+### 📋 Smart Clipboard History & Quick Paste (`Ctrl+Shift+V`)
+- **System-Wide Win32 Clipboard Monitor**: Captures clipboard updates in real time with high performance and zero system latency.
+- **Rich Multi-Format Support**: Preserves Plain Text, Rich Text (RTF), HTML formatting, and Images (PNG/BMP) with thumbnail previews.
+- **Instant Search & Direct Paste**: Filter clippings in real time; press `Enter` to automatically paste the selected clip directly into the previous active application, or `Ctrl+C` to copy back to clipboard.
+- **Pinned Favorites**: Star/pin frequently needed templates, code snippets, or account IDs to prevent them from rolling off history.
+- **Privacy & Password Manager Protection**:
+  - Automatically respects standard Windows clipboard security flags (`Clipboard Viewer Ignore`, `CanIncludeInClipboardHistory = 0`, `ExcludeClipboardContentFromMonitorProcessing`).
+  - Automatically suppresses clipboard capture from popular password managers (1Password, Bitwarden, KeePass, KeePassXC, LastPass, Dashlane, Enpass).
+- **Flexible Retention & Storage Controls**: Configurable history capacity (5–500 items, default 50), retention duration (1–365 days), and maximum item size (1–50 MB) persisted in atomic JSON storage.
+
+### ⚡ Inline Abbreviation Expander / Live Text Expander
+- **Instant As-You-Type Expansion**: Automatically expands trigger abbreviations across any Windows application (e.g. typing `;email` or `/sig` instantly replaces with your dynamic template or rich snippet).
+- **Low-Level Precision Hooking**: Seamlessly intercepts keystrokes, calculates replacement length, and performs atomic backspace and insertion with automatic caret placement (`{cursor}`).
+- **Case-Sensitivity Control**: Toggle between strict case-sensitive triggers or case-insensitive matching.
+- **Safe Environment Guardrails**:
+  - Automatically excludes remote desktop and terminal sessions by default (`mstsc.exe`, `vmconnect.exe`, `putty.exe`) with customizable process lists.
+  - Automatically suppresses expansion during full-screen games to avoid accidental activation.
+- **Audio & Visual Feedback**: Optional subtle audible cues (clicks, pops, muted beeps) and visual indicators upon successful expansion.
 
 ### 📝 Dynamic Snippets, Plain Text & Rich Text Expansion
 - **Rich Text & Plain Text Modes**: Create rich text snippets with bold, italics, underline, strikethrough, custom text & highlight colors, font size presets, bulleted/numbered lists, and alignments.
@@ -102,11 +121,14 @@ Designed to stay out of your way, TriggerPoint runs quietly in your system tray 
 - System tray management with quick "Snooze Hotkeys" toggle.
 
 ### 🔄 In-App Update Checker & Auto-Updater
-- **Integrated GitHub Releases Engine**: Automatically queries GitHub for newly published releases and release notes.
+- **Integrated GitHub Releases Engine**: Automatically queries GitHub for newly published releases, metadata, and full Markdown release notes.
+- **Intelligent Startup Notifications**:
+  - Prompts with the full interactive `UpdateAvailableDialog` upon manual application launch.
+  - Keeps notifications unobtrusive during Windows autostart (`--autostart`) with interactive, persistent toasts containing a direct "Review & Update" action.
+  - Displays a clean update banner at the top of the Command Palette when an update is pending.
 - **Configurable Cadence**: Check on application startup, daily, weekly, or manual only.
-- **Full Markdown Release Notes**: Read complete changelogs, version numbers, and file sizes directly in the update dialog.
 - **One-Click In-App Upgrade**: Download and verify the setup installer with real-time progress, automated SHA-256 hash checks, silent installation, and automatic application restart.
-- **Contextual Actions**: Trigger on-demand checks from the System Tray menu or Application Settings at any time.
+- **Instant Tray Feedback**: Trigger on-demand checks from the System Tray menu or Application Settings with immediate progress HUD feedback.
 
 ### 📦 Dual-Scope Single-File Installer
 - Packaged with Inno Setup into a clean `TriggerPointSetup.exe`.
@@ -154,7 +176,7 @@ powershell -ExecutionPolicy Bypass -File build/package.ps1 -AppVersion "2.2.6"
 ```
 The output artifacts will be produced in the `artifacts/` directory:
 - `artifacts/TriggerPointSetup.exe`
-- `artifacts/TriggerPoint-v2.2.0-Portable-win-x64.zip`
+- `artifacts/TriggerPoint-v2.2.6-Portable-win-x64.zip`
 
 ---
 
@@ -169,7 +191,7 @@ TriggerPoint/
 │   ├── TriggerPoint.Infrastructure/  # Win32 hooks, atomic JSON persistence, and Serilog logging
 │   └── TriggerPoint.UI/              # Modern WPF UI, Tray daemon, Hotkey recorder, and Themes
 ├── tests/
-│   └── TriggerPoint.Tests/           # Unit & UI test suite (705 tests: xUnit, FluentAssertions)
+│   └── TriggerPoint.Tests/           # Unit & UI test suite (839 tests: xUnit, FluentAssertions)
 ├── installer/
 │   └── TriggerPoint.iss              # Inno Setup dual-scope installer specification
 ├── build/
