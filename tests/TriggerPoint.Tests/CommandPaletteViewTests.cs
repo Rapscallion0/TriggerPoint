@@ -571,6 +571,8 @@ public class CommandPaletteViewTests
 
                 var items = new List<TriggerItem> { matchingAction };
                 var view = new CommandPaletteView(items, new DummyExecutor());
+                view._includeServicesInAll = false;
+                view._includeClipboardInAll = false;
 
                 // User types "42"
                 view.SearchTextBox.Text = "42";

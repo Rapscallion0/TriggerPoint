@@ -12,6 +12,17 @@ public sealed record FuzzyMatchResult(
     public bool IsMatch => Score > 0;
 }
 
+public sealed record ClipboardMatchResult(
+    ClipboardHistoryItem Item,
+    double Score,
+    IReadOnlyList<int> MatchedIndices,
+    bool IsMatchInTitle,
+    string? ContextExcerpt = null,
+    IReadOnlyList<int>? ContextExcerptMatchedIndices = null)
+{
+    public bool IsMatch => Score > 0;
+}
+
 public static class FuzzyMatcher
 {
     private const double ExactMatchBonus = 1000.0;
@@ -105,18 +116,106 @@ public static class FuzzyMatcher
 
         // Penalize spread / distance
         int span = matchedIndices[^1] - matchedIndices[0] + 1;
-        double penalty = (span - pattern.Length) * 2.0;
-        matchScore = Math.Max(1.0, matchScore - penalty);
+        double penalty = (span - pattern.Length) * 2.5;
+        matchScore -= penalty;
+        if (matchScore <= 0 || span > Math.Max(pattern.Length * 3, 24))
+        {
+            return null;
+        }
 
         return (matchScore, matchedIndices);
     }
 
+    public static ClipboardMatchResult? MatchClipboard(ClipboardHistoryItem clip, string pattern)
+    {
+        if (string.IsNullOrWhiteSpace(pattern))
+        {
+            return new ClipboardMatchResult(clip, 1.0, Array.Empty<int>(), true);
+        }
+
+        var query = SearchQueryParser.Parse(pattern);
+
+        // Check exclusions across all text properties of the item first
+        if (query.ExcludedTokens.Count > 0)
+        {
+            foreach (var excluded in query.ExcludedTokens)
+            {
+                if (string.IsNullOrWhiteSpace(excluded.Text)) continue;
+                if ((!string.IsNullOrEmpty(clip.DisplayTitle) && clip.DisplayTitle.IndexOf(excluded.Text, StringComparison.OrdinalIgnoreCase) >= 0) ||
+                    (!string.IsNullOrEmpty(clip.PlainText) && clip.PlainText.IndexOf(excluded.Text, StringComparison.OrdinalIgnoreCase) >= 0))
+                {
+                    return null; // Excluded term matched anywhere on item
+                }
+            }
+        }
+
+        // 1. Try Title first
+        var titleMatch = query.Match(clip.DisplayTitle);
+        if (titleMatch != null)
+        {
+            return new ClipboardMatchResult(clip, titleMatch.Score + 500.0, titleMatch.MatchedIndices, true);
+        }
+
+        // 2. Try PlainText body
+        if (!string.IsNullOrWhiteSpace(clip.PlainText))
+        {
+            var textMatch = query.Match(clip.PlainText);
+            if (textMatch != null)
+            {
+                var (excerpt, excerptIndices) = SearchQueryParser.ExtractContextExcerpt(
+                    clip.PlainText,
+                    textMatch.MatchedIndices,
+                    maxCharsBefore: 30,
+                    maxCharsAfter: 45);
+
+                return new ClipboardMatchResult(
+                    clip,
+                    textMatch.Score,
+                    textMatch.MatchedIndices,
+                    false,
+                    excerpt,
+                    excerptIndices);
+            }
+        }
+
+        return null;
+    }
+
     public static FuzzyMatchResult Match(TriggerItem item, string pattern)
     {
+        if (!string.IsNullOrWhiteSpace(pattern) &&
+            (pattern.Contains(' ') || pattern.Contains('|') || pattern.Contains('"') || pattern.Contains('-') || pattern.Contains("NOT", StringComparison.OrdinalIgnoreCase)))
+        {
+            var query = SearchQueryParser.Parse(pattern);
+            if (query.ExcludedTokens.Count > 0)
+            {
+                foreach (var excluded in query.ExcludedTokens)
+                {
+                    if (string.IsNullOrWhiteSpace(excluded.Text)) continue;
+                    if ((!string.IsNullOrEmpty(item.Name) && item.Name.IndexOf(excluded.Text, StringComparison.OrdinalIgnoreCase) >= 0) ||
+                        (!string.IsNullOrEmpty(item.Description) && item.Description.IndexOf(excluded.Text, StringComparison.OrdinalIgnoreCase) >= 0))
+                    {
+                        return new FuzzyMatchResult(item, 0, []);
+                    }
+                }
+            }
+        }
+
         var nameMatch = MatchText(item.Name, pattern);
         var abbrMatch = (!string.IsNullOrWhiteSpace(pattern) && !string.IsNullOrWhiteSpace(item.Abbreviation))
             ? MatchText(item.Abbreviation, pattern)
             : null;
+
+        if (nameMatch == null && !string.IsNullOrWhiteSpace(pattern) &&
+            (pattern.Contains(' ') || pattern.Contains('|') || pattern.Contains('"') || pattern.Contains('-') || pattern.Contains("NOT", StringComparison.OrdinalIgnoreCase)))
+        {
+            var query = SearchQueryParser.Parse(pattern);
+            var qMatch = query.Match(item.Name);
+            if (qMatch != null)
+            {
+                nameMatch = (qMatch.Score, qMatch.MatchedIndices);
+            }
+        }
 
         if (nameMatch == null && abbrMatch == null)
         {

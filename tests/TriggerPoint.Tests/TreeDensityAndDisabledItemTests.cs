@@ -151,7 +151,7 @@ public class TreeDensityAndDisabledItemTests
                 // Ensure the items source in ResultsListBox only includes the enabled item
                 var results = view.ResultsListBox.ItemsSource as IEnumerable<object>;
                 Assert.NotNull(results);
-                var resultList = results.OfType<PaletteItemViewModel>().Select(vm => vm.Item).ToList();
+                var resultList = results.OfType<PaletteItemViewModel>().Where(vm => vm.Item != null).Select(vm => vm.Item!).ToList();
 
                 Assert.Contains(resultList, x => x.Id == enabledItem.Id);
                 Assert.DoesNotContain(resultList, x => x.Id == disabledItem.Id);

@@ -663,8 +663,61 @@
                                     <CheckBox x:Name="ShowSnippetKeywordsInCommandPaletteCheck"
                                               Content="Show snippet trigger keywords in Command Palette"
                                               FontSize="12"
-                                              Margin="0,0,0,12"
+                                              Margin="0,0,0,10"
                                               ToolTip="Displays keyword badges next to snippet items and enables searching snippets by their trigger keyword"/>
+
+                                    <!-- Command Palette 'All' Filter Inclusions -->
+                                    <TextBlock Text="'All' Filter Search Inclusions" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                    <TextBlock Text="Select additional sources to include in search results when searching in the 'All' filter:" 
+                                               FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8" TextWrapping="Wrap"/>
+
+                                    <Grid Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <CheckBox x:Name="CommandPaletteIncludeClipboardInAllCheck"
+                                                  Grid.Column="0"
+                                                  Content="Include Clipboard History in 'All' search"
+                                                  FontSize="12"
+                                                  VerticalAlignment="Center"
+                                                  ToolTip="Searches saved clipboard clips alongside actions when searching in the 'All' filter"/>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="Max results:" FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                            <ComboBox x:Name="CommandPaletteMaxClipboardResultsCombo" Width="95" Height="26" VerticalAlignment="Center" FontSize="11.5"
+                                                      IsEnabled="{Binding ElementName=CommandPaletteIncludeClipboardInAllCheck, Path=IsChecked}">
+                                                <ComboBoxItem Content="3" Tag="3"/>
+                                                <ComboBoxItem Content="5 (Default)" Tag="5"/>
+                                                <ComboBoxItem Content="10" Tag="10"/>
+                                                <ComboBoxItem Content="15" Tag="15"/>
+                                                <ComboBoxItem Content="25" Tag="25"/>
+                                            </ComboBox>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <Grid Margin="0,0,0,14">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <CheckBox x:Name="CommandPaletteIncludeServicesInAllCheck"
+                                                  Grid.Column="0"
+                                                  Content="Include Windows Services in 'All' search"
+                                                  FontSize="12"
+                                                  VerticalAlignment="Center"
+                                                  ToolTip="Searches Windows services alongside actions when searching in the 'All' filter"/>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="Max results:" FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                            <ComboBox x:Name="CommandPaletteMaxServicesResultsCombo" Width="95" Height="26" VerticalAlignment="Center" FontSize="11.5"
+                                                      IsEnabled="{Binding ElementName=CommandPaletteIncludeServicesInAllCheck, Path=IsChecked}">
+                                                <ComboBoxItem Content="3" Tag="3"/>
+                                                <ComboBoxItem Content="5 (Default)" Tag="5"/>
+                                                <ComboBoxItem Content="10" Tag="10"/>
+                                                <ComboBoxItem Content="15" Tag="15"/>
+                                                <ComboBoxItem Content="25" Tag="25"/>
+                                            </ComboBox>
+                                        </StackPanel>
+                                    </Grid>
 
                                     <!-- Clipboard History Palette -->
                                     <TextBlock Text="Clipboard History Palette (@clip)" FontWeight="SemiBold" FontSize="12.5" Margin="0,0,0,4"/>

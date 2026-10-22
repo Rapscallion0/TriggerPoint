@@ -1135,7 +1135,8 @@
                                                     TextTrimming="CharacterEllipsis"/>
 
                                          <!-- Secondary Detail / Description (Clickable in calc mode to explore units) -->
-                                         <TextBlock Text="{Binding SecondaryDetail}"
+                                         <TextBlock local:TextBlockInlines.Segments="{Binding SecondaryDetailSegments}"
+                                                    Text="{Binding SecondaryDetail}"
                                                     FontSize="11"
                                                     LineHeight="15"
                                                     Foreground="{DynamicResource TextSecondaryBrush}"
@@ -2373,7 +2374,72 @@
                                     </StackPanel>
                                 </Border>
 
-                                <!-- Group 2: Action & Execution Shortcuts -->
+                                <!-- Group 2: Search Syntax & Operators -->
+                                <Border Background="{DynamicResource BgInputBrush}" CornerRadius="6" Padding="14,10" Margin="0,0,0,10">
+                                    <StackPanel>
+                                        <TextBlock Text="SEARCH SYNTAX &amp; OPERATORS" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,0,0,8"/>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="word1 word2" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Implicit AND — matches items containing all words" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="OR, |" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Logical OR — matches either term (e.g. invoice OR receipt)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="-term, NOT" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Exclusion — excludes items containing term (e.g. -draft)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="&quot;phrase&quot;" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Exact phrase — matches contiguous phrase (e.g. &quot;due date&quot;)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="^term" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Prefix anchor — matches starting with term" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <TextBlock Text="💡 In the 'All' tab, searches simultaneously match actions, clipboard history, and Windows services." 
+                                                   FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Group 3: Action & Execution Shortcuts -->
                                 <Border Background="{DynamicResource BgInputBrush}" CornerRadius="6" Padding="14,10" Margin="0,0,0,10">
                                     <StackPanel>
                                         <TextBlock Text="ACTION &amp; EXECUTION SHORTCUTS" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,0,0,8"/>

@@ -47,7 +47,7 @@ public static class TextBlockInlines
         if (d is TextBlock tb)
         {
             tb.Inlines.Clear();
-            if (e.NewValue is IReadOnlyList<HighlightSegment> segments)
+            if (e.NewValue is IReadOnlyList<HighlightSegment> segments && segments.Count > 0)
             {
                 var accentBrush = Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.CornflowerBlue;
                 foreach (var seg in segments)
@@ -60,6 +60,11 @@ public static class TextBlockInlines
                     }
                     tb.Inlines.Add(run);
                 }
+            }
+            else
+            {
+                var binding = System.Windows.Data.BindingOperations.GetBindingExpression(tb, TextBlock.TextProperty);
+                binding?.UpdateTarget();
             }
         }
     }
@@ -86,6 +91,9 @@ public class PaletteItemViewModel
     public bool IsClipboardItem { get; init; }
     public ClipboardHistoryItem? ClipboardItem { get; init; }
     public Visibility PinBadgeVisibility => (IsClipboardItem && ClipboardItem?.IsPinned == true) ? Visibility.Visible : Visibility.Collapsed;
+    public string? ContextExcerpt { get; }
+    public IReadOnlyList<HighlightSegment>? SecondaryDetailSegments { get; }
+    public bool HasContextExcerpt => !string.IsNullOrEmpty(ContextExcerpt);
 
     public IReadOnlyList<AlternativeMeasurement> CommonAlternatives =>
         CalcResult?.Alternatives?.Where(a => a.IsCommon).Take(4).ToList() ?? (IReadOnlyList<AlternativeMeasurement>)Array.Empty<AlternativeMeasurement>();
@@ -151,6 +159,12 @@ public class PaletteItemViewModel
             if (IsSectionHeader) return string.Empty;
             if (IsClipboardItem && ClipboardItem != null)
             {
+                if (HasContextExcerpt && !string.IsNullOrEmpty(ContextExcerpt))
+                {
+                    string relTime = FormatRelativeTime(ClipboardItem.CapturedAt);
+                    return $"{ContextExcerpt} • {relTime}";
+                }
+
                 string rel = FormatRelativeTime(ClipboardItem.CapturedAt);
                 string proc = !string.IsNullOrEmpty(ClipboardItem.SourceProcessName) ? $" from {ClipboardItem.SourceProcessName}" : "";
                 return ClipboardItem.Type switch
@@ -607,10 +621,16 @@ public class PaletteItemViewModel
         HighlightedNameSegments = BuildHighlightedSegments(serviceItem.DisplayName, matchedIndices);
     }
 
-    public PaletteItemViewModel(ClipboardHistoryItem clipItem, IReadOnlyList<int>? matchedIndices = null, double score = 0)
+    public PaletteItemViewModel(
+        ClipboardHistoryItem clipItem, 
+        IReadOnlyList<int>? matchedIndices = null, 
+        double score = 0,
+        string? contextExcerpt = null,
+        IReadOnlyList<int>? contextExcerptMatchedIndices = null)
     {
         ClipboardItem = clipItem;
         IsClipboardItem = true;
+        ContextExcerpt = contextExcerpt;
         Item = new TriggerItem
         {
             Id = clipItem.Id,
@@ -619,12 +639,21 @@ public class PaletteItemViewModel
             ActionType = ActionType.Snippet,
             Payload = new ActionPayload { SnippetTemplate = clipItem.PlainText ?? string.Empty }
         };
-        MatchResult = matchedIndices != null ? new FuzzyMatchResult(Item, score, matchedIndices) : null;
+        MatchResult = (matchedIndices != null || contextExcerptMatchedIndices != null)
+            ? new FuzzyMatchResult(Item, score, matchedIndices ?? contextExcerptMatchedIndices ?? Array.Empty<int>())
+            : null;
         ParentPath = null;
         IsSectionHeader = false;
         SectionHeaderText = string.Empty;
         HeaderBorderThickness = new Thickness(0);
         HighlightedNameSegments = BuildHighlightedSegments(clipItem.DisplayTitle, matchedIndices);
+
+        if (!string.IsNullOrEmpty(contextExcerpt) && contextExcerptMatchedIndices != null && contextExcerptMatchedIndices.Count > 0)
+        {
+            string relTime = FormatRelativeTime(clipItem.CapturedAt);
+            string fullExcerpt = !string.IsNullOrEmpty(relTime) ? $"{contextExcerpt} • {relTime}" : contextExcerpt;
+            SecondaryDetailSegments = BuildHighlightedSegments(fullExcerpt, contextExcerptMatchedIndices);
+        }
 
         if (clipItem.Type == ClipboardItemType.Image && !string.IsNullOrEmpty(clipItem.ImagePath) && File.Exists(clipItem.ImagePath))
         {
@@ -676,7 +705,7 @@ public class PaletteItemViewModel
     public static PaletteItemViewModel CreateSectionHeader(string title, bool hasTopDivider) =>
         new(title, hasTopDivider);
 
-    private static IReadOnlyList<HighlightSegment> BuildHighlightedSegments(string name, IReadOnlyList<int>? matchedIndices)
+    internal static IReadOnlyList<HighlightSegment> BuildHighlightedSegments(string name, IReadOnlyList<int>? matchedIndices)
     {
         if (string.IsNullOrEmpty(name)) return [];
         if (matchedIndices == null || matchedIndices.Count == 0)
@@ -778,6 +807,10 @@ public partial class CommandPaletteView : Window
     private bool _isLoaded;
     private bool _isCalcPromoted;
     private bool _showSnippetKeywords = true;
+    internal bool _includeClipboardInAll = true;
+    internal int _maxClipboardResultsInAll = 5;
+    internal bool _includeServicesInAll = true;
+    internal int _maxServicesResultsInAll = 5;
 
     private TriggerItem? _folderConfirmTargetFolder;
     private List<TriggerItem> _folderConfirmResolvedActions = [];
@@ -911,6 +944,10 @@ public partial class CommandPaletteView : Window
                 var settings = await _repository.LoadSettingsAsync();
                 _currentSortMode = settings.CommandPaletteSortMode;
                 _showSnippetKeywords = settings.ShowSnippetKeywordsInCommandPalette;
+                _includeClipboardInAll = settings.CommandPaletteIncludeClipboardInAll;
+                _maxClipboardResultsInAll = settings.CommandPaletteMaxClipboardResultsInAll;
+                _includeServicesInAll = settings.CommandPaletteIncludeServicesInAll;
+                _maxServicesResultsInAll = settings.CommandPaletteMaxServiceResultsInAll;
                 UpdateSortButtonText();
                 UpdateSortMenuCheckmarks();
 
@@ -1098,7 +1135,7 @@ public partial class CommandPaletteView : Window
         }
     }
 
-    private void FilterResults()
+    internal void FilterResults()
     {
         var rawQuery = SearchTextBox.Text.Trim();
         var effectiveQuery = rawQuery;
@@ -1232,18 +1269,15 @@ public partial class CommandPaletteView : Window
                 }
                 else
                 {
-                    var titleMatch = FuzzyMatcher.MatchText(clip.DisplayTitle, effectiveQuery);
-                    var textMatch = !string.IsNullOrWhiteSpace(clip.PlainText)
-                        ? FuzzyMatcher.MatchText(clip.PlainText, effectiveQuery)
-                        : null;
-
-                    var best = (titleMatch != null && textMatch != null)
-                        ? (titleMatch.Value.Score >= textMatch.Value.Score ? titleMatch : textMatch)
-                        : (titleMatch ?? textMatch);
-
-                    if (best != null)
+                    var clipMatch = FuzzyMatcher.MatchClipboard(clip, effectiveQuery);
+                    if (clipMatch != null)
                     {
-                        clipVms.Add(new PaletteItemViewModel(clip, best.Value.MatchedIndices, best.Value.Score));
+                        clipVms.Add(new PaletteItemViewModel(
+                            clip,
+                            clipMatch.IsMatchInTitle ? clipMatch.MatchedIndices : null,
+                            clipMatch.Score,
+                            clipMatch.ContextExcerpt,
+                            clipMatch.ContextExcerptMatchedIndices));
                     }
                 }
             }
@@ -1316,6 +1350,115 @@ public partial class CommandPaletteView : Window
 
             vms.AddRange(dedicatedVms);
             vms.AddRange(serviceVms);
+        }
+        else if (!string.IsNullOrWhiteSpace(effectiveQuery) && _activeFilter == CommandPaletteFilterType.All)
+        {
+            // 1. Actions in current scope
+            List<PaletteItemViewModel> actionVms;
+            if (_currentSortMode == CommandPaletteSortMode.ActionTree)
+            {
+                var treeOrdered = OrderByActionTree(filteredCandidates, _currentScopeFolderId);
+                var rankedTree = FuzzyMatcher.FilterAndRank(treeOrdered, effectiveQuery, _currentSortMode);
+                actionVms = rankedTree.Select(r => CreateActionViewModel(
+                    r.Item,
+                    r,
+                    r.Item.ParentId.HasValue && _folderPaths.TryGetValue(r.Item.ParentId.Value, out var path) ? path : null)).ToList();
+            }
+            else
+            {
+                var rankedActions = FuzzyMatcher.FilterAndRank(filteredCandidates, effectiveQuery, _currentSortMode);
+                actionVms = rankedActions.Select(r => CreateActionViewModel(
+                    r.Item,
+                    r,
+                    r.Item.ParentId.HasValue && _folderPaths.TryGetValue(r.Item.ParentId.Value, out var path) ? path : null)).ToList();
+            }
+
+            // 2. Clipboard History items (if enabled and service available)
+            var clipVms = new List<PaletteItemViewModel>();
+            if (_includeClipboardInAll && _clipboardService != null)
+            {
+                var history = _clipboardService.GetHistory() ?? [];
+                foreach (var clip in history)
+                {
+                    var clipMatch = FuzzyMatcher.MatchClipboard(clip, effectiveQuery);
+                    if (clipMatch != null)
+                    {
+                        clipVms.Add(new PaletteItemViewModel(
+                            clip,
+                            clipMatch.IsMatchInTitle ? clipMatch.MatchedIndices : null,
+                            clipMatch.Score,
+                            clipMatch.ContextExcerpt,
+                            clipMatch.ContextExcerptMatchedIndices));
+                    }
+                }
+
+                clipVms = clipVms
+                    .OrderByDescending(x => x.ClipboardItem?.IsPinned == true)
+                    .ThenByDescending(x => x.MatchResult?.Score ?? 0)
+                    .Take(Math.Max(1, _maxClipboardResultsInAll))
+                    .ToList();
+            }
+
+            // 3. Windows Services (if enabled and manager available)
+            var serviceVms = new List<PaletteItemViewModel>();
+            if (_includeServicesInAll && _serviceManager != null)
+            {
+                _cachedServices ??= _serviceManager.GetServices();
+                foreach (var svc in _cachedServices)
+                {
+                    var nameMatch = FuzzyMatcher.MatchText(svc.DisplayName, effectiveQuery);
+                    var idMatch = FuzzyMatcher.MatchText(svc.ServiceName, effectiveQuery);
+                    var best = (nameMatch != null && idMatch != null)
+                        ? (nameMatch.Value.Score >= idMatch.Value.Score ? nameMatch : idMatch)
+                        : (nameMatch ?? idMatch);
+
+                    if (best != null)
+                    {
+                        serviceVms.Add(CreateServiceViewModel(svc, best.Value.MatchedIndices, best.Value.Score));
+                    }
+                }
+
+                serviceVms = serviceVms
+                    .OrderByDescending(x => x.MatchResult?.Score ?? 0)
+                    .Take(Math.Max(1, _maxServicesResultsInAll))
+                    .ToList();
+            }
+
+            // 4. Section grouping: show headers only when multiple categories contain matches
+            int matchedCategories = 0;
+            if (actionVms.Count > 0) matchedCategories++;
+            if (clipVms.Count > 0) matchedCategories++;
+            if (serviceVms.Count > 0) matchedCategories++;
+
+            if (matchedCategories > 1)
+            {
+                bool hasPrevious = false;
+                if (actionVms.Count > 0)
+                {
+                    vms.Add(PaletteItemViewModel.CreateSectionHeader($"ACTIONS ({actionVms.Count})", hasTopDivider: false));
+                    vms.AddRange(actionVms);
+                    hasPrevious = true;
+                }
+
+                if (clipVms.Count > 0)
+                {
+                    vms.Add(PaletteItemViewModel.CreateSectionHeader($"CLIPBOARD HISTORY ({clipVms.Count})", hasTopDivider: hasPrevious));
+                    vms.AddRange(clipVms);
+                    hasPrevious = true;
+                }
+
+                if (serviceVms.Count > 0)
+                {
+                    vms.Add(PaletteItemViewModel.CreateSectionHeader($"WINDOWS SERVICES ({serviceVms.Count})", hasTopDivider: hasPrevious));
+                    vms.AddRange(serviceVms);
+                }
+            }
+            else
+            {
+                vms.AddRange(actionVms);
+                vms.AddRange(clipVms);
+                vms.AddRange(serviceVms);
+            }
         }
         else if (_currentSortMode == CommandPaletteSortMode.ActionTree)
         {
@@ -1517,6 +1660,11 @@ public partial class CommandPaletteView : Window
 
             ResultsListBox.ItemsSource = vms;
 
+            if (!string.IsNullOrWhiteSpace(effectiveQuery) && _activeFilter == CommandPaletteFilterType.All)
+            {
+                FilterCountAll.Text = FormatPillCount("All", vms.Count(x => x.IsSelectable));
+            }
+
             bool hasSelectable = vms.Any(x => x.IsSelectable);
             if (!hasSelectable)
             {
@@ -1573,7 +1721,50 @@ public partial class CommandPaletteView : Window
             }
         }
 
+        ResetResultsScrollToTop();
         UpdatePreviewAndHints();
+    }
+
+    private void ResetResultsScrollToTop()
+    {
+        try
+        {
+            var sv = FindVisualChild<ScrollViewer>(ResultsListBox);
+            sv?.ScrollToTop();
+            if (ResultsListBox.SelectedItem != null)
+            {
+                ResultsListBox.ScrollIntoView(ResultsListBox.SelectedItem);
+            }
+
+            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+            {
+                try
+                {
+                    var s = FindVisualChild<ScrollViewer>(ResultsListBox);
+                    s?.ScrollToTop();
+                    if (ResultsListBox.SelectedItem != null)
+                    {
+                        ResultsListBox.ScrollIntoView(ResultsListBox.SelectedItem);
+                    }
+                }
+                catch { }
+            }));
+        }
+        catch { }
+    }
+
+    private static T? FindVisualChild<T>(DependencyObject? parent) where T : DependencyObject
+    {
+        if (parent == null) return null;
+        int count = VisualTreeHelper.GetChildrenCount(parent);
+        for (int i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T typed) return typed;
+            var nested = FindVisualChild<T>(child);
+            if (nested != null) return nested;
+        }
+        return null;
     }
 
     internal static bool IsBareNumber(string query)
@@ -2129,9 +2320,80 @@ public partial class CommandPaletteView : Window
         SetPreviewMode(PreviewStripMode.Standard);
         if (PreviewDetailText != null)
         {
-            PreviewDetailText.Text = vm.DetailPreviewText;
-            PreviewDetailText.ToolTip = !string.IsNullOrWhiteSpace(vm.DetailPreviewText) ? vm.DetailPreviewText : null;
+            string currentQuery = GetEffectiveSearchQuery();
+            if (vm.IsClipboardItem && vm.ClipboardItem != null && vm.HasContextExcerpt && !string.IsNullOrEmpty(vm.ContextExcerpt))
+            {
+                var segments = vm.SecondaryDetailSegments;
+                if (segments != null && segments.Count > 0)
+                {
+                    TextBlockInlines.SetSegments(PreviewDetailText, segments);
+                }
+                else
+                {
+                    TextBlockInlines.SetSegments(PreviewDetailText, null);
+                    PreviewDetailText.Text = vm.ContextExcerpt;
+                }
+                PreviewDetailText.ToolTip = !string.IsNullOrWhiteSpace(vm.DetailPreviewText) ? vm.DetailPreviewText : null;
+            }
+            else if (!string.IsNullOrWhiteSpace(currentQuery))
+            {
+                var pIndices = GetMatchedIndicesForPreview(vm.DetailPreviewText, currentQuery);
+                if (pIndices != null && pIndices.Count > 0)
+                {
+                    string previewToDisplay = vm.DetailPreviewText;
+                    IReadOnlyList<int> indicesToHighlight = pIndices;
+
+                    if (pIndices[0] > 60)
+                    {
+                        var (excerpt, relIndices) = SearchQueryParser.ExtractContextExcerpt(
+                            vm.DetailPreviewText,
+                            pIndices,
+                            maxCharsBefore: 30,
+                            maxCharsAfter: 60);
+                        previewToDisplay = excerpt;
+                        indicesToHighlight = relIndices;
+                    }
+
+                    var segments = PaletteItemViewModel.BuildHighlightedSegments(previewToDisplay, indicesToHighlight);
+                    TextBlockInlines.SetSegments(PreviewDetailText, segments);
+                }
+                else
+                {
+                    TextBlockInlines.SetSegments(PreviewDetailText, null);
+                    PreviewDetailText.Text = vm.DetailPreviewText;
+                }
+                PreviewDetailText.ToolTip = !string.IsNullOrWhiteSpace(vm.DetailPreviewText) ? vm.DetailPreviewText : null;
+            }
+            else
+            {
+                TextBlockInlines.SetSegments(PreviewDetailText, null);
+                PreviewDetailText.Text = vm.DetailPreviewText;
+                PreviewDetailText.ToolTip = !string.IsNullOrWhiteSpace(vm.DetailPreviewText) ? vm.DetailPreviewText : null;
+            }
         }
+    }
+
+    private string GetEffectiveSearchQuery()
+    {
+        var raw = SearchTextBox?.Text?.Trim() ?? string.Empty;
+        if (raw.StartsWith('@'))
+        {
+            int spaceIdx = raw.IndexOf(' ');
+            return spaceIdx >= 0 ? raw.Substring(spaceIdx).Trim() : string.Empty;
+        }
+        if (raw.StartsWith('='))
+        {
+            return raw.Substring(1).Trim();
+        }
+        return raw;
+    }
+
+    private static IReadOnlyList<int>? GetMatchedIndicesForPreview(string text, string pattern)
+    {
+        if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(pattern)) return null;
+        var query = SearchQueryParser.Parse(pattern);
+        var match = query.Match(text);
+        return match?.MatchedIndices;
     }
 
     private void LoadRtfPreview(string rtfText, string? fallbackPlainText)
@@ -2143,6 +2405,11 @@ public partial class CommandPaletteView : Window
             var range = new TextRange(RichTextPreviewBox.Document.ContentStart, RichTextPreviewBox.Document.ContentEnd);
             range.Load(ms, DataFormats.Rtf);
             SanitizeFlowDocumentColors(RichTextPreviewBox.Document);
+            string currentQuery = GetEffectiveSearchQuery();
+            if (!string.IsNullOrWhiteSpace(currentQuery))
+            {
+                HighlightFlowDocumentText(RichTextPreviewBox.Document, currentQuery);
+            }
         }
         catch
         {
@@ -2151,6 +2418,43 @@ public partial class CommandPaletteView : Window
             {
                 RichTextPreviewBox.Document.Blocks.Add(new Paragraph(new Run(fallbackPlainText)));
             }
+        }
+    }
+
+    private void HighlightFlowDocumentText(FlowDocument doc, string query)
+    {
+        if (string.IsNullOrWhiteSpace(query)) return;
+        var q = SearchQueryParser.Parse(query);
+        var searchTokens = q.Clauses.SelectMany(c => c.PositiveTokens).Select(t => t.Text).Where(t => !string.IsNullOrEmpty(t)).ToList();
+        if (searchTokens.Count == 0) return;
+
+        var accentBrush = Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.CornflowerBlue;
+        TextPointer position = doc.ContentStart;
+        while (position != null && position.CompareTo(doc.ContentEnd) < 0)
+        {
+            if (position.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text)
+            {
+                string textRun = position.GetTextInRun(LogicalDirection.Forward);
+                foreach (var token in searchTokens)
+                {
+                    int indexInRun = textRun.IndexOf(token, StringComparison.OrdinalIgnoreCase);
+                    if (indexInRun >= 0)
+                    {
+                        TextPointer start = position.GetPositionAtOffset(indexInRun);
+                        if (start != null)
+                        {
+                            TextPointer end = start.GetPositionAtOffset(token.Length);
+                            if (end != null)
+                            {
+                                var range = new TextRange(start, end);
+                                range.ApplyPropertyValue(TextElement.FontWeightProperty, FontWeights.Bold);
+                                range.ApplyPropertyValue(TextElement.ForegroundProperty, accentBrush);
+                            }
+                        }
+                    }
+                }
+            }
+            position = position.GetNextContextPosition(LogicalDirection.Forward);
         }
     }
 

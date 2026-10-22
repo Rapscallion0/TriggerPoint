@@ -78,6 +78,10 @@ public class AppSettings
     public double? CommandPaletteWidth { get; set; }
     public double? CommandPaletteHeight { get; set; }
     public bool ShowSnippetKeywordsInCommandPalette { get; set; } = true;
+    public bool CommandPaletteIncludeClipboardInAll { get; set; } = true;
+    public int CommandPaletteMaxClipboardResultsInAll { get; set; } = 5;
+    public bool CommandPaletteIncludeServicesInAll { get; set; } = true;
+    public int CommandPaletteMaxServiceResultsInAll { get; set; } = 5;
     public bool CompactTreeDensity { get; set; } = true;
     public bool ShowDisabledItemsInTree { get; set; } = true;
     public bool ConfirmRevertChanges { get; set; } = true;
@@ -121,6 +125,10 @@ public class AppSettings
         if (ClipboardRetentionDays > 365) ClipboardRetentionDays = 365;
         if (ClipboardMaxItemSizeMb < 1) ClipboardMaxItemSizeMb = 1;
         if (ClipboardMaxItemSizeMb > 50) ClipboardMaxItemSizeMb = 50;
+        if (CommandPaletteMaxClipboardResultsInAll < 1) CommandPaletteMaxClipboardResultsInAll = 1;
+        if (CommandPaletteMaxClipboardResultsInAll > 50) CommandPaletteMaxClipboardResultsInAll = 50;
+        if (CommandPaletteMaxServiceResultsInAll < 1) CommandPaletteMaxServiceResultsInAll = 1;
+        if (CommandPaletteMaxServiceResultsInAll > 50) CommandPaletteMaxServiceResultsInAll = 50;
 
         // Auto-migrate legacy Win+F1 shortcut (which is intercepted and consumed by Windows Help)
         if (CheatSheetHotkey != null && CheatSheetHotkey.Modifiers == ModifierKeys.Windows && CheatSheetHotkey.VirtualKey == 112)

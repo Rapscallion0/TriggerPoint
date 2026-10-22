@@ -312,6 +312,10 @@ public partial class ApplicationSettingsWindow : Window
             CheatSheetHotkeyRecorder.Binding = _currentSettings.CheatSheetHotkey;
             GlobalClipboardHotkeyRecorder.Binding = _currentSettings.ClipboardHotkey;
             ShowSnippetKeywordsInCommandPaletteCheck.IsChecked = _currentSettings.ShowSnippetKeywordsInCommandPalette;
+            CommandPaletteIncludeClipboardInAllCheck.IsChecked = _currentSettings.CommandPaletteIncludeClipboardInAll;
+            SelectComboByTag(CommandPaletteMaxClipboardResultsCombo, _currentSettings.CommandPaletteMaxClipboardResultsInAll);
+            CommandPaletteIncludeServicesInAllCheck.IsChecked = _currentSettings.CommandPaletteIncludeServicesInAll;
+            SelectComboByTag(CommandPaletteMaxServicesResultsCombo, _currentSettings.CommandPaletteMaxServiceResultsInAll);
             OpenSettingsHotkeyRecorder.BindingRecorded += (s, b) => CheckHotkeyConflicts();
             CommandPaletteHotkeyRecorder.BindingRecorded += (s, b) => CheckHotkeyConflicts();
             CheatSheetHotkeyRecorder.BindingRecorded += (s, b) => CheckHotkeyConflicts();
@@ -789,6 +793,16 @@ public partial class ApplicationSettingsWindow : Window
             _currentSettings.CommandPaletteHotkey = cmdPaletteHotkey;
             _currentSettings.CheatSheetHotkey = cheatSheetHotkey;
             _currentSettings.ShowSnippetKeywordsInCommandPalette = ShowSnippetKeywordsInCommandPaletteCheck.IsChecked == true;
+            _currentSettings.CommandPaletteIncludeClipboardInAll = CommandPaletteIncludeClipboardInAllCheck.IsChecked == true;
+            if (CommandPaletteMaxClipboardResultsCombo.SelectedItem is ComboBoxItem maxClipItem && int.TryParse(maxClipItem.Tag?.ToString(), out int maxClipVal))
+            {
+                _currentSettings.CommandPaletteMaxClipboardResultsInAll = maxClipVal;
+            }
+            _currentSettings.CommandPaletteIncludeServicesInAll = CommandPaletteIncludeServicesInAllCheck.IsChecked == true;
+            if (CommandPaletteMaxServicesResultsCombo.SelectedItem is ComboBoxItem maxSvcItem && int.TryParse(maxSvcItem.Tag?.ToString(), out int maxSvcVal))
+            {
+                _currentSettings.CommandPaletteMaxServiceResultsInAll = maxSvcVal;
+            }
             _currentSettings.EnableBackdropEffects = EnableBackdropEffectsCheck.IsChecked == true;
             _currentSettings.EnableUiAnimations = EnableUiAnimationsCheck.IsChecked == true;
             _currentSettings.RecycleBinRetentionDays = recycleDays;

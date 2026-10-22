@@ -5,9 +5,9 @@
 
 [![.NET](https://img.shields.io/badge/.NET-9.0--windows-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011%20x64-0078D6?logo=windows)](https://microsoft.com/windows)
-[![Version](https://img.shields.io/badge/Version-v2.2.6-blue.svg)](https://github.com/Rapscallion0/TriggerPoint/releases/tag/v2.2.6)
+[![Version](https://img.shields.io/badge/Version-v2.2.7-blue.svg)](https://github.com/Rapscallion0/TriggerPoint/releases/tag/v2.2.7)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-839%20Passed%20(100%25)-brightgreen)]()
+[![Tests](https://img.shields.io/badge/Tests-857%20Passed%20(100%25)-brightgreen)]()
 
 ---
 
@@ -44,6 +44,14 @@ Designed to stay out of your way, TriggerPoint runs quietly in your system tray 
 ### 🔍 Spotlight-Style Command Palette & Quick Calculator
 - Summon a fast, floating search palette anywhere with a single global shortcut (`Ctrl+Shift+Space` or custom hotkey).
 - Fuzzy search across all actions and folders with autocomplete suggestions, sort modes (Alphabetical, Frequency, or Custom Tree Order), and folder breadcrumb paths (`📁 Tools › Development › Edit Hosts`).
+- **Unified 'All' Search**: Typing a search query under the 'All' filter simultaneously searches actions, clipboard clips, and Windows services, automatically grouping results under clean category headers (`ACTIONS`, `CLIPBOARD HISTORY`, `WINDOWS SERVICES`) with configurable inclusion toggles and customizable result limits in Settings.
+- **Advanced Search Operators & Syntax**:
+  - **Implicit AND**: Space-separated terms match items containing all words (e.g. `rocky mavericks`).
+  - **Logical OR (`OR`, `|`)**: Matches either search condition (e.g. `invoice OR receipt`, `report | memo`).
+  - **Exclusion / NOT (`-term`, `NOT term`)**: Rejects items containing unwanted words (e.g. `financial -draft`, `memo NOT archive`).
+  - **Exact Phrase (`"phrase"`)**: Matches contiguous word sequences enclosed in double quotes (e.g. `"due date"`).
+  - **Prefix Anchor (`^term`)**: Matches items starting with the specified term (e.g. `^calc`).
+- **Smart Context Excerpts & Search Highlighting**: When searching through long text or clipboard history, relevant match excerpts are dynamically generated on secondary lines and highlighted in both the search list and bottom preview bar with theme-aware accent colors.
 - **Instant Math Calculator**: Type arithmetic, percentages, parentheses, powers, and scientific functions directly into the search bar (`=45*1.2`, `15% of $800`, `sqrt(256)`) for real-time calculation and instant clipboard copying.
 
 ### ⌨ Shortcut Cheat Sheet & Chord HUD
@@ -172,7 +180,7 @@ dotnet run --project src/TriggerPoint.UI
 #### Package Installer & Portable Archive
 To package the app into both the Inno Setup installer and the standalone portable zip:
 ```powershell
-powershell -ExecutionPolicy Bypass -File build/package.ps1 -AppVersion "2.2.6"
+powershell -ExecutionPolicy Bypass -File build/package.ps1 -AppVersion "2.2.7"
 ```
 The output artifacts will be produced in the `artifacts/` directory:
 - `artifacts/TriggerPointSetup.exe`
