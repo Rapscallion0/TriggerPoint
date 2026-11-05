@@ -56,7 +56,8 @@ public enum WorkflowStepType
     Macro = 9,
     SetVariable = 10,
     IfCondition = 11,
-    Service = 12
+    Service = 12,
+    CaptureSelection = 13
 }
 
 public enum ConditionOperator
@@ -76,7 +77,9 @@ public enum ConditionOperator
     LessOrEqual = 12,
     FileExists = 13,
     DirectoryExists = 14,
-    ProcessIsRunning = 15
+    ProcessIsRunning = 15,
+    IsNumeric = 16,
+    IsNotNumeric = 17
 }
 
 public enum WorkflowDialogButtons

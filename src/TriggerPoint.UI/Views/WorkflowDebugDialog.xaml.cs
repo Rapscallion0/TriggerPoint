@@ -37,7 +37,10 @@ public class WorkflowStepDebugViewModel
             WorkflowStepType.Prompt => $"Prompt: {step.PromptTitle}",
             WorkflowStepType.Delay => $"Delay: {step.DelayMs}ms",
             WorkflowStepType.SetVariable => $"Set {step.SetVariableName} = {step.SetVariableValue}",
-            WorkflowStepType.IfCondition => $"If {step.ConditionLeft} {step.ConditionOperator} {step.ConditionRight}",
+            WorkflowStepType.CaptureSelection => $"Capture selection -> {{{(string.IsNullOrWhiteSpace(step.VariableName) ? "selectedText" : step.VariableName)}}}",
+            WorkflowStepType.IfCondition => ConditionEvaluator.IsUnary(step.ConditionOperator)
+                ? $"If {step.ConditionLeft} {step.ConditionOperator}"
+                : $"If {step.ConditionLeft} {step.ConditionOperator} {step.ConditionRight}",
             WorkflowStepType.Service => $"Service: {step.ServiceOperation} '{step.ServiceName}'",
             _ => step.StepType.ToString()
         };
@@ -186,6 +189,18 @@ public partial class WorkflowDebugDialog : Window
                     case WorkflowStepType.Service:
                         AppendLog($"  -> Mock Service: {step.ServiceOperation} '{step.ServiceName}' (Timeout: {step.ServiceTimeoutSeconds}s)");
                         break;
+
+                    case WorkflowStepType.CaptureSelection:
+                    {
+                        var selVar = string.IsNullOrWhiteSpace(step.VariableName) ? "selectedText" : step.VariableName.Trim();
+                        var mockSel = !string.IsNullOrEmpty(step.CaptureSelectionFallbackValue)
+                            ? PlaceholderParser.EvaluateAsync(step.CaptureSelectionFallbackValue, null, _runtimeVariables).GetAwaiter().GetResult()
+                            : "[mock selected text]";
+                        if (step.CaptureSelectionTrimWhitespace) mockSel = mockSel.Trim();
+                        _runtimeVariables[selVar] = mockSel;
+                        AppendLog($"  -> Mock CaptureSelection: '{selVar}' = '{mockSel}'");
+                        break;
+                    }
 
                     default:
                         AppendLog($"  -> Mock completed step: {step.StepType}");

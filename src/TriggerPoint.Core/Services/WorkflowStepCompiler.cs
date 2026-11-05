@@ -81,6 +81,10 @@ public static class WorkflowStepCompiler
                 case WorkflowStepType.Service:
                     CompileServiceStep(step, sb);
                     break;
+
+                case WorkflowStepType.CaptureSelection:
+                    CompileCaptureSelectionStep(step, sb, definedVariables);
+                    break;
             }
 
             sb.AppendLine();
@@ -148,9 +152,41 @@ public static class WorkflowStepCompiler
             case WorkflowStepType.Service:
                 CompileServiceStep(step, sb);
                 break;
+
+            case WorkflowStepType.CaptureSelection:
+                CompileCaptureSelectionStep(step, sb, definedVariables);
+                break;
         }
 
         return sb.ToString().TrimEnd();
+    }
+
+    private static void CompileCaptureSelectionStep(WorkflowStep step, StringBuilder sb, HashSet<string> definedVariables)
+    {
+        var rawVar = string.IsNullOrWhiteSpace(step.VariableName) ? "selectedText" : step.VariableName.Trim();
+        var safeVar = SanitizeIdentifier(rawVar);
+        var callExpr = "await tp.captureSelection()";
+        if (step.CaptureSelectionTrimWhitespace)
+        {
+            callExpr = $"({callExpr} || \"\").trim()";
+        }
+        if (!string.IsNullOrEmpty(step.CaptureSelectionFallbackValue))
+        {
+            var fallbackTpl = ConvertPlaceholdersToTemplateLiteral(step.CaptureSelectionFallbackValue);
+            callExpr = $"({callExpr} || `{fallbackTpl}`)";
+        }
+
+        if (definedVariables.Contains(safeVar))
+        {
+            sb.AppendLine($"{safeVar} = {callExpr};");
+        }
+        else
+        {
+            sb.AppendLine($"let {safeVar} = {callExpr};");
+            definedVariables.Add(safeVar);
+        }
+
+        sb.AppendLine($"tp.vars.{safeVar} = {safeVar};");
     }
 
     private static void CompileServiceStep(WorkflowStep step, StringBuilder sb)
@@ -186,7 +222,11 @@ public static class WorkflowStepCompiler
                     Label = step.PromptLabel,
                     DefaultValue = step.PromptDefaultValue,
                     Type = step.PromptType,
-                    Choices = step.PromptChoices
+                    Choices = step.PromptChoices,
+                    MinNumber = step.PromptMinNumber,
+                    MaxNumber = step.PromptMaxNumber,
+                    MinNumberText = step.PromptMinNumberText,
+                    MaxNumberText = step.PromptMaxNumberText
                 }
             ];
 
@@ -200,8 +240,12 @@ public static class WorkflowStepCompiler
             string promptCall;
             if (field.Type == TokenType.PromptNumber)
             {
-                var minPart = field.MinNumber.HasValue ? $", min: {field.MinNumber.Value}" : "";
-                var maxPart = field.MaxNumber.HasValue ? $", max: {field.MaxNumber.Value}" : "";
+                var minPart = !string.IsNullOrWhiteSpace(field.MinNumberText)
+                    ? (field.MinNumber.HasValue ? $", min: {field.MinNumber.Value}" : $", min: Number(`{ConvertPlaceholdersToTemplateLiteral(field.MinNumberText)}`)")
+                    : (field.MinNumber.HasValue ? $", min: {field.MinNumber.Value}" : "");
+                var maxPart = !string.IsNullOrWhiteSpace(field.MaxNumberText)
+                    ? (field.MaxNumber.HasValue ? $", max: {field.MaxNumber.Value}" : $", max: Number(`{ConvertPlaceholdersToTemplateLiteral(field.MaxNumberText)}`)")
+                    : (field.MaxNumber.HasValue ? $", max: {field.MaxNumber.Value}" : "");
                 var defPart = !string.IsNullOrEmpty(defaultVal) ? $", default: \"{defaultVal}\"" : "";
                 promptCall = $"await tp.prompt(\"{label}\", {{ type: \"number\"{minPart}{maxPart}{defPart} }})";
             }

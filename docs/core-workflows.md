@@ -183,16 +183,110 @@ Summon the floating Spotlight Command Palette from any application by pressing <
   - `Tree Order`: Strictly matches your sidebar folder hierarchy.
 - **Keyboard Navigation**: Use <kbd>↑</kbd> and <kbd>↓</kbd> arrows to navigate; press <kbd>Enter</kbd> to execute; press <kbd>Esc</kbd> to close.
 
-### Instant Math Calculator
+### Instant Math, Unit & Date Calculations
 You can use the Command Palette as a high-speed calculator without opening a separate application:
-1. Press <kbd>Alt</kbd> + <kbd>Space</kbd>.
-2. Type an expression starting with `=` or a direct math formula:
+1. Open the palette (<kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd> or your configured hotkey).
+2. Type an expression starting with `=` or a direct calculation formula:
    - Arithmetic: `= 45 * 1.15`, `(1200 - 350) / 4`
    - Percentages: `15% of 800`, `250 + 10%`
    - Powers & Roots: `2^8`, `sqrt(1024)`
    - Functions: `abs(-42)`, `sin(45)`, `log(100)`, `round(14.856, 2)`
-3. The calculated result displays dynamically in a green calculation card beneath the search bar.
-4. Press <kbd>Enter</kbd> to immediately copy the calculated result to your clipboard and close the palette, or press <kbd>Tab</kbd> to insert the result into the search box.
+   - Unit Conversions: `32px to rem`, `100 f to c`, `5 miles to km`, `16 gb to mb`, `50 usd to eur`
+   - Date & Time Math: `now + 3d`, `now - 2w`, `time until Christmas`, `unix 1727184000`
+3. The calculated result displays dynamically in the calculation banner beneath the search bar.
+4. Press <kbd>Enter</kbd> to copy the result to your clipboard and close the palette, or press <kbd>Shift</kbd> + <kbd>Enter</kbd> to paste it directly into your foreground app.
+
+---
+
+### Quick Generators & Random Utilities 🎲
+
+TriggerPoint includes a built-in cryptographic generator engine accessible right from the Command Palette search bar or the dedicated Calculator Workspace (`=`).
+
+```
+[ 🔄 ]  Result: 7f8c12a0-4b3e-7901-8e5f-1a2b3c4d5e6f  (UUIDv7)   [ ⚙ ]
+```
+
+#### 1. Cryptographic GUID & UUID Generator
+Generate standard and modern RFC 9562 UUIDv7 identifiers:
+- `guid` or `uuid` : Generates a standard hyphenated GUID (e.g., `d1b7f208-98e6-42d8-9fa4-762bb1e289c0`).
+- `guid v7` : Generates a time-ordered UUIDv7 containing a millisecond timestamp prefix followed by cryptographic randomness.
+- `guid upper` : Generates uppercase formatted GUID (`D1B7F208-98E6-42D8-9FA4-762BB1E289C0`).
+- `guid nohyphen` or `guid n` : 32-character continuous hex string (`d1b7f20898e642d89fa4762bb1e289c0`).
+- `guid braces` or `guid b` : Enclosed in braces (`{d1b7f208-98e6-42d8-9fa4-762bb1e289c0}`).
+- `guid parens` or `guid p` : Enclosed in parentheses (`(d1b7f208-98e6-42d8-9fa4-762bb1e289c0)`).
+- `guid b64` or `guid base64` : 22-character URL-safe Base64 encoded string (`0bfyCJjmQtifpHYrseKJwA`).
+
+#### 2. Secure Password & PIN Generator
+Generate cryptographically strong passwords using `RandomNumberGenerator`:
+- `pass` or `password` : Generates a password using your default settings (default 16 characters with uppercase, lowercase, numbers, and symbols).
+- `pass 24` : Generates a 24-character password.
+- `pass 32 nosym` : Generates a 32-character alphanumeric password without symbols.
+- `pass 16 nonum` : Generates a password without numbers.
+- `pass 12 noupper` / `pass 12 nolower` : Controls case inclusion.
+- `pin` or `pin 6` : Generates a secure numeric PIN of specified length (default: 4 digits, range 3–16).
+
+#### 3. Diceware Passphrase Generator with 1337 / Leetspeak
+Generate memorable, cryptographically secure multi-word passphrases drawn from a curated 2,048-word dictionary:
+- `phrase` or `passphrase` : Generates a 4-word passphrase separated by hyphens (e.g., `walnut-beacon-velvet-crater`).
+- `phrase 6` : Generates a 6-word passphrase (range: 2 to 12 words).
+- `phrase 4 _` or `phrase 4 .` : Sets custom separator character (`_`, `.`, space, or `-`).
+- `phrase nonum` : Excludes the trailing numeric suffix.
+- `phrase nocap` : Keeps all words lowercase without Title Case capitalization.
+
+##### 1337 (Leetspeak) & Phonetic Substitutions
+Harden passphrases while keeping them memorable:
+- `phrase leet` or `phrase 1337` : Applies visual character substitutions (e.g., `A` $\rightarrow$ `4`, `E` $\rightarrow$ `3`, `S` $\rightarrow$ `5`, `T` $\rightarrow$ `7`, `O` $\rightarrow$ `0`, `B` $\rightarrow$ `8`).
+- `phrase phonetic` : Replaces phonetic sounds and syllables (e.g., `before` $\rightarrow$ `b4`, `great` $\rightarrow$ `gr8`, `to`/`too` $\rightarrow$ `2`, `for` $\rightarrow$ `4`).
+- `phrase combo` : Combines both visual and phonetic substitutions.
+- **Substitution Intensity**: Control substitution density via keywords:
+  - `light` : ~25% substitution chance; replaces 1–2 characters per word.
+  - `mod` or `moderate` : ~55% substitution chance (balanced).
+  - `agg` or `aggressive` : ~90% substitution chance (maximum hardening).
+  - *Example*: `phrase 4 leet agg` $\rightarrow$ `w4lnu7-b34c0n-v3lv37-cr473r9`.
+
+#### 4. Tabletop Dice Roller, Random Numbers & Coin Flip
+- `roll 2d20` : Rolls two 20-sided dice and outputs the sum with individual roll breakdown (e.g., `Roll: 29  (17 + 12)`).
+- `roll 3d6+4` or `roll 1d100-5` : Supports positive and negative roll modifiers.
+- `rand 1 100` : Generates a random integer within inclusive bounds.
+- `coin` or `flip` : Simulates an unbiased cryptographic coin toss (`Heads` or `Tails`).
+
+#### 5. Cryptographic Hashes & Text Encodings
+- `sha256 Hello World` : Computes SHA-256 hash digest.
+- `md5 Hello World` : Computes MD5 checksum.
+- `sha512 secret` / `sha1 data` / `crc32 filedata` : Computes SHA-512, SHA-1, or CRC-32.
+- `base64 Hello World` : Encodes text to standard Base64.
+- `base64d SGVsbG8gV29ybGQ=` : Decodes Base64 to plaintext.
+- `urlencode Query String` : Percent-encodes URI characters (`Query+String`).
+- `urldecode Query+String` : Decodes percent-encoded URL text.
+- `slug Hello World 2026!` : Converts text to SEO URL slug (`hello-world-2026`).
+
+#### 6. Lorem Ipsum & Mock Data
+- `lorem 3p` : Generates 3 paragraphs of standard Latin placeholder text.
+- `lorem 50w` : Generates 50 words of placeholder text.
+- `mock email` : Generates a realistic mock email address (e.g., `alex.chen@example.com`).
+- `mock name` : Generates a realistic mock full name.
+- `mock ip` : Generates a valid IPv4 address.
+- `mock mac` : Generates a colon-delimited MAC address.
+
+---
+
+### In-Place Regeneration & Candidate Batch Drawer 🔄
+
+When generating passwords, GUIDs, passphrases, or dice rolls, you often want to sample several choices or roll again:
+
+1. **Instant In-Place Regeneration**:
+   - Click the **`🔄` (Regenerate)** button on the calculation result card.
+   - Or press <kbd>Tab</kbd>, <kbd>F5</kbd>, or <kbd>Ctrl</kbd> + <kbd>R</kbd> while the search box is focused.
+   - The primary result immediately refreshes with a newly generated random value in-place without needing to retype your query.
+
+2. **Candidate Batch Drawer**:
+   - Click the **Alternative Choices / Units Drawer** toggle icon (`📐`) or press <kbd>Alt</kbd> + <kbd>U</kbd>.
+   - TriggerPoint displays a batch of candidate values (configurable from 1 to 25 items in Settings; default: 10 candidates).
+   - Click any candidate item to copy it directly, or click the **`[🔄 New Batch]`** button in the drawer header to regenerate the entire candidate list simultaneously.
+
+3. **Jump to Generator Settings (`⚙`)**:
+   - Click the gear icon on the result banner to open **Application Settings** directly focused on the **Generators** category.
+   - Configure your personal defaults for password length, character sets, passphrase word count, separator style, 1337 substitution rules, GUID formatting, and batch sizes.
 
 ---
 

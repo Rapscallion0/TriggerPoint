@@ -74,10 +74,17 @@ public class WorkflowExecutorTests
     private class MockSnippetService : ISnippetService
     {
         public List<string> Snippets { get; } = [];
+        public string CapturedSelectionToReturn { get; set; } = string.Empty;
+
         public Task InjectSnippetAsync(string template, IntPtr targetHwnd, SnippetContentType contentType = SnippetContentType.PlainText, string? rtfContent = null)
         {
             Snippets.Add(template);
             return Task.CompletedTask;
+        }
+
+        public Task<string> CaptureSelectedTextAsync(IntPtr targetHwnd, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(CapturedSelectionToReturn);
         }
     }
 
@@ -530,6 +537,125 @@ public class WorkflowExecutorTests
 
         Assert.NotNull(failureMsg);
         Assert.Contains("do not have a local file", failureMsg);
+    }
+
+    [Fact]
+    public async Task ExecuteWorkflowAsync_CaptureSelection_StoresTrimmedSelectionAndResolvesFallback()
+    {
+        var promptMock = new MockPromptService();
+        var confirmMock = new MockConfirmationService();
+        var toastMock = new MockToastService();
+        var snippetMock = new MockSnippetService { CapturedSelectionToReturn = "  hello world  " };
+        var telemetryMock = new MockTelemetryService();
+        var contextMock = new MockContextFilterService();
+
+        var scriptEngine = new JintScriptEngineService(promptMock, confirmMock, toastMock, snippetMock);
+        var executor = new WorkflowExecutor(scriptEngine, promptMock, confirmMock, toastMock, snippetMock, telemetryMock, contextMock);
+
+        var item = new TriggerItem
+        {
+            Name = "Capture Selection Workflow",
+            ActionType = ActionType.Workflow,
+            Payload = new ActionPayload
+            {
+                WorkflowMode = WorkflowMode.Visual,
+                WorkflowSteps =
+                [
+                    new WorkflowStep
+                    {
+                        StepType = WorkflowStepType.CaptureSelection,
+                        VariableName = "selectedText",
+                        CaptureSelectionTrimWhitespace = true,
+                        CaptureSelectionFallbackValue = "fallback"
+                    },
+                    new WorkflowStep
+                    {
+                        StepType = WorkflowStepType.InjectSnippet,
+                        SnippetTemplate = "[{selectedText}]"
+                    }
+                ]
+            }
+        };
+
+        await executor.ExecuteWorkflowAsync(item);
+
+        Assert.Single(snippetMock.Snippets);
+        Assert.Equal("[hello world]", snippetMock.Snippets[0]);
+
+        // Now test fallback with token resolution when selection is empty
+        snippetMock.Snippets.Clear();
+        snippetMock.CapturedSelectionToReturn = "   ";
+        item.Payload.WorkflowVariables = [new WorkflowVariableDefinition { Name = "defaultQuery", Value = "TriggerPoint" }];
+        item.Payload.WorkflowSteps[0].CaptureSelectionFallbackValue = "{defaultQuery}";
+
+        await executor.ExecuteWorkflowAsync(item);
+
+        Assert.Single(snippetMock.Snippets);
+        Assert.Equal("[TriggerPoint]", snippetMock.Snippets[0]);
+    }
+
+    [Fact]
+    public async Task ExecuteWorkflowAsync_PromptFields_ResolvesTokensInDefaultMinAndMaxBounds()
+    {
+        var promptMock = new MockPromptService
+        {
+            CannedResponses = new Dictionary<string, string>
+            {
+                ["amount"] = "25"
+            }
+        };
+        var confirmMock = new MockConfirmationService();
+        var toastMock = new MockToastService();
+        var snippetMock = new MockSnippetService();
+        var telemetryMock = new MockTelemetryService();
+        var contextMock = new MockContextFilterService();
+
+        var scriptEngine = new JintScriptEngineService(promptMock, confirmMock, toastMock, snippetMock);
+        var executor = new WorkflowExecutor(scriptEngine, promptMock, confirmMock, toastMock, snippetMock, telemetryMock, contextMock);
+
+        var item = new TriggerItem
+        {
+            Name = "Dynamic Bounds Prompt Workflow",
+            ActionType = ActionType.Workflow,
+            Payload = new ActionPayload
+            {
+                WorkflowMode = WorkflowMode.Visual,
+                WorkflowVariables =
+                [
+                    new WorkflowVariableDefinition { Name = "minBound", Value = "5" },
+                    new WorkflowVariableDefinition { Name = "maxBound", Value = "100" },
+                    new WorkflowVariableDefinition { Name = "defAmount", Value = "20" }
+                ],
+                WorkflowSteps =
+                [
+                    new WorkflowStep
+                    {
+                        StepType = WorkflowStepType.Prompt,
+                        PromptFields =
+                        [
+                            new WorkflowPromptField
+                            {
+                                VariableName = "amount",
+                                Label = "Enter Amount",
+                                Type = TokenType.PromptNumber,
+                                DefaultValue = "{defAmount}",
+                                MinNumberText = "{minBound}",
+                                MaxNumberText = "{maxBound}"
+                            }
+                        ]
+                    }
+                ]
+            }
+        };
+
+        await executor.ExecuteWorkflowAsync(item);
+
+        Assert.NotNull(promptMock.LastTokens);
+        Assert.Single(promptMock.LastTokens);
+        var tok = promptMock.LastTokens[0];
+        Assert.Equal("20", tok.DefaultValue);
+        Assert.Equal(5d, tok.MinNumber);
+        Assert.Equal(100d, tok.MaxNumber);
     }
 }
 

@@ -37,6 +37,7 @@ public static class NativeMethods
     public const byte VK_UP = 0x26;
     public const byte VK_RIGHT = 0x27;
     public const byte VK_DOWN = 0x28;
+    public const byte VK_C = 0x43;
     public const byte VK_V = 0x56;
     public const byte VK_LWIN = 0x5B;
     public const byte VK_RWIN = 0x5C;

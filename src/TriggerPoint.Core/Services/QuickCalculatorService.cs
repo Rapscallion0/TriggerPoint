@@ -2,6 +2,7 @@ using System;
 using System.Data;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using TriggerPoint.Core.Models;
 using TriggerPoint.Core.Units;
 
 namespace TriggerPoint.Core.Services;
@@ -52,7 +53,7 @@ public static class QuickCalculatorService
         @"^\s*([0-9]+(?:\.[0-9]+)?)\s+to\s+([0-9]+(?:\.[0-9]+)?)\s+as\s+%\s*$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    public static CalculatorResult? TryEvaluate(string input)
+    public static CalculatorResult? TryEvaluate(string input, AppSettings? settings = null)
     {
         if (string.IsNullOrWhiteSpace(input)) return null;
 
@@ -74,6 +75,10 @@ public static class QuickCalculatorService
             trimmed = trimmed[1..].Trim();
             if (string.IsNullOrWhiteSpace(trimmed)) return null;
         }
+
+        // 0. Generators (GUID, Password, Passphrase, Hashes, Encodings, Dice, Mock Data)
+        var genRes = GeneratorEngine.TryEvaluate(trimmed, settings);
+        if (genRes != null) return genRes;
 
         // 1. Standalone & Multi-Unit Date & Time Math
         var dateRes = EvaluateDateMath(trimmed);

@@ -1360,42 +1360,41 @@ public partial class SettingsWindow : Window
             var folderMap = new Dictionary<Guid, TriggerTreeItemViewModel>();
             bool showDisabled = _appSettings?.ShowDisabledItemsInTree ?? true;
 
-            // First pass: Folders
+            // Pre-pass: Map all folder ViewModels by Id so parent-child relationships can resolve
             var folders = _items
                 .Where(x => x.ActionType == ActionType.Folder && (showDisabled || x.IsEnabled))
-                .OrderBy(x => x.OrderIndex)
                 .ToList();
             foreach (var item in folders)
             {
                 folderMap[item.Id] = new TriggerTreeItemViewModel(item);
             }
 
-            foreach (var item in folders)
+            // Unified pass: Process all visible items (folders & actions) in exact OrderIndex sequence
+            var orderedVisibleItems = _items
+                .Where(x => showDisabled || x.IsEnabled)
+                .OrderBy(x => x.OrderIndex)
+                .ToList();
+
+            foreach (var item in orderedVisibleItems)
             {
-                var vm = folderMap[item.Id];
-                if (item.ParentId.HasValue && folderMap.TryGetValue(item.ParentId.Value, out var parentVm))
+                TriggerTreeItemViewModel vm;
+                if (item.ActionType == ActionType.Folder)
                 {
-                    parentVm.Children.Add(vm);
+                    vm = folderMap[item.Id];
                 }
                 else
                 {
-                    _treeRoots.Add(vm);
-                }
-            }
-
-            // Second pass: Actions
-            foreach (var item in _items.Where(x => x.ActionType != ActionType.Folder && (showDisabled || x.IsEnabled)).OrderBy(x => x.OrderIndex))
-            {
-                var vm = new TriggerTreeItemViewModel(item);
-                if (item.ActionType == ActionType.Shell)
-                {
-                    if (item.Id != _newUnsavedItemId)
+                    vm = new TriggerTreeItemViewModel(item);
+                    if (item.ActionType == ActionType.Shell)
                     {
-                        var validation = ShortcutValidator.Validate(item.Payload.Command);
-                        if (validation.Status != ShortcutValidationStatus.Valid)
+                        if (item.Id != _newUnsavedItemId)
                         {
-                            vm.IsBrokenTarget = true;
-                            vm.BrokenTargetMessage = validation.Message;
+                            var validation = ShortcutValidator.Validate(item.Payload.Command);
+                            if (validation.Status != ShortcutValidationStatus.Valid)
+                            {
+                                vm.IsBrokenTarget = true;
+                                vm.BrokenTargetMessage = validation.Message;
+                            }
                         }
                     }
                 }

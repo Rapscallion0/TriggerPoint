@@ -1639,6 +1639,7 @@
                                                 <Button.ContextMenu>
                                                     <ContextMenu x:Name="AddFirstStepContextMenu">
                                                         <MenuItem Header="Set Variable" Click="AddStepMenuItem_Click" Tag="SetVariable"/>
+                                                        <MenuItem Header="Capture Selected Text" Click="AddStepMenuItem_Click" Tag="CaptureSelection"/>
                                                         <MenuItem Header="If / Condition Branch" Click="AddStepMenuItem_Click" Tag="IfCondition"/>
                                                         <MenuItem Header="Prompt User" Click="AddStepMenuItem_Click" Tag="Prompt"/>
                                                         <MenuItem Header="Open URL / Web" Click="AddStepMenuItem_Click" Tag="OpenUrl"/>

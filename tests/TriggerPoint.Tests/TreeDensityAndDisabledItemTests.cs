@@ -1138,6 +1138,126 @@ public class TreeDensityAndDisabledItemTests
         if (caughtEx != null) throw caughtEx;
     }
 
+    [Fact]
+    public void SettingsWindow_RebuildTree_MaintainsOrderIndexAcrossActionsAndFolders()
+    {
+        Exception? caughtEx = null;
+        var thread = new Thread(() =>
+        {
+            string tempDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "TP_OrderIndexTest_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                System.IO.Directory.CreateDirectory(tempDir);
+                EnsureApplication();
+
+                var repo = new TriggerPoint.Infrastructure.Persistence.JsonConfigRepository(tempDir);
+
+                var rootAction = new TriggerItem
+                {
+                    Id = Guid.NewGuid(),
+                    Name = "RootAction",
+                    ActionType = ActionType.Shell,
+                    ParentId = null,
+                    OrderIndex = 0,
+                    Payload = new ActionPayload { Command = "cmd.exe" }
+                };
+
+                var helpFolder = new TriggerItem
+                {
+                    Id = Guid.NewGuid(),
+                    Name = "Help",
+                    ActionType = ActionType.Folder,
+                    ParentId = null,
+                    OrderIndex = 1
+                };
+
+                // Inside Help folder: Action first (0), Subfolder second (1), Action third (2)
+                var smsEditor = new TriggerItem
+                {
+                    Id = Guid.NewGuid(),
+                    Name = "SmsHtmlEditor",
+                    ActionType = ActionType.Shell,
+                    ParentId = helpFolder.Id,
+                    OrderIndex = 0,
+                    Payload = new ActionPayload { Command = "notepad.exe" }
+                };
+
+                var subFolder = new TriggerItem
+                {
+                    Id = Guid.NewGuid(),
+                    Name = "V3.3",
+                    ActionType = ActionType.Folder,
+                    ParentId = helpFolder.Id,
+                    OrderIndex = 1
+                };
+
+                var docAction = new TriggerItem
+                {
+                    Id = Guid.NewGuid(),
+                    Name = "Usershelp.chm",
+                    ActionType = ActionType.Shell,
+                    ParentId = helpFolder.Id,
+                    OrderIndex = 2,
+                    Payload = new ActionPayload { Command = "hh.exe" }
+                };
+
+                var items = new List<TriggerItem> { rootAction, helpFolder, smsEditor, subFolder, docAction };
+                repo.SaveAsync(items).GetAwaiter().GetResult();
+
+                using var listener = new TriggerPoint.Infrastructure.Win32.Win32HotkeyListener();
+                var window = new SettingsWindow(repo, listener, new DummyExecutor());
+                window.Show();
+
+                while (!(bool)typeof(SettingsWindow).GetField("_isDataLoaded", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(window)!)
+                {
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+                    Thread.Sleep(20);
+                }
+
+                System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+
+                var roots = window.ItemsTreeView.ItemsSource as System.Collections.ObjectModel.ObservableCollection<TriggerTreeItemViewModel>;
+                Assert.NotNull(roots);
+
+                // Verify root items ordering: RootAction (OrderIndex 0) before Help (OrderIndex 1)
+                Assert.Equal(2, roots.Count);
+                Assert.Equal("RootAction", roots[0].Item.Name);
+                Assert.Equal("Help", roots[1].Item.Name);
+
+                // Verify Help children ordering: SmsHtmlEditor (0) -> V3.3 (1) -> Usershelp.chm (2)
+                var helpVm = roots[1];
+                Assert.Equal(3, helpVm.Children.Count);
+                Assert.Equal("SmsHtmlEditor", helpVm.Children[0].Item.Name);
+                Assert.Equal(ActionType.Shell, helpVm.Children[0].Item.ActionType);
+
+                Assert.Equal("V3.3", helpVm.Children[1].Item.Name);
+                Assert.Equal(ActionType.Folder, helpVm.Children[1].Item.ActionType);
+
+                Assert.Equal("Usershelp.chm", helpVm.Children[2].Item.Name);
+                Assert.Equal(ActionType.Shell, helpVm.Children[2].Item.ActionType);
+
+                window.Close();
+            }
+            catch (Exception ex)
+            {
+                caughtEx = ex;
+            }
+            finally
+            {
+                if (System.IO.Directory.Exists(tempDir))
+                {
+                    try { System.IO.Directory.Delete(tempDir, true); } catch { }
+                }
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join(10000);
+
+        if (caughtEx != null) throw caughtEx;
+    }
+
     private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
     {
         int count = VisualTreeHelper.GetChildrenCount(parent);

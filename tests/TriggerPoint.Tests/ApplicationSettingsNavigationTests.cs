@@ -25,6 +25,8 @@ public class ApplicationSettingsNavigationTests
     [InlineData("palette")]
     [InlineData("conflict")]
     [InlineData("shortcut")]
+    [InlineData("pin")]
+    [InlineData("pinned")]
     public void MatchesCategory_ShortcutQueries_MatchCorrectly(string query)
     {
         bool matches = ApplicationSettingsWindow.MatchesCategory(ApplicationSettingsWindow.SettingsCategory.Shortcuts, query);
@@ -112,11 +114,24 @@ public class ApplicationSettingsNavigationTests
         Assert.True(matches);
     }
 
+    [Theory]
+    [InlineData("generator")]
+    [InlineData("guid")]
+    [InlineData("password")]
+    [InlineData("passphrase")]
+    [InlineData("phrase")]
+    [InlineData("leetspeak")]
+    public void MatchesCategory_GeneratorQueries_MatchCorrectly(string query)
+    {
+        bool matches = ApplicationSettingsWindow.MatchesCategory(ApplicationSettingsWindow.SettingsCategory.Generators, query);
+        Assert.True(matches);
+    }
+
     [Fact]
     public void CategoryKeywords_CoversAllCategoriesWithSubstantialKeywords()
     {
         var allCategories = Enum.GetValues<ApplicationSettingsWindow.SettingsCategory>();
-        Assert.Equal(8, allCategories.Length);
+        Assert.Equal(9, allCategories.Length);
 
         foreach (var cat in allCategories)
         {

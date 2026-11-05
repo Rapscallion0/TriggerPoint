@@ -221,5 +221,52 @@ public class WorkflowVariableCascadeTests
         // cmdStep reference was updated
         Assert.Equal("--arg {newVar}", cmdStep.Arguments);
     }
+
+    [Fact]
+    public void ReplaceVariableReferences_IncludesCaptureSelectionAndPromptMinMaxText()
+    {
+        var steps = new List<WorkflowStep>
+        {
+            new WorkflowStep
+            {
+                StepType = WorkflowStepType.CaptureSelection,
+                VariableName = "oldSel",
+                CaptureSelectionFallbackValue = "{oldBound}"
+            },
+            new WorkflowStep
+            {
+                StepType = WorkflowStepType.Prompt,
+                PromptMinNumberText = "{oldBound}",
+                PromptMaxNumberText = "{oldSel}",
+                PromptFields =
+                [
+                    new WorkflowPromptField
+                    {
+                        VariableName = "num",
+                        Type = TokenType.PromptNumber,
+                        DefaultValue = "{oldSel}",
+                        MinNumberText = "{oldBound}",
+                        MaxNumberText = "{oldSel}"
+                    }
+                ]
+            }
+        };
+
+        int countSel = WorkflowVariableCascadeHelper.CountVariableReferences(steps, "oldSel");
+        Assert.Equal(4, countSel); // 1 definition + PromptMaxNumberText + DefaultValue + Min/MaxNumberText
+
+        int replacedSel = WorkflowVariableCascadeHelper.ReplaceVariableReferences(steps, "oldSel", "newSel");
+        Assert.Equal(4, replacedSel);
+        Assert.Equal("newSel", steps[0].VariableName);
+        Assert.Equal("{newSel}", steps[1].PromptMaxNumberText);
+        Assert.Equal("{newSel}", steps[1].PromptFields[0].DefaultValue);
+        Assert.Equal("{newSel}", steps[1].PromptFields[0].MaxNumberText);
+
+        int replacedBound = WorkflowVariableCascadeHelper.ReplaceVariableReferences(steps, "oldBound", "newBound");
+        Assert.Equal(3, replacedBound);
+        Assert.Equal("{newBound}", steps[0].CaptureSelectionFallbackValue);
+        Assert.Equal("{newBound}", steps[1].PromptMinNumberText);
+        Assert.Equal("{newBound}", steps[1].PromptFields[0].MinNumberText);
+    }
 }
 

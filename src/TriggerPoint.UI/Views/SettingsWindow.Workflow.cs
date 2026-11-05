@@ -480,26 +480,25 @@ public partial class SettingsWindow
                 var dlgVar = string.IsNullOrWhiteSpace(step.VariableName) ? "dialogResult" : step.VariableName.Trim();
                 definedVariables.Add(dlgVar);
             }
+            else if (step.StepType == WorkflowStepType.CaptureSelection)
+            {
+                var selVar = string.IsNullOrWhiteSpace(step.VariableName) ? "selectedText" : step.VariableName.Trim();
+                definedVariables.Add(selVar);
+            }
             else if (step.StepType == WorkflowStepType.IfCondition)
             {
                 if (step.ThenSteps != null)
                 {
                     foreach (var sub in step.ThenSteps)
                     {
-                        if (sub.StepType == WorkflowStepType.SetVariable && !string.IsNullOrWhiteSpace(sub.SetVariableName))
-                        {
-                            definedVariables.Add(sub.SetVariableName.Trim());
-                        }
+                        CollectStepDefinedVariables(sub, definedVariables);
                     }
                 }
                 if (step.ElseSteps != null)
                 {
                     foreach (var sub in step.ElseSteps)
                     {
-                        if (sub.StepType == WorkflowStepType.SetVariable && !string.IsNullOrWhiteSpace(sub.SetVariableName))
-                        {
-                            definedVariables.Add(sub.SetVariableName.Trim());
-                        }
+                        CollectStepDefinedVariables(sub, definedVariables);
                     }
                 }
             }
@@ -673,6 +672,7 @@ public partial class SettingsWindow
         var types = new (string Title, WorkflowStepType Type, string Icon)[]
         {
             ("Set Variable", WorkflowStepType.SetVariable, "🔤"),
+            ("Capture Selected Text", WorkflowStepType.CaptureSelection, "📋"),
             ("If / Condition Branch", WorkflowStepType.IfCondition, "🔀"),
             ("Prompt for User Input", WorkflowStepType.Prompt, "💬"),
             ("Show Dialog / Confirmation", WorkflowStepType.Dialog, "💬"),
@@ -732,6 +732,13 @@ public partial class SettingsWindow
             step.Name = "Set Variable";
             step.SetVariableName = "myVar";
             step.SetVariableValue = string.Empty;
+        }
+        else if (stepType == WorkflowStepType.CaptureSelection)
+        {
+            step.Name = "Capture Selected Text";
+            step.VariableName = "selectedText";
+            step.CaptureSelectionFallbackValue = string.Empty;
+            step.CaptureSelectionTrimWhitespace = false;
         }
         else if (stepType == WorkflowStepType.IfCondition)
         {
@@ -1142,7 +1149,12 @@ public partial class SettingsWindow
                             Label = string.IsNullOrWhiteSpace(step.PromptLabel) ? "Enter value" : step.PromptLabel,
                             DefaultValue = step.PromptDefaultValue,
                             Type = step.PromptType,
-                            Choices = step.PromptChoices
+                            Choices = step.PromptChoices,
+                            MinNumber = step.PromptMinNumber,
+                            MaxNumber = step.PromptMaxNumber,
+                            MinNumberText = step.PromptMinNumberText,
+                            MaxNumberText = step.PromptMaxNumberText,
+                            DateFormat = string.IsNullOrWhiteSpace(step.PromptDateFormat) ? "yyyy-MM-dd" : step.PromptDateFormat
                         }
                     ];
                 }
@@ -1494,14 +1506,15 @@ public partial class SettingsWindow
 
                     // Row 3: Default Value
                     var fDefStack = new StackPanel { Margin = new Thickness(0, 0, 0, (field.Type == TokenType.PromptChoice || field.Type == TokenType.PromptNumber || field.Type == TokenType.PromptDatePicker) ? 6 : 0) };
-                    fDefStack.Children.Add(new TextBlock { Text = "Default Value (Pre-populated, optional)", FontSize = 10.5, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 3) });
+                    fDefStack.Children.Add(new TextBlock { Text = "Default Value (Pre-populated, optional — {tokens} and %ENV% supported)", FontSize = 10.5, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 3) });
                     var fDefBox = new TextBox
                     {
                         Text = field.DefaultValue,
                         Height = 30,
                         Padding = new Thickness(6, 2, 6, 2),
                         VerticalContentAlignment = VerticalAlignment.Center,
-                        Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style
+                        Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style,
+                        ToolTip = "Optional default value. Supports workflow variables (e.g. {selectedText}), {clipboard}, {date}, and %ENV% tokens."
                     };
                     fDefBox.TextChanged += (s, e) =>
                     {
@@ -1510,6 +1523,7 @@ public partial class SettingsWindow
                         OnFormEdited();
                     };
                     fDefStack.Children.Add(fDefBox);
+                    RenderVariableChips(fDefStack, fDefBox, availableVariables, step);
                     fieldStack.Children.Add(fDefStack);
 
                     // Row 4 (if Choice): Comma separated choices
@@ -1544,44 +1558,56 @@ public partial class SettingsWindow
                         minMaxGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
                         var minStack = new StackPanel();
-                        minStack.Children.Add(new TextBlock { Text = "Minimum Value (optional)", FontSize = 10.5, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 3) });
+                        minStack.Children.Add(new TextBlock { Text = "Minimum Value (optional, {tokens} supported)", FontSize = 10.5, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 3) });
                         var minBox = new TextBox
                         {
-                            Text = field.MinNumber?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty,
+                            Text = !string.IsNullOrEmpty(field.MinNumberText)
+                                ? field.MinNumberText
+                                : (field.MinNumber?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty),
                             Height = 30,
                             Padding = new Thickness(6, 2, 6, 2),
                             VerticalContentAlignment = VerticalAlignment.Center,
-                            Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style
+                            Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style,
+                            ToolTip = "Optional minimum numeric bound. Supports literal numbers (e.g. 0) or tokens (e.g. {minAllowed})."
                         };
                         minBox.TextChanged += (s, e) =>
                         {
-                            field.MinNumber = double.TryParse(minBox.Text.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var parsedMin)
+                            var rawMin = minBox.Text.Trim();
+                            field.MinNumberText = rawMin;
+                            field.MinNumber = double.TryParse(rawMin, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var parsedMin)
                                 ? parsedMin : null;
                             SyncPrimaryPromptField(step);
                             OnFormEdited();
                         };
                         minStack.Children.Add(minBox);
+                        RenderVariableChips(minStack, minBox, availableVariables, step);
                         Grid.SetColumn(minStack, 0);
                         minMaxGrid.Children.Add(minStack);
 
                         var maxStack = new StackPanel();
-                        maxStack.Children.Add(new TextBlock { Text = "Maximum Value (optional)", FontSize = 10.5, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 3) });
+                        maxStack.Children.Add(new TextBlock { Text = "Maximum Value (optional, {tokens} supported)", FontSize = 10.5, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 3) });
                         var maxBox = new TextBox
                         {
-                            Text = field.MaxNumber?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty,
+                            Text = !string.IsNullOrEmpty(field.MaxNumberText)
+                                ? field.MaxNumberText
+                                : (field.MaxNumber?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty),
                             Height = 30,
                             Padding = new Thickness(6, 2, 6, 2),
                             VerticalContentAlignment = VerticalAlignment.Center,
-                            Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style
+                            Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style,
+                            ToolTip = "Optional maximum numeric bound. Supports literal numbers (e.g. 100) or tokens (e.g. {maxAllowed})."
                         };
                         maxBox.TextChanged += (s, e) =>
                         {
-                            field.MaxNumber = double.TryParse(maxBox.Text.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var parsedMax)
+                            var rawMax = maxBox.Text.Trim();
+                            field.MaxNumberText = rawMax;
+                            field.MaxNumber = double.TryParse(rawMax, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var parsedMax)
                                 ? parsedMax : null;
                             SyncPrimaryPromptField(step);
                             OnFormEdited();
                         };
                         maxStack.Children.Add(maxBox);
+                        RenderVariableChips(maxStack, maxBox, availableVariables, step);
                         Grid.SetColumn(maxStack, 2);
                         minMaxGrid.Children.Add(maxStack);
 
@@ -2729,6 +2755,115 @@ public partial class SettingsWindow
                 RenderIfConditionControls(container, step, summaryText, availableVariables);
                 break;
             }
+
+            case WorkflowStepType.CaptureSelection:
+            {
+                var grid = new Grid { Margin = new Thickness(0, 4, 0, 6) };
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(200) });
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+                // Variable Name
+                var nameStack = new StackPanel();
+                nameStack.Children.Add(new TextBlock
+                {
+                    Text = "Store Into Variable Name",
+                    FontSize = 11,
+                    FontWeight = FontWeights.SemiBold,
+                    Margin = new Thickness(0, 0, 0, 3)
+                });
+                string origSelVarName = string.IsNullOrWhiteSpace(step.VariableName) ? "selectedText" : step.VariableName.Trim();
+                var nameBox = new TextBox
+                {
+                    Text = origSelVarName,
+                    Height = 34,
+                    Padding = new Thickness(8, 4, 8, 4),
+                    VerticalContentAlignment = VerticalAlignment.Center,
+                    Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style,
+                    Tag = "e.g. selectedText, query",
+                    ToolTip = "Name of the workflow variable that will receive the highlighted text from the active window"
+                };
+                nameBox.GotFocus += (s, e) =>
+                {
+                    origSelVarName = (nameBox.Text ?? string.Empty).Trim();
+                };
+                nameBox.TextChanged += (s, e) =>
+                {
+                    step.VariableName = (nameBox.Text ?? string.Empty).Trim();
+                    summaryText.Text = GetStepLiveSummary(step);
+                    OnFormEdited();
+                };
+                nameBox.LostFocus += (s, e) =>
+                {
+                    var newName = (nameBox.Text ?? string.Empty).Trim();
+                    if (string.IsNullOrWhiteSpace(newName))
+                    {
+                        newName = "selectedText";
+                        nameBox.Text = newName;
+                    }
+                    if (!string.Equals(origSelVarName, newName, StringComparison.Ordinal))
+                    {
+                        PromptAndExecuteVariableRename(origSelVarName, newName, () => step.VariableName = newName, definingStep: step);
+                        origSelVarName = newName;
+                    }
+                };
+                nameBox.KeyDown += (s, e) =>
+                {
+                    if (e.Key == Key.Enter)
+                    {
+                        Keyboard.ClearFocus();
+                        e.Handled = true;
+                    }
+                };
+                nameStack.Children.Add(nameBox);
+                Grid.SetColumn(nameStack, 0);
+                grid.Children.Add(nameStack);
+
+                // Fallback Value
+                var fallbackStack = new StackPanel();
+                fallbackStack.Children.Add(new TextBlock
+                {
+                    Text = "Fallback Value if Nothing Selected (optional, {tokens} supported)",
+                    FontSize = 11,
+                    FontWeight = FontWeights.SemiBold,
+                    Margin = new Thickness(0, 0, 0, 3)
+                });
+                var fallbackBox = new TextBox
+                {
+                    Text = step.CaptureSelectionFallbackValue ?? string.Empty,
+                    Height = 34,
+                    Padding = new Thickness(8, 4, 8, 4),
+                    VerticalContentAlignment = VerticalAlignment.Center,
+                    Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style,
+                    Tag = "Optional default or {clipboard}",
+                    ToolTip = "Used if no text is currently highlighted in the foreground window"
+                };
+                fallbackBox.TextChanged += (s, e) =>
+                {
+                    step.CaptureSelectionFallbackValue = fallbackBox.Text;
+                    summaryText.Text = GetStepLiveSummary(step);
+                    OnFormEdited();
+                };
+                fallbackStack.Children.Add(fallbackBox);
+                RenderVariableChips(fallbackStack, fallbackBox, availableVariables, step);
+
+                Grid.SetColumn(fallbackStack, 2);
+                grid.Children.Add(fallbackStack);
+
+                container.Children.Add(grid);
+
+                var trimCheck = new CheckBox
+                {
+                    Content = "Trim leading and trailing whitespace from captured text",
+                    IsChecked = step.CaptureSelectionTrimWhitespace,
+                    Margin = new Thickness(0, 2, 0, 4),
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                trimCheck.Checked += (s, e) => { step.CaptureSelectionTrimWhitespace = true; OnFormEdited(); };
+                trimCheck.Unchecked += (s, e) => { step.CaptureSelectionTrimWhitespace = false; OnFormEdited(); };
+                container.Children.Add(trimCheck);
+                break;
+            }
         }
     }
 
@@ -3027,6 +3162,7 @@ public partial class SettingsWindow
     private static string GetStepTypeIconAndName(WorkflowStepType stepType) => stepType switch
     {
         WorkflowStepType.SetVariable => "🔤 Set Variable",
+        WorkflowStepType.CaptureSelection => "📋 Capture Selected Text",
         WorkflowStepType.IfCondition => "🔀 If / Branch",
         WorkflowStepType.Prompt => "💬 Prompt for Input",
         WorkflowStepType.Dialog => "💬 Show Confirmation Dialog",
@@ -3046,10 +3182,14 @@ public partial class SettingsWindow
     {
         WorkflowStepType.IfCondition => string.IsNullOrWhiteSpace(step.ConditionLeft)
             ? "No condition specified"
-            : $"If {step.ConditionLeft} {GetOperatorSymbol(step.ConditionOperator)} \"{step.ConditionRight}\" → {step.ThenSteps?.Count ?? 0} then{(step.HasElseBranch ? $", {step.ElseSteps?.Count ?? 0} else" : "")}",
+            : (ConditionEvaluator.IsUnary(step.ConditionOperator)
+                ? $"If {step.ConditionLeft} {GetOperatorSymbol(step.ConditionOperator)} → {step.ThenSteps?.Count ?? 0} then{(step.HasElseBranch ? $", {step.ElseSteps?.Count ?? 0} else" : "")}"
+                : $"If {step.ConditionLeft} {GetOperatorSymbol(step.ConditionOperator)} \"{step.ConditionRight}\" → {step.ThenSteps?.Count ?? 0} then{(step.HasElseBranch ? $", {step.ElseSteps?.Count ?? 0} else" : "")}"),
         WorkflowStepType.SetVariable => string.IsNullOrWhiteSpace(step.SetVariableName)
             ? "No variable name"
             : $"{{{step.SetVariableName}}} = {step.SetVariableValue}",
+        WorkflowStepType.CaptureSelection => $"stores selection into {{{(string.IsNullOrWhiteSpace(step.VariableName) ? "selectedText" : step.VariableName)}}}" +
+            (!string.IsNullOrWhiteSpace(step.CaptureSelectionFallbackValue) ? $" (fallback: \"{step.CaptureSelectionFallbackValue}\")" : ""),
         WorkflowStepType.Prompt => (step.PromptFields != null && step.PromptFields.Count > 0)
             ? (step.PromptFields.Count == 1 
                 ? $"stores into ${{{step.PromptFields[0].VariableName}}}" 
@@ -3089,6 +3229,8 @@ public partial class SettingsWindow
         ConditionOperator.MatchesRegex => "matches",
         ConditionOperator.IsEmpty => "is empty",
         ConditionOperator.IsNotEmpty => "is not empty",
+        ConditionOperator.IsNumeric => "is numeric",
+        ConditionOperator.IsNotNumeric => "is not numeric",
         ConditionOperator.GreaterThan => ">",
         ConditionOperator.LessThan => "<",
         ConditionOperator.GreaterOrEqual => ">=",
@@ -3200,6 +3342,7 @@ public partial class SettingsWindow
         var stepType = tag switch
         {
             "SetVariable" => WorkflowStepType.SetVariable,
+            "CaptureSelection" => WorkflowStepType.CaptureSelection,
             "IfCondition" => WorkflowStepType.IfCondition,
             "OpenUrl" => WorkflowStepType.OpenUrl,
             "EnsureDirectory" => WorkflowStepType.EnsureDirectory,
@@ -4014,7 +4157,7 @@ public partial class SettingsWindow
         return vars.ToList();
     }
 
-    private static void CollectStepDefinedVariables(WorkflowStep step, HashSet<string> vars)
+    private static void CollectStepDefinedVariables(WorkflowStep step, ICollection<string> vars)
     {
         if (step.StepType == WorkflowStepType.Prompt)
         {
@@ -4045,6 +4188,11 @@ public partial class SettingsWindow
         {
             var dlgVar = string.IsNullOrWhiteSpace(step.VariableName) ? "dialogResult" : step.VariableName.Trim();
             vars.Add(dlgVar);
+        }
+        else if (step.StepType == WorkflowStepType.CaptureSelection)
+        {
+            var selVar = string.IsNullOrWhiteSpace(step.VariableName) ? "selectedText" : step.VariableName.Trim();
+            vars.Add(selVar);
         }
         else if (step.StepType == WorkflowStepType.IfCondition)
         {
@@ -4092,6 +4240,8 @@ public partial class SettingsWindow
             step.PromptChoices = first.Choices;
             step.PromptMinNumber = first.MinNumber;
             step.PromptMaxNumber = first.MaxNumber;
+            step.PromptMinNumberText = first.MinNumberText;
+            step.PromptMaxNumberText = first.MaxNumberText;
             step.PromptDateFormat = first.DateFormat;
         }
     }
@@ -4189,6 +4339,8 @@ public partial class SettingsWindow
             (ConditionOperator.MatchesRegex, "Matches Regex"),
             (ConditionOperator.IsEmpty, "Is Empty"),
             (ConditionOperator.IsNotEmpty, "Is Not Empty"),
+            (ConditionOperator.IsNumeric, "Is Numeric"),
+            (ConditionOperator.IsNotNumeric, "Is Not Numeric"),
             (ConditionOperator.GreaterThan, "Greater Than (>)"),
             (ConditionOperator.LessThan, "Less Than (<)"),
             (ConditionOperator.GreaterOrEqual, "Greater or Equal (≥)"),
@@ -4237,12 +4389,26 @@ public partial class SettingsWindow
         Grid.SetColumn(rightStack, 4);
         exprGrid.Children.Add(rightStack);
 
+        // Options row: Ignore case checkbox
+        var optsRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 0) };
+        var ignoreCaseCheck = new CheckBox
+        {
+            Content = "Ignore Case (case-insensitive comparison)",
+            IsChecked = step.ConditionIgnoreCase,
+            VerticalAlignment = VerticalAlignment.Center,
+            ToolTip = "Treat uppercase and lowercase letters as equal during comparison"
+        };
+        ignoreCaseCheck.Checked += (s, e) => { step.ConditionIgnoreCase = true; OnFormEdited(); };
+        ignoreCaseCheck.Unchecked += (s, e) => { step.ConditionIgnoreCase = false; OnFormEdited(); };
+        optsRow.Children.Add(ignoreCaseCheck);
+
         // Helper to update right operand visibility for unary operators
         void UpdateRightOperandVisibility()
         {
             bool isUnary = ConditionEvaluator.IsUnary(step.ConditionOperator);
             rightStack.Visibility = isUnary ? Visibility.Collapsed : Visibility.Visible;
             rightCol.Width = isUnary ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
+            optsRow.Visibility = isUnary ? Visibility.Collapsed : Visibility.Visible;
         }
         UpdateRightOperandVisibility();
 
@@ -4272,19 +4438,6 @@ public partial class SettingsWindow
         };
 
         condStack.Children.Add(exprGrid);
-
-        // Options row: Ignore case checkbox
-        var optsRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 0) };
-        var ignoreCaseCheck = new CheckBox
-        {
-            Content = "Ignore Case (case-insensitive comparison)",
-            IsChecked = step.ConditionIgnoreCase,
-            VerticalAlignment = VerticalAlignment.Center,
-            ToolTip = "Treat uppercase and lowercase letters as equal during comparison"
-        };
-        ignoreCaseCheck.Checked += (s, e) => { step.ConditionIgnoreCase = true; OnFormEdited(); };
-        ignoreCaseCheck.Unchecked += (s, e) => { step.ConditionIgnoreCase = false; OnFormEdited(); };
-        optsRow.Children.Add(ignoreCaseCheck);
         condStack.Children.Add(optsRow);
 
         container.Children.Add(condCard);
@@ -5015,6 +5168,7 @@ public partial class SettingsWindow
         var stepTypes = new (string Title, WorkflowStepType Type, string Icon)[]
         {
             ("Set Variable", WorkflowStepType.SetVariable, "🔤"),
+            ("Capture Selected Text", WorkflowStepType.CaptureSelection, "📋"),
             ("If / Condition Branch", WorkflowStepType.IfCondition, "🔀"),
             ("Prompt for User Input", WorkflowStepType.Prompt, "💬"),
             ("Show Dialog / Confirmation", WorkflowStepType.Dialog, "💬"),

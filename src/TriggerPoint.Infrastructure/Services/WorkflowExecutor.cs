@@ -219,14 +219,15 @@ public class WorkflowExecutor : IWorkflowExecutor
                             Label = label,
                             DefaultValue = ResolveVariables(f.DefaultValue, contextVariables),
                             Type = f.Type,
-                            MinNumber = f.MinNumber,
-                            MaxNumber = f.MaxNumber,
+                            MinNumber = ResolveNullableDouble(f.MinNumberText, f.MinNumber, contextVariables),
+                            MaxNumber = ResolveNullableDouble(f.MaxNumberText, f.MaxNumber, contextVariables),
                             DateFormat = string.IsNullOrWhiteSpace(f.DateFormat) ? "yyyy-MM-dd" : f.DateFormat
                         };
 
                         if (f.Type == TokenType.PromptChoice && !string.IsNullOrWhiteSpace(f.Choices))
                         {
-                            var parts = f.Choices.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                            var resolvedChoices = ResolveVariables(f.Choices, contextVariables);
+                            var parts = resolvedChoices.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                             foreach (var p in parts)
                             {
                                 token.Choices.Add(new ChoiceOption(p, p));
@@ -246,14 +247,15 @@ public class WorkflowExecutor : IWorkflowExecutor
                         Label = label,
                         DefaultValue = ResolveVariables(step.PromptDefaultValue, contextVariables),
                         Type = step.PromptType,
-                        MinNumber = step.PromptMinNumber,
-                        MaxNumber = step.PromptMaxNumber,
+                        MinNumber = ResolveNullableDouble(step.PromptMinNumberText, step.PromptMinNumber, contextVariables),
+                        MaxNumber = ResolveNullableDouble(step.PromptMaxNumberText, step.PromptMaxNumber, contextVariables),
                         DateFormat = string.IsNullOrWhiteSpace(step.PromptDateFormat) ? "yyyy-MM-dd" : step.PromptDateFormat
                     };
 
                     if (step.PromptType == TokenType.PromptChoice && !string.IsNullOrWhiteSpace(step.PromptChoices))
                     {
-                        var parts = step.PromptChoices.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                        var resolvedChoices = ResolveVariables(step.PromptChoices, contextVariables);
+                        var parts = resolvedChoices.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                         foreach (var p in parts)
                         {
                             token.Choices.Add(new ChoiceOption(p, p));
@@ -629,6 +631,29 @@ public class WorkflowExecutor : IWorkflowExecutor
                 }
             }
 
+            case WorkflowStepType.CaptureSelection:
+            {
+                var varName = string.IsNullOrWhiteSpace(step.VariableName) ? "selectedText" : step.VariableName.Trim();
+                var captured = await _snippetService.CaptureSelectedTextAsync(effectiveHwnd, cancellationToken);
+                if (step.CaptureSelectionTrimWhitespace && !string.IsNullOrEmpty(captured))
+                {
+                    captured = captured.Trim();
+                }
+
+                if (string.IsNullOrEmpty(captured) && !string.IsNullOrEmpty(step.CaptureSelectionFallbackValue))
+                {
+                    captured = ResolveVariables(step.CaptureSelectionFallbackValue, contextVariables);
+                    if (step.CaptureSelectionTrimWhitespace && !string.IsNullOrEmpty(captured))
+                    {
+                        captured = captured.Trim();
+                    }
+                }
+
+                contextVariables[varName] = captured ?? string.Empty;
+                _logger.Information("Captured selection into variable '{VarName}' ({Length} chars).", varName, contextVariables[varName].Length);
+                return true;
+            }
+
             default:
                 return true;
         }
@@ -657,12 +682,16 @@ public class WorkflowExecutor : IWorkflowExecutor
         }
 
         // If step references placeholders (e.g. {ticket}), extract and prompt for test values if prompt dialog service is available
-        var textToCheck = $"{step.Url} {step.Command} {step.Arguments} {step.WorkingDirectory} {step.DirectoryPath} {step.SnippetTemplate} {step.SetVariableValue}";
+        var promptFieldsText = step.PromptFields != null
+            ? string.Join(" ", step.PromptFields.Select(f => $"{f.DefaultValue} {f.MinNumberText} {f.MaxNumberText} {f.Choices}"))
+            : string.Empty;
+        var textToCheck = $"{step.Url} {step.Command} {step.Arguments} {step.WorkingDirectory} {step.DirectoryPath} {step.SnippetTemplate} {step.SetVariableValue} {step.PromptDefaultValue} {step.PromptMinNumberText} {step.PromptMaxNumberText} {step.CaptureSelectionFallbackValue} {promptFieldsText}";
         var matches = System.Text.RegularExpressions.Regex.Matches(textToCheck, @"\{([a-zA-Z0-9_]+)\}");
         var neededTokens = new List<PromptToken>();
         foreach (System.Text.RegularExpressions.Match match in matches)
         {
             var key = match.Groups[1].Value;
+            if (PlaceholderParser.IsSystemToken(key)) continue;
             if (!contextVariables.ContainsKey(key) && !neededTokens.Any(t => t.RawTag.Equals(key, StringComparison.OrdinalIgnoreCase)))
             {
                 neededTokens.Add(new PromptToken
@@ -692,6 +721,20 @@ public class WorkflowExecutor : IWorkflowExecutor
         return await ExecuteStepAsync(step, contextVariables, parentItem?.Payload?.RunAsAdmin ?? false, effectiveHwnd, cancellationToken);
     }
 
+    public static double? ResolveNullableDouble(string? textExpr, double? numericFallback, IReadOnlyDictionary<string, string> variables)
+    {
+        if (!string.IsNullOrWhiteSpace(textExpr))
+        {
+            var resolved = ResolveVariables(textExpr, variables).Trim();
+            if (double.TryParse(resolved, System.Globalization.NumberStyles.Float | System.Globalization.NumberStyles.AllowThousands, System.Globalization.CultureInfo.InvariantCulture, out var parsed) &&
+                !double.IsNaN(parsed) && !double.IsInfinity(parsed))
+            {
+                return parsed;
+            }
+        }
+        return numericFallback;
+    }
+
     public static string ResolveVariables(string? template, IReadOnlyDictionary<string, string> variables)
     {
         if (string.IsNullOrEmpty(template)) return string.Empty;
@@ -702,7 +745,27 @@ public class WorkflowExecutor : IWorkflowExecutor
         // 2. Uses PlaceholderParser to resolve dynamic tokens ({date}, {clipboard}, {env:...}) as well as user variables
         return PlaceholderParser.EvaluateAsync(
             expandedEnv,
-            clipboardProvider: null,
+            clipboardProvider: () => Task.FromResult(GetClipboardTextSafe()),
             promptResponses: variables).GetAwaiter().GetResult();
+    }
+
+    private static string GetClipboardTextSafe()
+    {
+        string text = string.Empty;
+        if (System.Windows.Application.Current != null)
+        {
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                try
+                {
+                    if (System.Windows.Clipboard.ContainsText())
+                    {
+                        text = System.Windows.Clipboard.GetText();
+                    }
+                }
+                catch { }
+            });
+        }
+        return text;
     }
 }

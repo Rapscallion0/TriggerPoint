@@ -66,6 +66,30 @@ public class ConditionEvaluatorTests
         Assert.Equal(expected, result);
     }
 
+    [Theory]
+    [InlineData("42", ConditionOperator.IsNumeric, true)]
+    [InlineData("-3.14", ConditionOperator.IsNumeric, true)]
+    [InlineData("  1,234.56 ", ConditionOperator.IsNumeric, true)]
+    [InlineData("0", ConditionOperator.IsNumeric, true)]
+    [InlineData("1e5", ConditionOperator.IsNumeric, true)]
+    [InlineData("", ConditionOperator.IsNumeric, false)]
+    [InlineData("   ", ConditionOperator.IsNumeric, false)]
+    [InlineData(null, ConditionOperator.IsNumeric, false)]
+    [InlineData("abc", ConditionOperator.IsNumeric, false)]
+    [InlineData("12abc", ConditionOperator.IsNumeric, false)]
+    [InlineData("42", ConditionOperator.IsNotNumeric, false)]
+    [InlineData("-3.14", ConditionOperator.IsNotNumeric, false)]
+    [InlineData("", ConditionOperator.IsNotNumeric, true)]
+    [InlineData("   ", ConditionOperator.IsNotNumeric, true)]
+    [InlineData(null, ConditionOperator.IsNotNumeric, true)]
+    [InlineData("abc", ConditionOperator.IsNotNumeric, true)]
+    public void IsNumericOperators_EvaluateAccurately(string? left, ConditionOperator op, bool expected)
+    {
+        var result = ConditionEvaluator.Evaluate(left!, op, string.Empty);
+        Assert.Equal(expected, result);
+        Assert.True(ConditionEvaluator.IsUnary(op));
+    }
+
     [Fact]
     public void SystemOperators_FileAndDirectoryExists()
     {

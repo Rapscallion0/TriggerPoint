@@ -367,6 +367,20 @@
                                     <TextBlock Grid.Column="1" Text="Clipboard History" FontSize="12.5" VerticalAlignment="Center"/>
                                 </Grid>
                             </Button>
+
+                            <!-- 9. Generators & Randomness -->
+                            <Button x:Name="NavGeneratorsBtn" 
+                                    Style="{StaticResource SettingsNavButtonStyle}" 
+                                    Click="NavCategory_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="24"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="🎲" FontSize="13" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="Generators" FontSize="12.5" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Button>
                         </StackPanel>
                     </ScrollViewer>
                 </Grid>
@@ -663,8 +677,13 @@
                                     <CheckBox x:Name="ShowSnippetKeywordsInCommandPaletteCheck"
                                               Content="Show snippet trigger keywords in Command Palette"
                                               FontSize="12"
-                                              Margin="0,0,0,10"
+                                              Margin="0,0,0,6"
                                               ToolTip="Displays keyword badges next to snippet items and enables searching snippets by their trigger keyword"/>
+                                    <CheckBox x:Name="CommandPalettePinnedDefaultCheck"
+                                              Content="Pin Command Palette by default (stays open when losing focus)"
+                                              FontSize="12"
+                                              Margin="0,0,0,10"
+                                              ToolTip="When checked, the Command Palette opens pinned and will not close when you click elsewhere until dismissed or hotkey pressed"/>
 
                                     <!-- Command Palette 'All' Filter Inclusions -->
                                     <TextBlock Text="'All' Filter Search Inclusions" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3" Foreground="{DynamicResource TextPrimaryBrush}"/>
@@ -1782,6 +1801,209 @@
                                         <Button x:Name="PurgeClipboardBtn" Content="Purge History..." Style="{StaticResource SecondaryButtonStyle}" Padding="10,4" Click="PurgeClipboardBtn_Click"/>
                                     </StackPanel>
                                 </Grid>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- 9. Generators & Randomness Panel -->
+                        <StackPanel x:Name="CategoryGeneratorsPanel" Visibility="Collapsed">
+                            <!-- Section: Password Defaults -->
+                            <TextBlock Text="Password Defaults" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,4,0,8"/>
+                            <Border Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="14,12" Margin="0,0,0,12">
+                                <StackPanel>
+                                    <!-- Length Slider -->
+                                    <Grid Margin="0,0,0,12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                            <TextBlock Text="Default Password Length" FontSize="12.5" FontWeight="SemiBold"/>
+                                            <TextBlock Text="Length used when running 'pass' without specifying an explicit length" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1" x:Name="PasswordLengthText" Text="16 chars" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center"/>
+                                    </Grid>
+                                    <Slider x:Name="PasswordLengthSlider" Minimum="4" Maximum="64" Value="16" IsSnapToTickEnabled="True" TickFrequency="1" Margin="0,0,0,12"/>
+
+                                    <!-- Character Sets -->
+                                    <TextBlock Text="Character Sets Included by Default" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,8"/>
+                                    <Grid Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <CheckBox x:Name="PasswordIncludeUppercaseCheck" Content="Uppercase Letters (A-Z)" IsChecked="True" Margin="0,0,0,6"/>
+                                            <CheckBox x:Name="PasswordIncludeLowercaseCheck" Content="Lowercase Letters (a-z)" IsChecked="True" Margin="0,0,0,6"/>
+                                            <CheckBox x:Name="PasswordIncludeDigitsCheck" Content="Digits (0-9)" IsChecked="True" Margin="0,0,0,6"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1">
+                                            <CheckBox x:Name="PasswordIncludeSpecialCheck" Content="Special Symbols (!@#$...)" IsChecked="True" Margin="0,0,0,6"/>
+                                            <CheckBox x:Name="PasswordExcludeAmbiguousCheck" Content="Exclude Ambiguous (1, l, I, 0, O)" IsChecked="True" Margin="0,0,0,6"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Section: Passphrase & Diceware Defaults -->
+                            <TextBlock Text="Passphrase (Diceware) Defaults" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,4,0,8"/>
+                            <Border Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="14,12" Margin="0,0,0,12">
+                                <StackPanel>
+                                    <!-- Word Count Slider -->
+                                    <Grid Margin="0,0,0,12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                            <TextBlock Text="Default Word Count" FontSize="12.5" FontWeight="SemiBold"/>
+                                            <TextBlock Text="Number of random words used when running 'phrase' (2 - 12 words)" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1" x:Name="PassphraseWordCountText" Text="4 words" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center"/>
+                                    </Grid>
+                                    <Slider x:Name="PassphraseWordCountSlider" Minimum="2" Maximum="12" Value="4" IsSnapToTickEnabled="True" TickFrequency="1" Margin="0,0,0,12"/>
+
+                                    <!-- Separator & Styling -->
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="180"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                            <TextBlock Text="Word Separator" FontSize="12.5" FontWeight="SemiBold"/>
+                                            <TextBlock Text="Character placed between words" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        </StackPanel>
+                                        <ComboBox Grid.Column="1" x:Name="PassphraseSeparatorCombo" VerticalAlignment="Center">
+                                            <ComboBoxItem Content="Hyphen (-)" Tag="Hyphen"/>
+                                            <ComboBoxItem Content="Underscore (_)" Tag="Underscore"/>
+                                            <ComboBoxItem Content="Space ( )" Tag="Space"/>
+                                            <ComboBoxItem Content="Period (.)" Tag="Dot"/>
+                                        </ComboBox>
+                                    </Grid>
+
+                                    <!-- Word Styling Checkboxes -->
+                                    <Grid Margin="0,0,0,12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <CheckBox Grid.Column="0" x:Name="PassphraseCapitalizeCheck" Content="Capitalize Each Word (PascalCase)" IsChecked="False"/>
+                                        <CheckBox Grid.Column="1" x:Name="PassphraseIncludeNumberCheck" Content="Append Trailing Number (e.g. 42)" IsChecked="False"/>
+                                    </Grid>
+
+                                    <!-- 1337 / Leetspeak & Phonetic Substitutions -->
+                                    <TextBlock Text="1337 (Leetspeak) &amp; Phonetics" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,4,0,8"/>
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="220"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                            <TextBlock Text="Substitution Mode" FontSize="12.5" FontWeight="SemiBold"/>
+                                            <TextBlock Text="Visual (A→4, E→3, S→5) or Phonetic (before→b4, great→gr8, to→2)" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        </StackPanel>
+                                        <ComboBox Grid.Column="1" x:Name="PassphraseLeetModeCombo" VerticalAlignment="Center">
+                                            <ComboBoxItem Content="Disabled (Standard Diceware)" Tag="None"/>
+                                            <ComboBoxItem Content="Basic (Visual: A→4, E→3, S→5)" Tag="Visual"/>
+                                            <ComboBoxItem Content="Phonetic (b4, gr8, 2, 1)" Tag="Phonetic"/>
+                                            <ComboBoxItem Content="Both (Phonetic + Visual)" Tag="Combined"/>
+                                        </ComboBox>
+                                    </Grid>
+
+                                    <Grid Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="220"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                            <TextBlock Text="Substitution Intensity" FontSize="12.5" FontWeight="SemiBold"/>
+                                            <TextBlock Text="Controls what percentage of matching patterns are replaced" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        </StackPanel>
+                                        <ComboBox Grid.Column="1" x:Name="PassphraseLeetIntensityCombo" VerticalAlignment="Center">
+                                            <ComboBoxItem Content="Light (~25% subtle)" Tag="Light"/>
+                                            <ComboBoxItem Content="Moderate (~50% balanced)" Tag="Moderate"/>
+                                            <ComboBoxItem Content="Aggressive (100% full)" Tag="Aggressive"/>
+                                        </ComboBox>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Section: GUID / UUID Defaults -->
+                            <TextBlock Text="GUID &amp; UUID Defaults" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,4,0,8"/>
+                            <Border Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="14,12" Margin="0,0,0,12">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="240"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                        <TextBlock Text="Default GUID Format" FontSize="12.5" FontWeight="SemiBold"/>
+                                        <TextBlock Text="Format applied when typing 'guid' without format arguments" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                    </StackPanel>
+                                    <ComboBox Grid.Column="1" x:Name="GuidFormatCombo" VerticalAlignment="Center">
+                                        <ComboBoxItem Content="Standard Hyphenated" Tag="StandardHyphenated"/>
+                                        <ComboBoxItem Content="Uppercase Hyphenated" Tag="Uppercase"/>
+                                        <ComboBoxItem Content="No Hyphens (32-hex)" Tag="NoHyphens"/>
+                                        <ComboBoxItem Content="Braced {guid}" Tag="Braced"/>
+                                        <ComboBoxItem Content="Parentheses (guid)" Tag="Parentheses"/>
+                                        <ComboBoxItem Content="Base64 URL-Safe (22-char)" Tag="Base64UrlSafe"/>
+                                        <ComboBoxItem Content="Version 7 UUID (Time-ordered)" Tag="UuidV7"/>
+                                    </ComboBox>
+                                </Grid>
+                            </Border>
+
+                            <!-- Section: Candidate Count & Regeneration -->
+                            <TextBlock Text="Candidate Count &amp; Drawer Batch" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,4,0,8"/>
+                            <Border Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="14,12" Margin="0,0,0,12">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                            <TextBlock Text="Default Candidate Count" FontSize="12.5" FontWeight="SemiBold"/>
+                                            <TextBlock Text="Batch size generated for the candidate drawer (1 - 25 candidates)" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1" x:Name="GeneratorCandidateCountText" Text="10 candidates" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center"/>
+                                    </Grid>
+                                    <Slider x:Name="GeneratorCandidateCountSlider" Minimum="1" Maximum="25" Value="10" IsSnapToTickEnabled="True" TickFrequency="1" Margin="0,0,0,6"/>
+                                    <TextBlock Text="💡 Tip: You can press Tab or F5 in the Command Palette or click 🔄 to regenerate results in-place without re-typing your query." FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Section: Live Preview -->
+                            <TextBlock Text="Live Preview" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,4,0,8"/>
+                            <Border Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="14,12" Margin="0,0,0,12">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="90"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Password:" FontWeight="SemiBold" FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        <TextBox Grid.Column="1" x:Name="PreviewPasswordText" IsReadOnly="True" FontFamily="Consolas, Courier New" FontSize="12" Padding="6,4" Background="{DynamicResource BgPrimaryBrush}" Foreground="{DynamicResource TextPrimaryBrush}" BorderBrush="{DynamicResource BorderBrush}"/>
+                                    </Grid>
+
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="90"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Passphrase:" FontWeight="SemiBold" FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        <TextBox Grid.Column="1" x:Name="PreviewPassphraseText" IsReadOnly="True" FontFamily="Consolas, Courier New" FontSize="12" Padding="6,4" Background="{DynamicResource BgPrimaryBrush}" Foreground="{DynamicResource TextPrimaryBrush}" BorderBrush="{DynamicResource BorderBrush}"/>
+                                    </Grid>
+
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="90"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="GUID:" FontWeight="SemiBold" FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        <TextBox Grid.Column="1" x:Name="PreviewGuidText" IsReadOnly="True" FontFamily="Consolas, Courier New" FontSize="12" Padding="6,4" Background="{DynamicResource BgPrimaryBrush}" Foreground="{DynamicResource TextPrimaryBrush}" BorderBrush="{DynamicResource BorderBrush}"/>
+                                    </Grid>
+
+                                    <Button x:Name="RefreshGeneratorPreviewBtn" Content="🔄 Refresh Live Sample" Style="{StaticResource SecondaryButtonStyle}" HorizontalAlignment="Left" Padding="12,5" Click="RefreshGeneratorPreviewBtn_Click"/>
+                                </StackPanel>
                             </Border>
                         </StackPanel>
 

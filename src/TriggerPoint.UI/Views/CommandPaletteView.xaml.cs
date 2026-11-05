@@ -84,7 +84,7 @@ public class PaletteItemViewModel
     public Visibility ActionVisibility => IsSelectable ? Visibility.Visible : Visibility.Collapsed;
     public bool IsSystemAction => Item != null && (Item.Id == App.OpenSettingsActionId || Item.Id == CommandPaletteView.AppSettingsVirtualId);
     public bool IsCalculatorResult { get; init; }
-    public CalculatorResult? CalcResult { get; init; }
+    public CalculatorResult? CalcResult { get; set; }
     public bool IsServiceItem { get; init; }
     public WindowsServiceItem? ServiceItem { get; init; }
     public WindowsServiceStatus? ServiceActionStatus { get; init; }
@@ -805,7 +805,9 @@ public partial class CommandPaletteView : Window
     private CommandPaletteSortMode _currentSortMode = CommandPaletteSortMode.Smart;
     private readonly DispatcherTimer _feedbackTimer;
     private bool _isLoaded;
+    private bool _isPinned;
     private bool _isCalcPromoted;
+    private string _currentGuideTab = "Popular";
     private bool _showSnippetKeywords = true;
     internal bool _includeClipboardInAll = true;
     internal int _maxClipboardResultsInAll = 5;
@@ -904,6 +906,8 @@ public partial class CommandPaletteView : Window
         };
 
         UpdateScopeUi();
+        _isPinned = (Application.Current as App)?.CachedSettings?.CommandPalettePinnedDefault ?? false;
+        UpdatePinButtonVisual();
         LoadSortModePreference();
 
         if (App.LatestAvailableUpdate?.IsUpdateAvailable == true && App.LatestAvailableUpdate.LatestUpdate != null)
@@ -948,6 +952,8 @@ public partial class CommandPaletteView : Window
                 _maxClipboardResultsInAll = settings.CommandPaletteMaxClipboardResultsInAll;
                 _includeServicesInAll = settings.CommandPaletteIncludeServicesInAll;
                 _maxServicesResultsInAll = settings.CommandPaletteMaxServiceResultsInAll;
+                _isPinned = settings.CommandPalettePinnedDefault;
+                UpdatePinButtonVisual();
                 UpdateSortButtonText();
                 UpdateSortMenuCheckmarks();
 
@@ -1084,7 +1090,129 @@ public partial class CommandPaletteView : Window
             PrefixAutoCompletePopup.IsOpen = false;
         }
 
+        UpdateCalcIntelliSense();
+
         FilterResults();
+    }
+
+    private bool _isCalcIntelliSenseMinimized = false;
+    private bool _isCalcIntelliSenseUserClosed = false;
+
+    private void UpdateCalcIntelliSense()
+    {
+        string raw = SearchTextBox.Text ?? string.Empty;
+        bool isCalcMode = raw.StartsWith("@calc", StringComparison.OrdinalIgnoreCase) || raw.StartsWith("=");
+
+        if (CalcIntelliSenseToggleBtn != null)
+        {
+            CalcIntelliSenseToggleBtn.Visibility = isCalcMode ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        if (isCalcMode && !PrefixAutoCompletePopup.IsOpen && !_isCalcIntelliSenseUserClosed)
+        {
+            var suggestions = CalcIntelliSenseService.GetSuggestions(raw, SearchTextBox.CaretIndex);
+            if (suggestions.Count > 0)
+            {
+                if (CalcIntelliSenseSignatureText != null)
+                {
+                    CalcIntelliSenseSignatureText.Text = CalcIntelliSenseService.GetSignature(raw) ?? "💡 Calculator Suggestions";
+                }
+                if (CalcIntelliSenseList != null)
+                {
+                    CalcIntelliSenseList.ItemsSource = suggestions;
+                    if (CalcIntelliSenseList.SelectedIndex < 0 || CalcIntelliSenseList.SelectedIndex >= suggestions.Count)
+                    {
+                        CalcIntelliSenseList.SelectedIndex = 0;
+                    }
+                }
+                if (CalcIntelliSenseDock != null)
+                {
+                    CalcIntelliSenseDock.Visibility = Visibility.Visible;
+                    UpdateCalcIntelliSenseDockVisual();
+                }
+                return;
+            }
+        }
+
+        if (CalcIntelliSenseDock != null)
+        {
+            CalcIntelliSenseDock.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private void UpdateCalcIntelliSenseDockVisual()
+    {
+        if (CalcIntelliSenseList != null)
+        {
+            CalcIntelliSenseList.Visibility = _isCalcIntelliSenseMinimized ? Visibility.Collapsed : Visibility.Visible;
+        }
+        if (CalcIntelliSenseMinimizedBar != null)
+        {
+            CalcIntelliSenseMinimizedBar.Visibility = _isCalcIntelliSenseMinimized ? Visibility.Visible : Visibility.Collapsed;
+            if (_isCalcIntelliSenseMinimized && CalcIntelliSenseList?.Items != null)
+            {
+                CalcIntelliSenseMinimizedText.Text = $"💡 {CalcIntelliSenseList.Items.Count} suggestions available - click to expand";
+            }
+        }
+        if (CalcIntelliSenseMinIcon != null)
+        {
+            CalcIntelliSenseMinIcon.Text = _isCalcIntelliSenseMinimized ? "+" : "–";
+        }
+    }
+
+    private void CalcIntelliSenseMinBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _isCalcIntelliSenseMinimized = !_isCalcIntelliSenseMinimized;
+        UpdateCalcIntelliSenseDockVisual();
+    }
+
+    private void CalcIntelliSenseCloseBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _isCalcIntelliSenseUserClosed = true;
+        if (CalcIntelliSenseDock != null)
+        {
+            CalcIntelliSenseDock.Visibility = Visibility.Collapsed;
+        }
+        SearchTextBox.Focus();
+    }
+
+    private void CalcIntelliSenseMinimizedBar_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        _isCalcIntelliSenseMinimized = false;
+        UpdateCalcIntelliSenseDockVisual();
+    }
+
+    private void CalcIntelliSenseToggleBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (CalcIntelliSenseDock != null && CalcIntelliSenseDock.Visibility == Visibility.Visible)
+        {
+            _isCalcIntelliSenseUserClosed = true;
+            CalcIntelliSenseDock.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            _isCalcIntelliSenseUserClosed = false;
+            _isCalcIntelliSenseMinimized = false;
+            UpdateCalcIntelliSense();
+        }
+        SearchTextBox.Focus();
+    }
+
+    private void ApplySelectedIntelliSense()
+    {
+        if (CalcIntelliSenseList.SelectedItem is CalcIntelliSenseItem item)
+        {
+            SearchTextBox.Text = CalcIntelliSenseService.ApplySuggestion(SearchTextBox.Text, item);
+            SearchTextBox.CaretIndex = SearchTextBox.Text.Length;
+            SearchTextBox.Focus();
+            UpdateCalcIntelliSense();
+        }
+    }
+
+    private void CalcIntelliSenseList_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        ApplySelectedIntelliSense();
+        e.Handled = true;
     }
 
     private void ApplyPrefixSuggestion(PrefixSuggestionItem suggestion)
@@ -1517,8 +1645,9 @@ public partial class CommandPaletteView : Window
 
         bool hasExplicitPrefix = rawQuery.StartsWith("=") || rawQuery.StartsWith("@calc", StringComparison.OrdinalIgnoreCase);
 
-        // Evaluate quick math or unit conversion utility
-        var calcResult = QuickCalculatorService.TryEvaluate(rawQuery);
+        // Evaluate quick math, unit conversion, or randomness generator utility
+        var appSettings = (Application.Current as App)?.CachedSettings;
+        var calcResult = QuickCalculatorService.TryEvaluate(rawQuery, appSettings);
 
         if (_isCalcPromoted && !hasExplicitPrefix && calcResult == null)
         {
@@ -1533,7 +1662,6 @@ public partial class CommandPaletteView : Window
             ResultsListBox.Visibility = Visibility.Collapsed;
             EmptyStateCard.Visibility = Visibility.Collapsed;
             CalculatorGuideCard.Visibility = Visibility.Visible;
-            AnimateWindowHeight(Math.Min(640, SystemParameters.WorkArea.Height - 60));
 
             if (calcResult != null)
             {
@@ -1567,7 +1695,29 @@ public partial class CommandPaletteView : Window
                 CalcResultValueText.ToolTip = $"Calculation: {calcResult.Expression.TrimStart('=', ' ').Trim()} = {calcResult.FormattedResult} (Shift+Enter to paste, Enter to copy)";
                 CalcResultDescText.Text = !string.IsNullOrWhiteSpace(calcResult.Description) ? calcResult.Description : "Calculation result";
                 CalcResultDescText.ToolTip = CalcResultDescText.Text;
+
+                bool isGen = IsGeneratorResult(calcResult);
+                CalcResultRegenBtn.Visibility = isGen ? Visibility.Visible : Visibility.Collapsed;
+                CalcResultSettingsBtn.Visibility = isGen ? Visibility.Visible : Visibility.Collapsed;
+                CalcResultMoreUnitsText.Text = isGen ? "Candidates" : "Units";
                 CalcResultMoreUnitsBtn.Visibility = (calcResult.Alternatives != null && calcResult.Alternatives.Count > 0) ? Visibility.Visible : Visibility.Collapsed;
+
+                if (isGen && calcResult.Alternatives != null && calcResult.Alternatives.Count > 0)
+                {
+                    CalcInlineCandidatesPanel.Visibility = Visibility.Visible;
+                    CalcGuideTabsPanel.Visibility = Visibility.Collapsed;
+                    HideAllCalcGuidePanels();
+                    CalcCandidatesItemsControl.ItemsSource = calcResult.Alternatives;
+                    CalcCandidatesBadgeText.Text = $"{calcResult.Alternatives.Count} Candidates";
+                    PopulateParamChips(rawQuery);
+                }
+                else
+                {
+                    CalcInlineCandidatesPanel.Visibility = Visibility.Collapsed;
+                    CalcParamChipsWrapPanel.Visibility = Visibility.Collapsed;
+                    CalcGuideTabsPanel.Visibility = Visibility.Visible;
+                    SelectCalcGuideTab(_currentGuideTab);
+                }
             }
             else
             {
@@ -1576,6 +1726,11 @@ public partial class CommandPaletteView : Window
                 vms.Clear();
                 ResultsListBox.ItemsSource = vms;
                 ResultsListBox.SelectedItem = null;
+
+                CalcInlineCandidatesPanel.Visibility = Visibility.Collapsed;
+                CalcParamChipsWrapPanel.Visibility = Visibility.Collapsed;
+                CalcGuideTabsPanel.Visibility = Visibility.Visible;
+                SelectCalcGuideTab(_currentGuideTab);
 
                 CalcResultBanner.Visibility = Visibility.Collapsed;
                 CalcDraftBanner.Visibility = Visibility.Visible;
@@ -1600,7 +1755,12 @@ public partial class CommandPaletteView : Window
             CalculatorGuideCard.Visibility = Visibility.Collapsed;
             CalcResultBanner.Visibility = Visibility.Collapsed;
             CalcDraftBanner.Visibility = Visibility.Collapsed;
-            AnimateWindowHeight(520);
+            CalcInlineCandidatesPanel.Visibility = Visibility.Collapsed;
+            CalcParamChipsWrapPanel.Visibility = Visibility.Collapsed;
+            if (CalcIntelliSenseDock != null)
+            {
+                CalcIntelliSenseDock.Visibility = Visibility.Collapsed;
+            }
 
             if (calcResult != null)
             {
@@ -1814,20 +1974,33 @@ public partial class CommandPaletteView : Window
 
     private void SelectCalcGuideTab(string tag)
     {
-        if (CalcPanelPopular == null || CalcPanelDate == null || CalcPanelScientific == null ||
+        _currentGuideTab = tag;
+        if (CalcPanelPopular == null || CalcPanelGenerators == null || CalcPanelDate == null || CalcPanelScientific == null ||
             CalcPanelProgrammer == null || CalcPanelUnits == null) return;
 
         CalcPanelPopular.Visibility = tag == "Popular" ? Visibility.Visible : Visibility.Collapsed;
+        CalcPanelGenerators.Visibility = tag == "Generators" ? Visibility.Visible : Visibility.Collapsed;
         CalcPanelDate.Visibility = tag == "Date" ? Visibility.Visible : Visibility.Collapsed;
         CalcPanelScientific.Visibility = tag == "Scientific" ? Visibility.Visible : Visibility.Collapsed;
         CalcPanelProgrammer.Visibility = tag == "Programmer" ? Visibility.Visible : Visibility.Collapsed;
         CalcPanelUnits.Visibility = tag == "Units" ? Visibility.Visible : Visibility.Collapsed;
 
         UpdateTabButtonStyle(CalcTabPopular, tag == "Popular");
+        UpdateTabButtonStyle(CalcTabGenerators, tag == "Generators");
         UpdateTabButtonStyle(CalcTabDate, tag == "Date");
         UpdateTabButtonStyle(CalcTabScientific, tag == "Scientific");
         UpdateTabButtonStyle(CalcTabProgrammer, tag == "Programmer");
         UpdateTabButtonStyle(CalcTabUnits, tag == "Units");
+    }
+
+    private void HideAllCalcGuidePanels()
+    {
+        if (CalcPanelPopular != null) CalcPanelPopular.Visibility = Visibility.Collapsed;
+        if (CalcPanelGenerators != null) CalcPanelGenerators.Visibility = Visibility.Collapsed;
+        if (CalcPanelDate != null) CalcPanelDate.Visibility = Visibility.Collapsed;
+        if (CalcPanelScientific != null) CalcPanelScientific.Visibility = Visibility.Collapsed;
+        if (CalcPanelProgrammer != null) CalcPanelProgrammer.Visibility = Visibility.Collapsed;
+        if (CalcPanelUnits != null) CalcPanelUnits.Visibility = Visibility.Collapsed;
     }
 
     private void UpdateTabButtonStyle(Button? btn, bool isSelected)
@@ -2139,7 +2312,14 @@ public partial class CommandPaletteView : Window
                     ? $"Calculator • {_activeCalcResult.Expression} = {_activeCalcResult.FormattedResult} • {_activeCalcResult.Description}"
                     : $"Calculator • {_activeCalcResult.Expression} = {_activeCalcResult.FormattedResult}";
                 PreviewDetailText.ToolTip = PreviewDetailText.Text;
-                FooterHintsText.Text = $"Shift+Enter Paste Answer   •   Ctrl+C Copy Answer ({_activeCalcResult.FormattedResult})   •   Ctrl+Shift+C Copy Question & Answer   •   Alt+U Units   •   Tab Chain";
+                if (IsGeneratorResult(_activeCalcResult))
+                {
+                    FooterHintsText.Text = $"Shift+Enter Paste Answer   •   Ctrl+C Copy   •   Tab / F5 Regenerate 🔄   •   Alt+U Candidates ▾";
+                }
+                else
+                {
+                    FooterHintsText.Text = $"Shift+Enter Paste Answer   •   Ctrl+C Copy Answer ({_activeCalcResult.FormattedResult})   •   Ctrl+Shift+C Copy Question & Answer   •   Alt+U Units   •   Tab Chain";
+                }
             }
             else
             {
@@ -2646,6 +2826,14 @@ public partial class CommandPaletteView : Window
             SetFilterPillCtrlHintsVisibility(Visibility.Visible);
         }
 
+        // Pin Window shortcut (Ctrl+Shift+P)
+        if ((Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) == (ModifierKeys.Control | ModifierKeys.Shift) && key == Key.P)
+        {
+            TogglePin();
+            e.Handled = true;
+            return;
+        }
+
         // Overlay Escape
         if (CheatSheetOverlay.Visibility == Visibility.Visible)
         {
@@ -2774,9 +2962,75 @@ public partial class CommandPaletteView : Window
             }
         }
 
+        // Calculator IntelliSense Dock Navigation
+        if (CalcIntelliSenseDock != null && CalcIntelliSenseDock.Visibility == Visibility.Visible && !_isCalcIntelliSenseMinimized)
+        {
+            if (key == Key.Down)
+            {
+                int count = CalcIntelliSenseList.Items.Count;
+                if (count > 0)
+                {
+                    int next = (CalcIntelliSenseList.SelectedIndex + 1) % count;
+                    CalcIntelliSenseList.SelectedIndex = next;
+                    CalcIntelliSenseList.ScrollIntoView(CalcIntelliSenseList.SelectedItem);
+                }
+                e.Handled = true;
+                return;
+            }
+
+            if (key == Key.Up)
+            {
+                int count = CalcIntelliSenseList.Items.Count;
+                if (count > 0)
+                {
+                    int prev = (CalcIntelliSenseList.SelectedIndex - 1 + count) % count;
+                    CalcIntelliSenseList.SelectedIndex = prev;
+                    CalcIntelliSenseList.ScrollIntoView(CalcIntelliSenseList.SelectedItem);
+                }
+                e.Handled = true;
+                return;
+            }
+
+            if (key == Key.Tab || key == Key.Enter)
+            {
+                ApplySelectedIntelliSense();
+                e.Handled = true;
+                return;
+            }
+
+            if (key == Key.Escape)
+            {
+                _isCalcIntelliSenseUserClosed = true;
+                CalcIntelliSenseDock.Visibility = Visibility.Collapsed;
+                e.Handled = true;
+                return;
+            }
+        }
+
         // Global Navigation Hotkeys
         if ((Keyboard.Modifiers & ModifierKeys.Control) != 0)
         {
+            if (key == Key.Space)
+            {
+                string raw = SearchTextBox.Text ?? string.Empty;
+                bool isCalcMode = raw.StartsWith("@calc", StringComparison.OrdinalIgnoreCase) || raw.StartsWith("=");
+                if (isCalcMode)
+                {
+                    if (CalcIntelliSenseDock != null && CalcIntelliSenseDock.Visibility == Visibility.Visible)
+                    {
+                        _isCalcIntelliSenseUserClosed = true;
+                        CalcIntelliSenseDock.Visibility = Visibility.Collapsed;
+                    }
+                    else
+                    {
+                        _isCalcIntelliSenseUserClosed = false;
+                        _isCalcIntelliSenseMinimized = false;
+                        UpdateCalcIntelliSense();
+                    }
+                    e.Handled = true;
+                    return;
+                }
+            }
             if (key == Key.M)
             {
                 SafeClose();
@@ -2993,6 +3247,16 @@ public partial class CommandPaletteView : Window
             return;
         }
 
+        if (key == Key.F5 || (key == Key.R && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control))
+        {
+            if (_activeCalcResult != null && IsGeneratorResult(_activeCalcResult))
+            {
+                RegenerateCurrentCalculatorResult();
+                e.Handled = true;
+                return;
+            }
+        }
+
         if (key == Key.Tab)
         {
             if (SearchTextBox == null) return;
@@ -3002,6 +3266,12 @@ public partial class CommandPaletteView : Window
 
             if (_activeCalcResult != null)
             {
+                if (IsGeneratorResult(_activeCalcResult))
+                {
+                    RegenerateCurrentCalculatorResult();
+                    e.Handled = true;
+                    return;
+                }
                 var ans = _activeCalcResult.FormattedResult;
                 if (!string.IsNullOrWhiteSpace(ans))
                 {
@@ -3430,6 +3700,10 @@ public partial class CommandPaletteView : Window
             {
                 PrefixAutoCompletePopup.IsOpen = false;
             }
+            if (CalcIntelliSenseDock != null)
+            {
+                CalcIntelliSenseDock.Visibility = Visibility.Collapsed;
+            }
             if (SortContextMenu != null)
             {
                 SortContextMenu.IsOpen = false;
@@ -3482,6 +3756,22 @@ public partial class CommandPaletteView : Window
             {
                 Height = Math.Clamp(h, MinPaletteHeight, maxH);
             }
+
+            if (settings?.CommandPaletteLeft is double left && settings?.CommandPaletteTop is double top)
+            {
+                double virtualLeft = SystemParameters.VirtualScreenLeft;
+                double virtualTop = SystemParameters.VirtualScreenTop;
+                double virtualWidth = SystemParameters.VirtualScreenWidth;
+                double virtualHeight = SystemParameters.VirtualScreenHeight;
+
+                if (left >= virtualLeft - 50 && left <= virtualLeft + virtualWidth - 100 &&
+                    top >= virtualTop - 50 && top <= virtualTop + virtualHeight - 100)
+                {
+                    WindowStartupLocation = WindowStartupLocation.Manual;
+                    Left = left;
+                    Top = top;
+                }
+            }
         }
         catch { }
     }
@@ -3498,14 +3788,26 @@ public partial class CommandPaletteView : Window
 
             if (settings != null && Width >= MinPaletteWidth && Height >= MinPaletteHeight)
             {
+                bool changed = false;
                 if (settings.CommandPaletteWidth != Width || settings.CommandPaletteHeight != Height)
                 {
                     settings.CommandPaletteWidth = Width;
                     settings.CommandPaletteHeight = Height;
-                    if (_repository != null)
-                    {
-                        _ = _repository.SaveSettingsAsync(settings);
-                    }
+                    changed = true;
+                }
+                if (!double.IsNaN(Left) && !double.IsInfinity(Left) && settings.CommandPaletteLeft != Left)
+                {
+                    settings.CommandPaletteLeft = Left;
+                    changed = true;
+                }
+                if (!double.IsNaN(Top) && !double.IsInfinity(Top) && settings.CommandPaletteTop != Top)
+                {
+                    settings.CommandPaletteTop = Top;
+                    changed = true;
+                }
+                if (changed && _repository != null)
+                {
+                    _repository.SaveSettingsAsync(settings).GetAwaiter().GetResult();
                 }
             }
         }
@@ -3517,6 +3819,9 @@ public partial class CommandPaletteView : Window
         var thumb = sender as FrameworkElement;
         string direction = thumb?.Tag as string ?? "BottomRight";
 
+        BeginAnimation(WidthProperty, null);
+        BeginAnimation(HeightProperty, null);
+
         double minW = MinWidth > 0 ? MinWidth : MinPaletteWidth;
         double minH = MinHeight > 0 ? MinHeight : MinPaletteHeight;
         double workWidth = SystemParameters.WorkArea.Width > 0 ? SystemParameters.WorkArea.Width : 2560;
@@ -3524,7 +3829,7 @@ public partial class CommandPaletteView : Window
         double maxW = workWidth * 0.95;
         double maxH = workHeight * 0.95;
 
-        if (direction is "Right" or "BottomRight")
+        if (direction is "Right" or "BottomRight" or "TopRight")
         {
             Width = Math.Clamp(Width + e.HorizontalChange, minW, maxW);
         }
@@ -3532,12 +3837,19 @@ public partial class CommandPaletteView : Window
         {
             Height = Math.Clamp(Height + e.VerticalChange, minH, maxH);
         }
-        if (direction is "Left" or "BottomLeft")
+        if (direction is "Left" or "BottomLeft" or "TopLeft")
         {
             double newWidth = Math.Clamp(Width - e.HorizontalChange, minW, maxW);
             double delta = Width - newWidth;
             Width = newWidth;
             Left += delta;
+        }
+        if (direction is "Top" or "TopLeft" or "TopRight")
+        {
+            double newHeight = Math.Clamp(Height - e.VerticalChange, minH, maxH);
+            double delta = Height - newHeight;
+            Height = newHeight;
+            Top += delta;
         }
     }
 
@@ -3723,7 +4035,220 @@ public partial class CommandPaletteView : Window
     {
         SetFilterPillCtrlHintsVisibility(Visibility.Collapsed);
         if (!_isLoaded) return;
+        if (_isPinned) return;
         SafeClose();
+    }
+
+    private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.LeftButton == MouseButtonState.Pressed)
+        {
+            if (e.OriginalSource is DependencyObject dep && FindVisualParent<Button>(dep) != null)
+            {
+                return;
+            }
+            try
+            {
+                DragMove();
+            }
+            catch (InvalidOperationException) { }
+        }
+    }
+
+    private void CloseWindowBtn_Click(object sender, RoutedEventArgs e)
+    {
+        SafeClose();
+    }
+
+    private void WindowOuterBorder_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ButtonState == MouseButtonState.Pressed)
+        {
+            if (e.OriginalSource is DependencyObject dep)
+            {
+                if (FindVisualParent<TextBox>(dep) != null ||
+                    FindVisualParent<Button>(dep) != null ||
+                    FindVisualParent<ScrollBar>(dep) != null ||
+                    FindVisualParent<ListBoxItem>(dep) != null ||
+                    FindVisualParent<Thumb>(dep) != null)
+                {
+                    return;
+                }
+            }
+            try
+            {
+                DragMove();
+            }
+            catch (InvalidOperationException) { }
+        }
+    }
+
+    private void PinWindowBtn_Click(object sender, RoutedEventArgs e)
+    {
+        TogglePin();
+    }
+
+    private void TogglePin()
+    {
+        _isPinned = !_isPinned;
+        UpdatePinButtonVisual();
+        ShowInlineFeedback(_isPinned ? "Pinned 📌" : "Unpinned");
+    }
+
+    private void UpdatePinButtonVisual()
+    {
+        if (PinWindowIcon != null)
+        {
+            PinWindowIcon.Opacity = _isPinned ? 1.0 : 0.45;
+        }
+        if (PinWindowBtn != null)
+        {
+            PinWindowBtn.ToolTip = _isPinned
+                ? "Unpin Window (Ctrl+Shift+P - currently pinned)"
+                : "Pin Window (Ctrl+Shift+P - keep open on blur)";
+            PinWindowBtn.Background = _isPinned
+                ? (Brush)FindResource("AccentSubtleBrush")
+                : Brushes.Transparent;
+            PinWindowBtn.BorderBrush = _isPinned
+                ? (Brush)FindResource("AccentBrush")
+                : Brushes.Transparent;
+        }
+    }
+
+    private static T? FindVisualParent<T>(DependencyObject? child) where T : DependencyObject
+    {
+        while (child != null)
+        {
+            if (child is T typed) return typed;
+            child = VisualTreeHelper.GetParent(child);
+        }
+        return null;
+    }
+
+    private void CandidateCopyBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is string val && !string.IsNullOrEmpty(val))
+        {
+            Clipboard.SetText(val);
+            ShowInlineFeedback($"Copied '{val}' 📋");
+        }
+    }
+
+    private void CandidatePasteBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is string val && !string.IsNullOrEmpty(val))
+        {
+            var calcItem = new TriggerItem
+            {
+                Id = Guid.NewGuid(),
+                Name = val,
+                Description = "Candidate solution",
+                ActionType = ActionType.Snippet,
+                Payload = new ActionPayload
+                {
+                    SnippetTemplate = val
+                },
+                IsEnabled = true
+            };
+            SafeClose();
+            _ = _executor.ExecuteAsync(calcItem, ExecutionOverride.Standard, _targetHwnd);
+        }
+    }
+
+    private void CalcParamChip_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is string token)
+        {
+            string current = SearchTextBox.Text;
+            var item = new CalcIntelliSenseItem
+            {
+                Text = token,
+                DisplayText = token,
+                Description = "",
+                Kind = CalcIntelliSenseKind.Modifier
+            };
+            SearchTextBox.Text = CalcIntelliSenseService.ApplySuggestion(current, item);
+            SearchTextBox.CaretIndex = SearchTextBox.Text.Length;
+            SearchTextBox.Focus();
+        }
+    }
+
+    private void PopulateParamChips(string query)
+    {
+        CalcParamChipsWrapPanel.Children.Clear();
+        var lower = query.ToLowerInvariant();
+
+        if (lower.Contains("pass") || lower.Contains("pw") || lower.Contains("pin"))
+        {
+            AddParamChip("16 chars", "16", "Set length to 16");
+            AddParamChip("24 chars", "24", "Set length to 24");
+            if (lower.Contains("nosym"))
+                AddParamChip("+Symbols", "symbols", "Include special symbols");
+            else
+                AddParamChip("No Symbols", "nosym", "Exclude special symbols");
+
+            if (lower.Contains("1337") || lower.Contains("leet"))
+                AddParamChip("Phonetic b4", "b4", "Phonetic leetspeak substitutions");
+            else
+                AddParamChip("1337 Leet", "1337", "Visual leetspeak substitutions");
+
+            if (!lower.Contains("safe"))
+                AddParamChip("Safe (No Ambiguous)", "safe", "Exclude visually confusing characters");
+
+            AddParamChip("10 Options", "count 10", "Generate 10 candidates");
+            CalcParamChipsWrapPanel.Visibility = Visibility.Visible;
+        }
+        else if (lower.Contains("phrase"))
+        {
+            AddParamChip("4 words", "4", "Generate 4 words");
+            AddParamChip("5 words", "5", "Generate 5 words");
+            AddParamChip("Hyphen (-)", "sep -", "Separate with hyphens");
+            AddParamChip("Space ( )", "sep space", "Separate with spaces");
+            AddParamChip("Dot (.)", "sep .", "Separate with dots");
+            AddParamChip("TitleCase", "title", "Capitalize each word");
+            if (!lower.Contains("1337") && !lower.Contains("leet"))
+                AddParamChip("1337 Leet", "1337", "Apply leetspeak");
+            AddParamChip("10 Options", "count 10", "Generate 10 candidates");
+            CalcParamChipsWrapPanel.Visibility = Visibility.Visible;
+        }
+        else if (lower.Contains("guid") || lower.Contains("uuid"))
+        {
+            if (!lower.Contains("v7")) AddParamChip("UUIDv7", "v7", "Time-ordered UUIDv7");
+            if (!lower.Contains("upper")) AddParamChip("UPPERCASE", "upper", "Uppercase hex");
+            if (!lower.Contains("nohyphen")) AddParamChip("No Hyphens", "nohyphen", "Compact without hyphens");
+            if (!lower.Contains("braces")) AddParamChip("Braces {}", "braces", "Enclosed in braces");
+            if (!lower.Contains("base64")) AddParamChip("Base64", "base64", "URL-safe Base64");
+            AddParamChip("10 Options", "count 10", "Generate 10 candidates");
+            CalcParamChipsWrapPanel.Visibility = Visibility.Visible;
+        }
+        else if (lower.Contains("roll"))
+        {
+            AddParamChip("3d6+2", "3d6+2", "Roll 3d6+2");
+            AddParamChip("1d20+4", "1d20+4", "Roll 1d20+4");
+            AddParamChip("1d20-2", "1d20-2", "Roll 1d20-2");
+            AddParamChip("4d6", "4d6", "Roll 4d6");
+            AddParamChip("2d10+5", "2d10+5", "Roll 2d10+5");
+            AddParamChip("1d100", "1d100", "Roll d100");
+            CalcParamChipsWrapPanel.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            CalcParamChipsWrapPanel.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private void AddParamChip(string label, string token, string tooltip)
+    {
+        var btn = new Button
+        {
+            Content = label,
+            Tag = token,
+            ToolTip = tooltip,
+            Style = (Style)FindResource("CalcCategoryChipStyle"),
+            Margin = new Thickness(0, 0, 5, 4)
+        };
+        btn.Click += CalcParamChip_Click;
+        CalcParamChipsWrapPanel.Children.Add(btn);
     }
 
     private CalculatorResult? _activeCalcResult;
@@ -3817,6 +4342,20 @@ public partial class CommandPaletteView : Window
         _activeCalcVm = vm;
         _currentAlternatives = vm.CalcResult?.Alternatives ?? Array.Empty<AlternativeMeasurement>();
         _selectedCategory = "All";
+
+        bool isGen = IsGeneratorResult(vm.CalcResult);
+        if (isGen)
+        {
+            UnitsDrawerTitleText.Text = "🎲 Generated Candidates & Variations";
+            UnitsDrawerSubtitleText.Text = "Click 'Paste' to use candidate, or 'Copy' to copy to clipboard";
+            DrawerRegenBatchBtn.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            UnitsDrawerTitleText.Text = "🧮 Alternative Measurements & Conversions";
+            UnitsDrawerSubtitleText.Text = "Click 'Paste' to use as result, or 'Copy' to copy value or full sentence";
+            DrawerRegenBatchBtn.Visibility = Visibility.Collapsed;
+        }
 
         PopulateCategoryChips(_currentAlternatives);
         UpdateCategoryChipsUi();
@@ -4081,6 +4620,90 @@ public partial class CommandPaletteView : Window
             catch { }
         }
     }
+
+    #region Calculator Generator Helpers & In-Place Regeneration
+
+    private static bool IsGeneratorResult(CalculatorResult? result)
+    {
+        if (result == null) return false;
+        var expr = result.Expression.TrimStart('=', ' ').Trim();
+        return expr.StartsWith("guid", StringComparison.OrdinalIgnoreCase)
+            || expr.StartsWith("pass", StringComparison.OrdinalIgnoreCase)
+            || expr.StartsWith("phrase", StringComparison.OrdinalIgnoreCase)
+            || expr.StartsWith("pin", StringComparison.OrdinalIgnoreCase)
+            || expr.StartsWith("roll", StringComparison.OrdinalIgnoreCase)
+            || expr.StartsWith("rand", StringComparison.OrdinalIgnoreCase)
+            || expr.StartsWith("coin", StringComparison.OrdinalIgnoreCase)
+            || expr.StartsWith("flip", StringComparison.OrdinalIgnoreCase)
+            || expr.StartsWith("sha", StringComparison.OrdinalIgnoreCase)
+            || expr.StartsWith("md5", StringComparison.OrdinalIgnoreCase)
+            || expr.StartsWith("crc32", StringComparison.OrdinalIgnoreCase)
+            || expr.StartsWith("base64", StringComparison.OrdinalIgnoreCase)
+            || expr.StartsWith("url", StringComparison.OrdinalIgnoreCase)
+            || expr.StartsWith("slug", StringComparison.OrdinalIgnoreCase)
+            || expr.StartsWith("lorem", StringComparison.OrdinalIgnoreCase)
+            || expr.StartsWith("mock", StringComparison.OrdinalIgnoreCase)
+            || (result.Alternatives != null && result.Alternatives.Any(a => a.Label.StartsWith("Candidate", StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private void RegenerateCurrentCalculatorResult()
+    {
+        if (SearchTextBox == null) return;
+        string rawQuery = SearchTextBox.Text?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(rawQuery)) return;
+
+        var appSettings = (Application.Current as App)?.CachedSettings;
+        var newResult = QuickCalculatorService.TryEvaluate(rawQuery, appSettings);
+        if (newResult == null) return;
+
+        _activeCalcResult = newResult;
+        CalcResultValueText.Text = newResult.FormattedResult;
+        CalcResultValueText.ToolTip = $"Calculation: {newResult.Expression.TrimStart('=', ' ').Trim()} = {newResult.FormattedResult} (Shift+Enter to paste, Enter to copy)";
+        CalcResultDescText.Text = !string.IsNullOrWhiteSpace(newResult.Description) ? newResult.Description : "Calculation result";
+        CalcResultDescText.ToolTip = CalcResultDescText.Text;
+
+        if (_activeCalcVm != null)
+        {
+            _activeCalcVm.CalcResult = newResult;
+            _activeCalcVm.Item.Name = $"{newResult.FormattedResult}  ({newResult.Expression})";
+            _activeCalcVm.Item.Description = newResult.Description;
+            _activeCalcVm.Item.Payload.SnippetTemplate = newResult.FormattedResult;
+        }
+
+        bool isGen = IsGeneratorResult(newResult);
+        CalcResultRegenBtn.Visibility = isGen ? Visibility.Visible : Visibility.Collapsed;
+        CalcResultSettingsBtn.Visibility = isGen ? Visibility.Visible : Visibility.Collapsed;
+        CalcResultMoreUnitsText.Text = isGen ? "Candidates" : "Units";
+        CalcResultMoreUnitsBtn.Visibility = (newResult.Alternatives != null && newResult.Alternatives.Count > 0) ? Visibility.Visible : Visibility.Collapsed;
+
+        if (CalculatorUnitsOverlay.Visibility == Visibility.Visible && _activeCalcVm != null)
+        {
+            _currentAlternatives = newResult.Alternatives ?? Array.Empty<AlternativeMeasurement>();
+            PopulateCategoryChips(_currentAlternatives);
+            UpdateCategoryChipsUi();
+            ApplyAlternativesFilter();
+        }
+
+        ShowInlineFeedback("Regenerated! 🔄");
+    }
+
+    private void CalcResultRegenBtn_Click(object sender, RoutedEventArgs e)
+    {
+        RegenerateCurrentCalculatorResult();
+    }
+
+    private void DrawerRegenBatchBtn_Click(object sender, RoutedEventArgs e)
+    {
+        RegenerateCurrentCalculatorResult();
+    }
+
+    private void CalcResultSettingsBtn_Click(object sender, RoutedEventArgs e)
+    {
+        SafeClose();
+        (Application.Current as App)?.ShowApplicationSettingsWindow(ApplicationSettingsWindow.SettingsCategory.Generators);
+    }
+
+    #endregion
 
     public static List<TriggerItem> ResolveFolderActions(TriggerItem folder, IEnumerable<TriggerItem> allItems, bool includeSubfolders)
     {

@@ -519,7 +519,9 @@
         </Style>
     </Window.Resources>
 
-    <Border Background="{DynamicResource BgSecondaryBrush}"
+    <Border x:Name="WindowOuterBorder"
+            MouseLeftButtonDown="WindowOuterBorder_MouseLeftButtonDown"
+            Background="{DynamicResource BgSecondaryBrush}"
             BorderBrush="{DynamicResource BorderBrush}"
             BorderThickness="1"
             CornerRadius="12"
@@ -529,7 +531,58 @@
         </Border.Effect>
 
         <Grid>
-            <Grid Margin="16,14,16,12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/> <!-- Dedicated Title Bar (Row 0) -->
+                <RowDefinition Height="*"/>    <!-- Palette Main Content (Row 1) -->
+            </Grid.RowDefinitions>
+
+            <!-- Row 0: Dedicated Title Bar -->
+            <Border Grid.Row="0"
+                    x:Name="TitleBarBorder"
+                    Height="28"
+                    Background="Transparent"
+                    CornerRadius="12,12,0,0"
+                    Padding="14,4,10,0"
+                    MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/> <!-- App Icon & Title -->
+                        <ColumnDefinition Width="*"/>    <!-- Draggable Header Middle -->
+                        <ColumnDefinition Width="Auto"/> <!-- Pin & Close Window Buttons -->
+                    </Grid.ColumnDefinitions>
+
+                    <!-- App Icon & Title -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" IsHitTestVisible="False">
+                        <Image Source="{DynamicResource AppIconSource}" Width="15" Height="15" Margin="0,0,7,0" RenderOptions.BitmapScalingMode="HighQuality"/>
+                        <TextBlock Text="TriggerPoint" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <!-- Draggable Surface -->
+                    <Rectangle Grid.Column="1" Fill="Transparent"/>
+
+                    <!-- Right Buttons: Pin and Close Window -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button x:Name="PinWindowBtn"
+                                Style="{StaticResource HeaderIconButtonStyle}"
+                                Width="26" Height="24"
+                                Click="PinWindowBtn_Click"
+                                ToolTip="Pin Window (Keep open on blur, Ctrl+Shift+P)">
+                            <TextBlock x:Name="PinWindowIcon" Text="📌" FontSize="11.5" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False" Opacity="0.45"/>
+                        </Button>
+
+                        <Button x:Name="CloseWindowBtn"
+                                Style="{StaticResource HeaderIconButtonStyle}"
+                                Width="26" Height="24"
+                                Click="CloseWindowBtn_Click"
+                                ToolTip="Close Command Palette (Esc)">
+                            <TextBlock Text="✕" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Row 1: Palette Main Content -->
+            <Grid Grid.Row="1" Margin="16,2,16,12">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/> <!-- Search & Scope Header -->
                 <RowDefinition Height="Auto"/> <!-- Filter Pills Bar -->
@@ -756,6 +809,15 @@
                                            Margin="0,-1,0,0"/>
                             </Border>
                         </Button>
+
+                        <!-- Toggle IntelliSense Suggestions Button -->
+                        <Button x:Name="CalcIntelliSenseToggleBtn"
+                                Style="{StaticResource HeaderIconButtonStyle}"
+                                Click="CalcIntelliSenseToggleBtn_Click"
+                                ToolTip="Calculator suggestions &amp; modifiers (Ctrl+Space)"
+                                Visibility="Collapsed">
+                            <TextBlock Text="💡" FontSize="12.5" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                        </Button>
                     </StackPanel>
                 </Grid>
             </Border>
@@ -847,6 +909,7 @@
                     </StackPanel>
                 </Border>
             </Popup>
+
 
             <!-- Row 1: Filter Pills Bar -->
             <Border Grid.Row="1" x:Name="FilterPillsBar" Panel.ZIndex="50" Margin="0,0,0,6" ClipToBounds="False">
@@ -1366,14 +1429,153 @@
                         Visibility="Collapsed">
                     <Grid>
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/> <!-- Row 0: Inline Suggestions Dock -->
+                            <RowDefinition Height="Auto"/> <!-- Row 1: Live Result or Draft Formula Banner -->
+                            <RowDefinition Height="Auto"/> <!-- Row 2: Category Tabs Strip -->
+                            <RowDefinition Height="Auto"/> <!-- Row 3: Delineation Line -->
+                            <RowDefinition Height="*"/>    <!-- Row 4: Panels Scroll Container -->
                         </Grid.RowDefinitions>
 
+                        <!-- Row 0: Inline Non-Occluding IntelliSense & Autocomplete Suggestions Dock -->
+                        <Border Grid.Row="0"
+                                x:Name="CalcIntelliSenseDock"
+                                Visibility="Collapsed"
+                                Background="{DynamicResource BgTertiaryBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="8,6"
+                                Margin="0,0,0,8">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <!-- Header: Signature Badge & Action Controls -->
+                                <Grid Grid.Row="0" Margin="0,0,0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Signature text -->
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="💡" FontSize="11" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="CalcIntelliSenseSignatureText"
+                                                   Text="roll &lt;count&gt;d&lt;sides&gt; [+/-modifier]"
+                                                   FontFamily="{StaticResource CodeFont}"
+                                                   FontSize="11"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource AccentBrush}"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Text="• Tab to autocomplete" FontSize="10" Foreground="{DynamicResource TextMutedBrush}" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                    </StackPanel>
+
+                                    <!-- Minimize and Close Buttons -->
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Button x:Name="CalcIntelliSenseMinBtn"
+                                                Style="{StaticResource GhostIconButtonStyle}"
+                                                Width="20" Height="20"
+                                                Click="CalcIntelliSenseMinBtn_Click"
+                                                ToolTip="Minimize suggestions"
+                                                Margin="0,0,2,0">
+                                            <TextBlock x:Name="CalcIntelliSenseMinIcon" Text="–" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Button>
+
+                                        <Button x:Name="CalcIntelliSenseCloseBtn"
+                                                Style="{StaticResource GhostIconButtonStyle}"
+                                                Width="20" Height="20"
+                                                Click="CalcIntelliSenseCloseBtn_Click"
+                                                ToolTip="Close suggestions (Esc)">
+                                            <TextBlock Text="✕" FontSize="10" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Button>
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- Row 1: Expanded Suggestions List -->
+                                <ListBox Grid.Row="1"
+                                         x:Name="CalcIntelliSenseList"
+                                         MaxHeight="150"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                         SelectionMode="Single"
+                                         PreviewMouseLeftButtonUp="CalcIntelliSenseList_PreviewMouseLeftButtonUp">
+                                    <ListBox.ItemContainerStyle>
+                                        <Style TargetType="ListBoxItem">
+                                            <Setter Property="Background" Value="Transparent"/>
+                                            <Setter Property="BorderThickness" Value="0"/>
+                                            <Setter Property="Padding" Value="0"/>
+                                            <Setter Property="Margin" Value="0,1"/>
+                                            <Setter Property="Cursor" Value="Hand"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="ListBoxItem">
+                                                        <Border x:Name="ciBorder"
+                                                                Background="{TemplateBinding Background}"
+                                                                CornerRadius="5"
+                                                                Padding="6,4"
+                                                                SnapsToDevicePixels="True">
+                                                            <ContentPresenter/>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="ciBorder" Property="Background" Value="{DynamicResource ItemHoverBrush}"/>
+                                                            </Trigger>
+                                                            <Trigger Property="IsSelected" Value="True">
+                                                                <Setter TargetName="ciBorder" Property="Background" Value="{DynamicResource ItemSelectedBrush}"/>
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </ListBox.ItemContainerStyle>
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{Binding IconBadge}" FontSize="12.5" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding DisplayText}" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                    <TextBlock Text="{Binding Description}" FontSize="10" Foreground="{DynamicResource TextMutedBrush}" TextTrimming="CharacterEllipsis"/>
+                                                </StackPanel>
+                                                <Border Grid.Column="2" Background="{DynamicResource BgInputBrush}" BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="3" Padding="4,1" VerticalAlignment="Center" Margin="6,0,0,0">
+                                                    <TextBlock Text="Tab ⇥" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/>
+                                                </Border>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+
+                                <!-- Row 2: Minimized Bar (Visible only when minimized) -->
+                                <Border Grid.Row="2"
+                                        x:Name="CalcIntelliSenseMinimizedBar"
+                                        Visibility="Collapsed"
+                                        Background="{DynamicResource BgInputBrush}"
+                                        BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="4"
+                                        Padding="8,3"
+                                        Cursor="Hand"
+                                        MouseLeftButtonUp="CalcIntelliSenseMinimizedBar_MouseLeftButtonUp">
+                                    <Grid>
+                                        <TextBlock x:Name="CalcIntelliSenseMinimizedText" Text="💡 Suggestions available - click to expand" FontSize="10.5" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Expand ▾" FontSize="10" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Border>
+                            </Grid>
+                        </Border>
+
                         <!-- Live Result or Draft Formula Banner -->
-                        <Grid Grid.Row="0" Margin="0,0,0,8">
+                        <Grid Grid.Row="1" Margin="0,0,0,8">
                             <!-- State A: Valid Calculation Result Banner -->
                             <Border x:Name="CalcResultBanner"
                                     Background="{DynamicResource BgTertiaryBrush}"
@@ -1436,20 +1638,39 @@
                                                 Width="28" Height="26" Padding="0" Margin="0,0,4,0">
                                             <TextBlock Text="⇥" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                         </Button>
+                                        <Button x:Name="CalcResultRegenBtn" 
+                                                Style="{StaticResource CalcUnitActionButtonStyle}" 
+                                                Click="CalcResultRegenBtn_Click" 
+                                                ToolTip="Regenerate new random value / candidates in-place (F5 / Tab)" 
+                                                Visibility="Collapsed" 
+                                                Width="28" Height="26" Padding="0" Margin="0,0,4,0">
+                                            <TextBlock Text="🔄" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Button>
+                                        <Button x:Name="CalcResultSettingsBtn" 
+                                                Style="{StaticResource CalcUnitActionButtonStyle}" 
+                                                Click="CalcResultSettingsBtn_Click" 
+                                                ToolTip="Generator Defaults in Settings" 
+                                                Visibility="Collapsed" 
+                                                Width="28" Height="26" Padding="0" Margin="0,0,4,0">
+                                            <TextBlock Text="⚙" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Button>
                                         <Button x:Name="CalcResultMoreUnitsBtn" 
                                                 Style="{StaticResource CalcMoreUnitsButtonStyle}" 
                                                 Click="CalcResultMoreUnitsBtn_Click" 
-                                                ToolTip="Explore all alternative units &amp; formats" 
+                                                ToolTip="Explore all alternative units, candidates &amp; formats" 
                                                 Visibility="Collapsed" 
                                                 Height="26" Padding="7,2">
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                <TextBlock Text="Units" FontSize="11" FontWeight="SemiBold"/>
+                                                <TextBlock x:Name="CalcResultMoreUnitsText" Text="Units" FontSize="11" FontWeight="SemiBold"/>
                                                 <TextBlock Text=" ▾" FontSize="9" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </Button>
                                     </StackPanel>
                                 </Grid>
                             </Border>
+
+                            <!-- Contextual Modifier Parameter Chips for Generators -->
+                            <WrapPanel x:Name="CalcParamChipsWrapPanel" Margin="0,6,0,0" Visibility="Collapsed"/>
 
                             <!-- State B: Draft Formula / Incomplete Input Banner -->
                             <Border x:Name="CalcDraftBanner"
@@ -1493,8 +1714,9 @@
                         </Grid>
 
                         <!-- Category Tabs Strip -->
-                        <WrapPanel Grid.Row="1" x:Name="CalcGuideTabsPanel" Margin="0,0,0,6">
+                        <WrapPanel Grid.Row="2" x:Name="CalcGuideTabsPanel" Margin="0,0,0,6">
                             <Button x:Name="CalcTabPopular" Content="🌟 Popular" Style="{StaticResource CalcGuideTabButtonStyle}" Click="CalcGuideTab_Click" Tag="Popular"/>
+                            <Button x:Name="CalcTabGenerators" Content="🎲 Generators" Style="{StaticResource CalcGuideTabButtonStyle}" Click="CalcGuideTab_Click" Tag="Generators"/>
                             <Button x:Name="CalcTabDate" Content="📅 Date &amp; Time" Style="{StaticResource CalcGuideTabButtonStyle}" Click="CalcGuideTab_Click" Tag="Date"/>
                             <Button x:Name="CalcTabScientific" Content="📐 Scientific" Style="{StaticResource CalcGuideTabButtonStyle}" Click="CalcGuideTab_Click" Tag="Scientific"/>
                             <Button x:Name="CalcTabProgrammer" Content="💻 Programmer" Style="{StaticResource CalcGuideTabButtonStyle}" Click="CalcGuideTab_Click" Tag="Programmer"/>
@@ -1502,11 +1724,75 @@
                         </WrapPanel>
 
                         <!-- Delineation Line between Tabs and Content -->
-                        <Border Grid.Row="2" Height="1" Background="{DynamicResource BorderSubtleBrush}" Margin="0,0,0,10"/>
+                        <Border Grid.Row="3" Height="1" Background="{DynamicResource BorderSubtleBrush}" Margin="0,0,0,10"/>
 
                         <!-- Panels Scroll Container -->
-                        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto">
+                        <ScrollViewer Grid.Row="4" VerticalScrollBarVisibility="Auto">
                             <StackPanel>
+                                <!-- Inline Candidate Solutions Panel (for Generators) -->
+                                <StackPanel x:Name="CalcInlineCandidatesPanel" Visibility="Collapsed" Margin="0,0,0,10">
+                                    <Grid Margin="0,0,0,8">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="CANDIDATE SOLUTIONS" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/>
+                                            <Border Background="{DynamicResource AccentSubtleBrush}" CornerRadius="4" Padding="6,1" Margin="8,0,0,0" VerticalAlignment="Center">
+                                                <TextBlock x:Name="CalcCandidatesBadgeText" Text="10 Candidates" FontSize="9.5" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <Button x:Name="CalcCandidatesNewBatchBtn"
+                                                Style="{StaticResource CalcUnitActionButtonStyle}"
+                                                Click="CalcResultRegenBtn_Click"
+                                                HorizontalAlignment="Right"
+                                                ToolTip="Generate another batch of candidates (Tab / F5)"
+                                                Padding="8,2">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock Text="🔄 " FontSize="10"/>
+                                                <TextBlock Text="New Batch" FontSize="11" FontWeight="SemiBold"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </Grid>
+                                    <ItemsControl x:Name="CalcCandidatesItemsControl">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Background="{DynamicResource BgTertiaryBrush}"
+                                                        BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="6"
+                                                        Padding="10,6"
+                                                        Margin="0,0,0,4">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,0">
+                                                            <TextBlock Text="{Binding FormattedValue}" FontSize="13" FontWeight="SemiBold" FontFamily="Consolas, Cascadia Code, Courier New" Foreground="{DynamicResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis"/>
+                                                            <TextBlock Text="{Binding Description}" FontSize="10.5" Foreground="{DynamicResource TextMutedBrush}" TextTrimming="CharacterEllipsis"/>
+                                                        </StackPanel>
+                                                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <Button Style="{StaticResource CalcUnitActionButtonStyle}"
+                                                                    Tag="{Binding FormattedValue}"
+                                                                    Click="CandidateCopyBtn_Click"
+                                                                    ToolTip="Copy to clipboard"
+                                                                    Width="26" Height="24" Padding="0" Margin="0,0,4,0">
+                                                                <TextBlock Text="📋" FontSize="10.5" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                            </Button>
+                                                            <Button Style="{StaticResource CalcUnitActionButtonStyle}"
+                                                                    Tag="{Binding FormattedValue}"
+                                                                    Click="CandidatePasteBtn_Click"
+                                                                    ToolTip="Paste into active window"
+                                                                    Width="26" Height="24" Padding="0">
+                                                                <TextBlock Text="↵" FontSize="11" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                            </Button>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+
                                 <!-- 1. POPULAR PANEL -->
                                 <StackPanel x:Name="CalcPanelPopular" Visibility="Visible">
                                     <!-- Tier 1: Quick Operators Bar -->
@@ -1959,6 +2245,139 @@
                                             </Grid.ColumnDefinitions>
                                             <Button Grid.Column="0" Content="#10b981 to rgb" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= #10b981 to rgb" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
                                             <TextBlock Grid.Column="1" Text="Hexadecimal color code to RGB color string" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <!-- 6. GENERATORS & RANDOMNESS PANEL -->
+                                <StackPanel x:Name="CalcPanelGenerators" Visibility="Collapsed">
+                                    <!-- Tier 1: Quick Tokens Bar -->
+                                    <TextBlock Text="QUICK GENERATOR TOKENS" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,5"/>
+                                    <WrapPanel Margin="0,0,0,10">
+                                        <Button Content="guid" Style="{StaticResource CalcKeypadButtonStyle}" Tag="guid" Click="CalcOperatorButton_Click" ToolTip="Default GUID"/>
+                                        <Button Content="guid v7" Style="{StaticResource CalcKeypadButtonStyle}" Tag="guid v7" Click="CalcOperatorButton_Click" ToolTip="Version 7 UUID"/>
+                                        <Button Content="guid upper" Style="{StaticResource CalcKeypadButtonStyle}" Tag="guid upper" Click="CalcOperatorButton_Click" ToolTip="Uppercase GUID"/>
+                                        <Button Content="guid base64" Style="{StaticResource CalcKeypadButtonStyle}" Tag="guid base64" Click="CalcOperatorButton_Click" ToolTip="Base64 URL-safe GUID"/>
+                                        <Button Content="pass" Style="{StaticResource CalcKeypadButtonStyle}" Tag="pass" Click="CalcOperatorButton_Click" ToolTip="Password"/>
+                                        <Button Content="pass 24" Style="{StaticResource CalcKeypadButtonStyle}" Tag="pass 24" Click="CalcOperatorButton_Click" ToolTip="24-char password"/>
+                                        <Button Content="pass pin 6" Style="{StaticResource CalcKeypadButtonStyle}" Tag="pass pin 6" Click="CalcOperatorButton_Click" ToolTip="6-digit PIN"/>
+                                        <Button Content="phrase" Style="{StaticResource CalcKeypadButtonStyle}" Tag="phrase" Click="CalcOperatorButton_Click" ToolTip="Passphrase"/>
+                                        <Button Content="phrase 5" Style="{StaticResource CalcKeypadButtonStyle}" Tag="phrase 5" Click="CalcOperatorButton_Click" ToolTip="5-word passphrase"/>
+                                        <Button Content="phrase 1337" Style="{StaticResource CalcKeypadButtonStyle}" Tag="phrase 1337" Click="CalcOperatorButton_Click" ToolTip="Leetspeak passphrase"/>
+                                        <Button Content="phrase b4" Style="{StaticResource CalcKeypadButtonStyle}" Tag="phrase b4" Click="CalcOperatorButton_Click" ToolTip="Phonetic passphrase"/>
+                                        <Button Content="roll 2d6" Style="{StaticResource CalcKeypadButtonStyle}" Tag="roll 2d6" Click="CalcOperatorButton_Click" ToolTip="Roll two 6-sided dice"/>
+                                        <Button Content="rand 1 100" Style="{StaticResource CalcKeypadButtonStyle}" Tag="rand 1 100" Click="CalcOperatorButton_Click" ToolTip="Random number 1-100"/>
+                                        <Button Content="coin" Style="{StaticResource CalcKeypadButtonStyle}" Tag="coin" Click="CalcOperatorButton_Click" ToolTip="Flip a coin"/>
+                                        <Button Content="sha256" Style="{StaticResource CalcKeypadButtonStyle}" Tag="sha256 " Click="CalcOperatorButton_Click" ToolTip="SHA-256 hash"/>
+                                        <Button Content="crc32" Style="{StaticResource CalcKeypadButtonStyle}" Tag="crc32 " Click="CalcOperatorButton_Click" ToolTip="CRC-32 checksum"/>
+                                        <Button Content="lorem 3p" Style="{StaticResource CalcKeypadButtonStyle}" Tag="lorem 3p" Click="CalcOperatorButton_Click" ToolTip="3 paragraphs lorem ipsum"/>
+                                    </WrapPanel>
+
+                                    <!-- Tier 2: Structured Examples with Descriptions -->
+                                    <Grid Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="GENERATOR EXAMPLES" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
+                                        <Button Grid.Column="1" Content="⚙ Configure Generator Defaults..." Style="{StaticResource SecondaryButtonStyle}" FontSize="10.5" Padding="8,2" Click="CalcResultSettingsBtn_Click"/>
+                                    </Grid>
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="guid" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= guid" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Generate standard GUID in configured default format" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="guid v7" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= guid v7" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Time-ordered Version 7 UUID" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="pass 24" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= pass 24" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="High-entropy password of specified length (with entropy bits)" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="pass pin 6" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= pass pin 6" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Cryptographically secure 6-digit numeric PIN" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="phrase 4" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= phrase 4" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Diceware passphrase with 4 memorable random words" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="phrase 4 1337" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= phrase 4 1337" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Passphrase with Leetspeak visual replacements (A→4, E→3, S→5)" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="phrase 4 b4" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= phrase 4 b4" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Passphrase with phonetic sound replacements (before→b4, great→gr8)" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="sha256 Hello World" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= sha256 Hello World" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Cryptographic SHA-256 hash digest" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="crc32 Hello World" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= crc32 Hello World" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="CRC-32 checksum in hex and unsigned integer" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="roll 3d6+2" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= roll 3d6+2" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Simulate tabletop dice rolls with individual die breakdowns" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="lorem 3 paragraphs" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= lorem 3 paragraphs" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Generate placeholder text by words, sentences, or paragraphs" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="mock email" Style="{StaticResource SecondaryButtonStyle}" FontSize="11" Padding="7,2" Tag="= mock email" Click="CalcExamplePill_Click" HorizontalAlignment="Left"/>
+                                            <TextBlock Grid.Column="1" Text="Generate random mock data (email, name, ipv4, mac)" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
                                         </Grid>
                                     </StackPanel>
                                 </StackPanel>
@@ -2644,9 +3063,9 @@
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
                                             <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
-                                                <TextBlock Text="Tab" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                <TextBlock Text="Tab / F5 / Ctrl+R" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             </Border>
-                                            <TextBlock Grid.Column="1" Text="Cycle filter pills / Chain calculator answer" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1" Text="Regenerate random generator result / Cycle filter pills" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                         </Grid>
 
                                         <Grid Margin="0,2.5">
@@ -2717,10 +3136,10 @@
                                     </StackPanel>
                                 </Border>
 
-                                <!-- Group 4: Quick Calculations & Conversions -->
+                                <!-- Group 4: Quick Calculations, Conversions & Generators -->
                                 <Border Background="{DynamicResource BgInputBrush}" CornerRadius="6" Padding="14,10">
                                     <StackPanel>
-                                        <TextBlock Text="QUICK CALCULATIONS &amp; CONVERSIONS (= or @calc)" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,0,0,8"/>
+                                        <TextBlock Text="QUICK CALCULATIONS, CONVERSIONS &amp; GENERATORS (= or @calc)" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,0,0,8"/>
 
                                         <Grid Margin="0,2.5">
                                             <Grid.ColumnDefinitions>
@@ -2755,11 +3174,77 @@
                                             <TextBlock Grid.Column="1" Text="Date countdowns &amp; time (now + 3d, time until Christmas, unix 1727184000)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                         </Grid>
 
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="guid / guid v7" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Cryptographic GUID / UUIDv7 generator (modifiers: upper, nohyphen, braces, b64)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="pass 20 / pin 6" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Password &amp; PIN generator with customizable length, symbols, and candidate batch" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="phrase 5 leet" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Diceware passphrase with optional 1337 / phonetic substitutions (intensity: light, mod, agg)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="roll 2d20 / rand" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Tabletop dice roller (roll 3d6+2), random range (rand 1 100), and coin flip" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="sha256 / base64" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Hashes (sha256, md5, crc32) &amp; encodings (base64, urlencode, slug)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{DynamicResource KeyBadgeStyle}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="lorem 3p / mock" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="Lorem ipsum placeholder text (by paragraphs/words) &amp; mock data (email, name, ip)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+
                                         <!-- Discovery Tip to Full Calc Workspace -->
                                         <Border Background="{DynamicResource AccentSubtleBrush}" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,8,0,0">
                                             <StackPanel Orientation="Horizontal">
                                                 <TextBlock Text="💡 " FontSize="12" VerticalAlignment="Center"/>
-                                                <TextBlock Text="Tip: Type = or @calc to open the full Calculator Workspace with interactive keypad, conversion categories, and complete 5-tab reference guide." 
+                                                <TextBlock Text="Tip: Type = or @calc to open the full Calculator Workspace. Press Tab, F5, or click 🔄 on generator cards to instantly re-roll fresh values or view all candidates in the drawer." 
                                                            FontSize="11.5" Foreground="{DynamicResource TextPrimaryBrush}" TextWrapping="Wrap" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </Border>
@@ -2792,24 +3277,37 @@
                         <!-- Header -->
                         <Grid Grid.Row="0" Margin="0,0,0,8">
                             <StackPanel>
-                                <TextBlock Text="🧮 Alternative Measurements &amp; Conversions" 
+                                <TextBlock x:Name="UnitsDrawerTitleText"
+                                           Text="🧮 Alternative Measurements &amp; Conversions" 
                                            FontSize="13.5" 
                                            FontWeight="Bold" 
                                            Foreground="{DynamicResource TextPrimaryBrush}"/>
-                                <TextBlock Text="Click 'Paste' to use as result, or 'Copy' to copy value or full sentence" 
+                                <TextBlock x:Name="UnitsDrawerSubtitleText"
+                                           Text="Click 'Paste' to use as result, or 'Copy' to copy value or full sentence" 
                                            FontSize="10.5" 
                                            Foreground="{DynamicResource TextMutedBrush}"
                                            Margin="0,1,0,0"/>
                             </StackPanel>
-                            <Button x:Name="CloseUnitsOverlayBtn" 
-                                    Style="{StaticResource GhostIconButtonStyle}"
-                                    Click="CloseUnitsOverlayBtn_Click" 
-                                    HorizontalAlignment="Right" 
-                                    VerticalAlignment="Top"
-                                    Width="24" Height="24"
-                                    ToolTip="Close (Esc)">
-                                <TextBlock Text="✕" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/>
-                            </Button>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top">
+                                <Button x:Name="DrawerRegenBatchBtn" 
+                                        Style="{StaticResource CalcUnitActionButtonStyle}"
+                                        Click="DrawerRegenBatchBtn_Click" 
+                                        ToolTip="Regenerate a new batch of random candidates (F5)"
+                                        Visibility="Collapsed"
+                                        Height="24" Padding="8,2" Margin="0,0,6,0">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="🔄" FontSize="10" Margin="0,0,4,0"/>
+                                        <TextBlock Text="New Batch" FontSize="10.5" FontWeight="SemiBold"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="CloseUnitsOverlayBtn" 
+                                        Style="{StaticResource GhostIconButtonStyle}"
+                                        Click="CloseUnitsOverlayBtn_Click" 
+                                        Width="24" Height="24"
+                                        ToolTip="Close (Esc)">
+                                    <TextBlock Text="✕" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/>
+                                </Button>
+                            </StackPanel>
                         </Grid>
 
                         <!-- Hero Card: Natural Time Breakdown (Format A & B - Compact 2-Row Banner) -->
@@ -3267,6 +3765,9 @@
         </Grid>
 
         <!-- Invisible Perimeter Resize Thumbs around the card border -->
+        <Thumb x:Name="ResizeThumbTop" Tag="Top" VerticalAlignment="Top" Height="7" Cursor="SizeNS" DragDelta="ResizeThumb_DragDelta" Style="{StaticResource ResizeThumbStyle}"/>
+        <Thumb x:Name="ResizeThumbTopRight" Tag="TopRight" HorizontalAlignment="Right" VerticalAlignment="Top" Width="14" Height="14" Cursor="SizeNESW" DragDelta="ResizeThumb_DragDelta" Style="{StaticResource ResizeThumbStyle}"/>
+        <Thumb x:Name="ResizeThumbTopLeft" Tag="TopLeft" HorizontalAlignment="Left" VerticalAlignment="Top" Width="14" Height="14" Cursor="SizeNWSE" DragDelta="ResizeThumb_DragDelta" Style="{StaticResource ResizeThumbStyle}"/>
         <Thumb x:Name="ResizeThumbRight" Tag="Right" HorizontalAlignment="Right" Width="7" Cursor="SizeWE" DragDelta="ResizeThumb_DragDelta" Style="{StaticResource ResizeThumbStyle}"/>
         <Thumb x:Name="ResizeThumbBottom" Tag="Bottom" VerticalAlignment="Bottom" Height="7" Cursor="SizeNS" DragDelta="ResizeThumb_DragDelta" Style="{StaticResource ResizeThumbStyle}"/>
         <Thumb x:Name="ResizeThumbLeft" Tag="Left" HorizontalAlignment="Left" Width="7" Cursor="SizeWE" DragDelta="ResizeThumb_DragDelta" Style="{StaticResource ResizeThumbStyle}"/>

@@ -41,6 +41,40 @@ public enum UpdateCheckFrequency
     ManualOnly
 }
 
+public enum GuidFormatOption
+{
+    StandardHyphenated,
+    Uppercase,
+    NoHyphens,
+    Braced,
+    Parentheses,
+    Base64UrlSafe,
+    UuidV7
+}
+
+public enum PassphraseSeparatorOption
+{
+    Hyphen,
+    Underscore,
+    Space,
+    Dot
+}
+
+public enum PassphraseLeetMode
+{
+    None,
+    Visual,
+    Phonetic,
+    Combined
+}
+
+public enum PassphraseLeetIntensity
+{
+    Light,
+    Moderate,
+    Aggressive
+}
+
 public class AppSettings
 {
     public LogLevelOption LogLevel { get; set; } = LogLevelOption.Information;
@@ -77,6 +111,9 @@ public class AppSettings
     public CommandPaletteSortMode CommandPaletteSortMode { get; set; } = CommandPaletteSortMode.Smart;
     public double? CommandPaletteWidth { get; set; }
     public double? CommandPaletteHeight { get; set; }
+    public double? CommandPaletteLeft { get; set; }
+    public double? CommandPaletteTop { get; set; }
+    public bool CommandPalettePinnedDefault { get; set; } = false;
     public bool ShowSnippetKeywordsInCommandPalette { get; set; } = true;
     public bool CommandPaletteIncludeClipboardInAll { get; set; } = true;
     public int CommandPaletteMaxClipboardResultsInAll { get; set; } = 5;
@@ -112,6 +149,22 @@ public class AppSettings
     public bool ShowUpdateDialogOnStartup { get; set; } = true;
     public string? LastKnownAppVersion { get; set; }
 
+    // Generator settings
+    public int GeneratorCandidateCount { get; set; } = 10;
+    public GuidFormatOption DefaultGuidFormat { get; set; } = GuidFormatOption.StandardHyphenated;
+    public int DefaultPasswordLength { get; set; } = 16;
+    public bool DefaultPasswordIncludeUppercase { get; set; } = true;
+    public bool DefaultPasswordIncludeLowercase { get; set; } = true;
+    public bool DefaultPasswordIncludeDigits { get; set; } = true;
+    public bool DefaultPasswordIncludeSpecial { get; set; } = true;
+    public bool DefaultPasswordExcludeAmbiguous { get; set; } = false;
+    public int DefaultPassphraseWordCount { get; set; } = 4;
+    public PassphraseSeparatorOption DefaultPassphraseSeparator { get; set; } = PassphraseSeparatorOption.Hyphen;
+    public bool DefaultPassphraseCapitalize { get; set; } = false;
+    public bool DefaultPassphraseIncludeNumber { get; set; } = false;
+    public PassphraseLeetMode DefaultPassphraseLeetMode { get; set; } = PassphraseLeetMode.None;
+    public PassphraseLeetIntensity DefaultPassphraseLeetIntensity { get; set; } = PassphraseLeetIntensity.Light;
+
     public void Normalize()
     {
         if (LogRetentionDays < 1) LogRetentionDays = 1;
@@ -129,6 +182,13 @@ public class AppSettings
         if (CommandPaletteMaxClipboardResultsInAll > 50) CommandPaletteMaxClipboardResultsInAll = 50;
         if (CommandPaletteMaxServiceResultsInAll < 1) CommandPaletteMaxServiceResultsInAll = 1;
         if (CommandPaletteMaxServiceResultsInAll > 50) CommandPaletteMaxServiceResultsInAll = 50;
+
+        if (GeneratorCandidateCount < 1) GeneratorCandidateCount = 1;
+        if (GeneratorCandidateCount > 25) GeneratorCandidateCount = 25;
+        if (DefaultPasswordLength < 4) DefaultPasswordLength = 4;
+        if (DefaultPasswordLength > 256) DefaultPasswordLength = 256;
+        if (DefaultPassphraseWordCount < 2) DefaultPassphraseWordCount = 2;
+        if (DefaultPassphraseWordCount > 12) DefaultPassphraseWordCount = 12;
 
         // Auto-migrate legacy Win+F1 shortcut (which is intercepted and consumed by Windows Help)
         if (CheatSheetHotkey != null && CheatSheetHotkey.Modifiers == ModifierKeys.Windows && CheatSheetHotkey.VirtualKey == 112)

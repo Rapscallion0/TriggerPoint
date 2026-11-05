@@ -51,12 +51,20 @@ public static class WorkflowVariableCascadeHelper
         count += CountOccurrences(step.PromptTitle, token);
         count += CountOccurrences(step.PromptSubtitle, token);
         count += CountOccurrences(step.PromptDefaultValue, token);
+        count += CountOccurrences(step.PromptMinNumberText, token);
+        count += CountOccurrences(step.PromptMaxNumberText, token);
+        count += CountOccurrences(step.CaptureSelectionFallbackValue, token);
 
         bool isSkipStep = skipStepDefinition != null && step.Id == skipStepDefinition.Id;
 
         if (!isSkipStep)
         {
             if (step.StepType == WorkflowStepType.SetVariable && string.Equals(step.SetVariableName, varName, StringComparison.OrdinalIgnoreCase))
+            {
+                count++;
+            }
+
+            if (step.StepType == WorkflowStepType.CaptureSelection && string.Equals(step.VariableName, varName, StringComparison.OrdinalIgnoreCase))
             {
                 count++;
             }
@@ -87,6 +95,8 @@ public static class WorkflowVariableCascadeHelper
                 count += CountOccurrences(field.DefaultValue, token);
                 count += CountOccurrences(field.Label, token);
                 count += CountOccurrences(field.Choices, token);
+                count += CountOccurrences(field.MinNumberText, token);
+                count += CountOccurrences(field.MaxNumberText, token);
             }
         }
 
@@ -135,6 +145,9 @@ public static class WorkflowVariableCascadeHelper
         step.PromptTitle = ReplaceString(step.PromptTitle, oldToken, newToken, ref count);
         step.PromptSubtitle = ReplaceString(step.PromptSubtitle, oldToken, newToken, ref count);
         step.PromptDefaultValue = ReplaceString(step.PromptDefaultValue, oldToken, newToken, ref count);
+        step.PromptMinNumberText = ReplaceString(step.PromptMinNumberText, oldToken, newToken, ref count);
+        step.PromptMaxNumberText = ReplaceString(step.PromptMaxNumberText, oldToken, newToken, ref count);
+        step.CaptureSelectionFallbackValue = ReplaceString(step.CaptureSelectionFallbackValue, oldToken, newToken, ref count);
 
         bool isSkipStep = skipStepDefinition != null && step.Id == skipStepDefinition.Id;
 
@@ -143,6 +156,12 @@ public static class WorkflowVariableCascadeHelper
             if (step.StepType == WorkflowStepType.SetVariable && string.Equals(step.SetVariableName, oldName, StringComparison.OrdinalIgnoreCase))
             {
                 step.SetVariableName = newName;
+                count++;
+            }
+
+            if (step.StepType == WorkflowStepType.CaptureSelection && string.Equals(step.VariableName, oldName, StringComparison.OrdinalIgnoreCase))
+            {
+                step.VariableName = newName;
                 count++;
             }
 
@@ -174,6 +193,8 @@ public static class WorkflowVariableCascadeHelper
                 field.DefaultValue = ReplaceString(field.DefaultValue, oldToken, newToken, ref count);
                 field.Label = ReplaceString(field.Label, oldToken, newToken, ref count);
                 field.Choices = ReplaceString(field.Choices, oldToken, newToken, ref count);
+                field.MinNumberText = ReplaceString(field.MinNumberText, oldToken, newToken, ref count);
+                field.MaxNumberText = ReplaceString(field.MaxNumberText, oldToken, newToken, ref count);
             }
         }
 

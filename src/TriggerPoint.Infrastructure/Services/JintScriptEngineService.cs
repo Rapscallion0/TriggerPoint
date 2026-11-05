@@ -389,6 +389,12 @@ public class TriggerPointJsBridge
         _snippetService.InjectSnippetAsync(template, effectiveHwnd).GetAwaiter().GetResult();
     }
 
+    public string captureSelection()
+    {
+        var effectiveHwnd = _targetHwnd ?? IntPtr.Zero;
+        return _snippetService.CaptureSelectedTextAsync(effectiveHwnd).GetAwaiter().GetResult() ?? string.Empty;
+    }
+
     public bool executeAction(string idOrName)
     {
         if (string.IsNullOrWhiteSpace(idOrName) || _actionExecutionHandler == null) return false;

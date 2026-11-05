@@ -79,6 +79,10 @@ public interface ISnippetService
         IntPtr targetHwnd, 
         SnippetContentType contentType = SnippetContentType.PlainText, 
         string? rtfContent = null);
+
+    Task<string> CaptureSelectedTextAsync(
+        IntPtr targetHwnd,
+        CancellationToken cancellationToken = default) => Task.FromResult(string.Empty);
 }
 
 public interface IIconService

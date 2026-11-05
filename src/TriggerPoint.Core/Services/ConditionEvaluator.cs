@@ -54,6 +54,16 @@ public static class ConditionEvaluator
             case ConditionOperator.IsNotEmpty:
                 return !string.IsNullOrWhiteSpace(leftValue);
 
+            case ConditionOperator.IsNumeric:
+                return !string.IsNullOrWhiteSpace(leftValue) &&
+                       double.TryParse(leftValue.Trim(), NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var numVal) &&
+                       !double.IsNaN(numVal) && !double.IsInfinity(numVal);
+
+            case ConditionOperator.IsNotNumeric:
+                return string.IsNullOrWhiteSpace(leftValue) ||
+                       !double.TryParse(leftValue.Trim(), NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var nonNumVal) ||
+                       double.IsNaN(nonNumVal) || double.IsInfinity(nonNumVal);
+
             case ConditionOperator.GreaterThan:
             case ConditionOperator.LessThan:
             case ConditionOperator.GreaterOrEqual:
@@ -130,6 +140,8 @@ public static class ConditionEvaluator
     public static bool IsUnary(ConditionOperator op) =>
         op is ConditionOperator.IsEmpty
            or ConditionOperator.IsNotEmpty
+           or ConditionOperator.IsNumeric
+           or ConditionOperator.IsNotNumeric
            or ConditionOperator.FileExists
            or ConditionOperator.DirectoryExists
            or ConditionOperator.ProcessIsRunning;

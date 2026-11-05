@@ -194,7 +194,7 @@ public static partial class PlaceholderParser
         return sb.ToString();
     }
 
-    private static bool IsSystemToken(string rawTag)
+    public static bool IsSystemToken(string rawTag)
     {
         var colonIdx = rawTag.IndexOf(':');
         if (colonIdx > 0)
@@ -225,8 +225,8 @@ public static partial class PlaceholderParser
             "random" or "rand" => true,
             "username" or "user" => true,
             "machine" or "computer" or "machinename" => true,
-            "active_window" => true,
-            "active_process" => true,
+            "active_window" or "active_window_title" => true,
+            "active_process" or "active_app_name" => true,
             _ => false
         };
     }

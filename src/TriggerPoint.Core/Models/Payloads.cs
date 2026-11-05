@@ -90,6 +90,8 @@ public sealed class WorkflowPromptField
     public string Choices { get; set; } = string.Empty;
     public double? MinNumber { get; set; }
     public double? MaxNumber { get; set; }
+    public string MinNumberText { get; set; } = string.Empty;
+    public string MaxNumberText { get; set; } = string.Empty;
     public string DateFormat { get; set; } = "yyyy-MM-dd";
 
     public WorkflowPromptField Clone()
@@ -104,6 +106,8 @@ public sealed class WorkflowPromptField
             Choices = Choices,
             MinNumber = MinNumber,
             MaxNumber = MaxNumber,
+            MinNumberText = MinNumberText,
+            MaxNumberText = MaxNumberText,
             DateFormat = DateFormat
         };
     }
@@ -129,7 +133,13 @@ public sealed class WorkflowStep
     public string PromptChoices { get; set; } = string.Empty;
     public double? PromptMinNumber { get; set; }
     public double? PromptMaxNumber { get; set; }
+    public string PromptMinNumberText { get; set; } = string.Empty;
+    public string PromptMaxNumberText { get; set; } = string.Empty;
     public string PromptDateFormat { get; set; } = "yyyy-MM-dd";
+
+    // CaptureSelection properties
+    public string CaptureSelectionFallbackValue { get; set; } = string.Empty;
+    public bool CaptureSelectionTrimWhitespace { get; set; } = false;
 
     // OpenUrl properties
     public string Url { get; set; } = string.Empty;
@@ -214,7 +224,11 @@ public sealed class WorkflowStep
             PromptChoices = PromptChoices,
             PromptMinNumber = PromptMinNumber,
             PromptMaxNumber = PromptMaxNumber,
+            PromptMinNumberText = PromptMinNumberText,
+            PromptMaxNumberText = PromptMaxNumberText,
             PromptDateFormat = PromptDateFormat,
+            CaptureSelectionFallbackValue = CaptureSelectionFallbackValue,
+            CaptureSelectionTrimWhitespace = CaptureSelectionTrimWhitespace,
             Url = Url,
             BrowserTarget = BrowserTarget,
             BrowserProfile = BrowserProfile,

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Automation;
@@ -86,6 +87,102 @@ public class Win32SnippetService : ISnippetService
         // 5. Instant atomic text injection via clipboard paste
         _logger.Information("Injecting snippet ({Length} chars) via instant clipboard paste.", cleanText.Length);
         await InjectViaClipboardSequencingAsync(cleanText, caretOffset, targetHwnd).ConfigureAwait(false);
+    }
+
+    public async Task<string> CaptureSelectedTextAsync(IntPtr targetHwnd, CancellationToken cancellationToken = default)
+    {
+        if (targetHwnd != IntPtr.Zero)
+        {
+            await RestoreFocusToWindowAsync(targetHwnd).ConfigureAwait(false);
+        }
+
+        ReleaseLingeringModifiers();
+
+        string? previousText = null;
+        bool hadPreviousText = false;
+
+        if (Application.Current != null)
+        {
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                for (int attempt = 0; attempt < 5; attempt++)
+                {
+                    try
+                    {
+                        if (Clipboard.ContainsText())
+                        {
+                            previousText = Clipboard.GetText();
+                            hadPreviousText = true;
+                        }
+                        Clipboard.Clear();
+                        return;
+                    }
+                    catch (Exception ex)
+                    {
+                        if (attempt == 4)
+                        {
+                            _logger.Warning(ex, "Failed to clear clipboard prior to selection capture.");
+                        }
+                        Thread.Sleep(15);
+                    }
+                }
+            });
+        }
+
+        await Task.Delay(25, cancellationToken).ConfigureAwait(false);
+
+        SendCopyCommand();
+
+        string capturedText = string.Empty;
+        for (int i = 0; i < 8; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await Task.Delay(25, cancellationToken).ConfigureAwait(false);
+
+            bool found = false;
+            if (Application.Current != null)
+            {
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    try
+                    {
+                        if (Clipboard.ContainsText())
+                        {
+                            capturedText = Clipboard.GetText() ?? string.Empty;
+                            found = true;
+                        }
+                    }
+                    catch { }
+                });
+            }
+
+            if (found)
+            {
+                break;
+            }
+        }
+
+        if (Application.Current != null && hadPreviousText && previousText != null)
+        {
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                for (int attempt = 0; attempt < 5; attempt++)
+                {
+                    try
+                    {
+                        Clipboard.SetDataObject(new DataObject(DataFormats.UnicodeText, previousText), true);
+                        return;
+                    }
+                    catch
+                    {
+                        Thread.Sleep(15);
+                    }
+                }
+            });
+        }
+
+        _logger.Information("CaptureSelectedTextAsync captured {Length} chars.", capturedText.Length);
+        return capturedText;
     }
 
     private async Task InjectRichSnippetAsync(string plainFallback, string rtf, IntPtr targetHwnd)
@@ -612,6 +709,47 @@ public class Win32SnippetService : ISnippetService
         else
         {
             _logger.Information("SendPasteCommand successfully sent {SentCount} inputs.", sent);
+        }
+    }
+
+    private void SendCopyCommand()
+    {
+        var inputs = new NativeMethods.INPUT[4];
+
+        // Ctrl down
+        inputs[0] = new NativeMethods.INPUT
+        {
+            type = NativeMethods.INPUT_KEYBOARD,
+            u = new NativeMethods.InputUnion { ki = new NativeMethods.KEYBDINPUT { wVk = NativeMethods.VK_CONTROL } }
+        };
+        // C down
+        inputs[1] = new NativeMethods.INPUT
+        {
+            type = NativeMethods.INPUT_KEYBOARD,
+            u = new NativeMethods.InputUnion { ki = new NativeMethods.KEYBDINPUT { wVk = NativeMethods.VK_C } }
+        };
+        // C up
+        inputs[2] = new NativeMethods.INPUT
+        {
+            type = NativeMethods.INPUT_KEYBOARD,
+            u = new NativeMethods.InputUnion { ki = new NativeMethods.KEYBDINPUT { wVk = NativeMethods.VK_C, dwFlags = NativeMethods.KEYEVENTF_KEYUP } }
+        };
+        // Ctrl up
+        inputs[3] = new NativeMethods.INPUT
+        {
+            type = NativeMethods.INPUT_KEYBOARD,
+            u = new NativeMethods.InputUnion { ki = new NativeMethods.KEYBDINPUT { wVk = NativeMethods.VK_CONTROL, dwFlags = NativeMethods.KEYEVENTF_KEYUP } }
+        };
+
+        uint sent = NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
+        if (sent == 0)
+        {
+            int err = Marshal.GetLastWin32Error();
+            _logger.Error("SendCopyCommand SendInput failed with error code {ErrorCode}", err);
+        }
+        else
+        {
+            _logger.Information("SendCopyCommand successfully sent {SentCount} inputs.", sent);
         }
     }
 

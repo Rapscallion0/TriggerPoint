@@ -52,7 +52,15 @@ Designed to stay out of your way, TriggerPoint runs quietly in your system tray 
   - **Exact Phrase (`"phrase"`)**: Matches contiguous word sequences enclosed in double quotes (e.g. `"due date"`).
   - **Prefix Anchor (`^term`)**: Matches items starting with the specified term (e.g. `^calc`).
 - **Smart Context Excerpts & Search Highlighting**: When searching through long text or clipboard history, relevant match excerpts are dynamically generated on secondary lines and highlighted in both the search list and bottom preview bar with theme-aware accent colors.
-- **Instant Math Calculator**: Type arithmetic, percentages, parentheses, powers, and scientific functions directly into the search bar (`=45*1.2`, `15% of $800`, `sqrt(256)`) for real-time calculation and instant clipboard copying.
+- **Instant Math & Unit Calculator**: Type arithmetic, percentages, parentheses, powers, scientific functions, unit conversions, and date countdowns directly into the search bar (`=45*1.2`, `15% of $800`, `32px to rem`, `now + 3d`) for real-time calculation and instant clipboard copying.
+- **Cryptographic Generators & Diceware Suite 🎲**:
+  - **GUID & UUIDv7**: Standard, uppercase, no-hyphens, braced, and time-ordered RFC 9562 UUIDv7 (`guid v7`, `guid b64`).
+  - **Passwords & PINs**: Cryptographically secure random passwords and numeric PINs with custom length and character set flags (`pass 24`, `pin 6`, `pass 16 nosym`).
+  - **Diceware Passphrases & 1337 Leetspeak**: Multi-word passphrases from a curated 2,048-word dictionary with custom separators, Title Case, trailing numbers, and visual/phonetic Leetspeak substitutions with configurable intensity (`phrase 5 leet agg`).
+  - **Dice & Random**: Tabletop dice roller with modifiers (`roll 2d20`, `roll 3d6+4`), random integer ranges (`rand 1 100`), and coin tosses (`flip`).
+  - **Hashes & Encodings**: Instant hash digests (`sha256`, `md5`, `crc32`) and text encodings (`base64`, `urlencode`, `slug`).
+  - **Mock Data & Lorem**: Multi-paragraph Lorem ipsum (`lorem 3p`) and mock entities (`mock email`, `mock ip`).
+  - **In-Place Regeneration & Candidate Batch**: Re-roll on the fly with `🔄`, <kbd>Tab</kbd>, <kbd>F5</kbd>, or open the Candidate Batch Drawer (<kbd>Alt</kbd>+<kbd>U</kbd>) to choose from multiple candidates with configurable batch sizes in Settings.
 
 ### ⌨ Shortcut Cheat Sheet & Chord HUD
 - **Shortcut Cheat Sheet HUD (`Ctrl+Shift+/`)**: Instantly view all shortcuts across all folders in a sleek, non-intrusive floating HUD with real-time filtering.

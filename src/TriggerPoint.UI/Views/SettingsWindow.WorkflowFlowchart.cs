@@ -682,6 +682,7 @@ public partial class SettingsWindow
         WorkflowStepType.Dialog => "DIALOG",
         WorkflowStepType.Macro => "MACRO",
         WorkflowStepType.SetVariable => "SET",
+        WorkflowStepType.CaptureSelection => "SEL",
         WorkflowStepType.Service => "SRV",
         _ => "STEP"
     };
@@ -694,6 +695,7 @@ public partial class SettingsWindow
             WorkflowStepType.Prompt => "AccentBrush",
             WorkflowStepType.LaunchApp => "ShellBrush",
             WorkflowStepType.InjectSnippet => "SnippetBrush",
+            WorkflowStepType.CaptureSelection => "SnippetBrush",
             WorkflowStepType.EnsureDirectory => "FolderBrush",
             WorkflowStepType.Delay => "WarningBrush",
             WorkflowStepType.Dialog => "InfoBrush",

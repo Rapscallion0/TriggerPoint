@@ -140,3 +140,29 @@ If `triggers.json` is ever corrupted or zeroed out by an external process:
 ### Recycle Bin Retention
 - When actions are deleted, they are soft-deleted into the Recycle Bin.
 - Configure the auto-purge retention window in settings (**0 to 90 days**; default: 30 days). Setting to 0 days disables automatic purging.
+
+---
+
+## 6. Quick Generator & Diceware Defaults 🎲
+
+Configure system-wide defaults for random generation, cryptographic identifiers, and Diceware passphrases under the **Generators** category in Application Settings:
+
+![Generators Settings](images/config-generators-settings.png)
+<!-- SCREENSHOT REQUIRED: Application Settings modal open to the "Generators" tab. Shows Password Defaults (Length slider set to 16, Uppercase, Lowercase, Numbers, Symbols checked), Passphrase Defaults (Word count slider set to 4 words, Separator dropdown set to "Hyphen (-)", Capitalize checked, Trailing number checked, 1337 Substitution Mode set to "Visual & Phonetic", Substitution Intensity set to "Moderate (55%)"), Default GUID Format set to "Standard Hyphenated", Candidate Batch Size slider set to 10, and the Live Preview card displaying a live sample password and passphrase with a "Refresh Live Sample" button. -->
+
+| Setting | Default | Range / Options | Description |
+| :--- | :--- | :--- | :--- |
+| **Password Length** | `16` | 6 to 128 characters | Default character length when typing `pass` or `password` without arguments. |
+| **Character Sets** | All Enabled | Uppercase, Lowercase, Digits, Symbols | Which character categories are active for default passwords. |
+| **Passphrase Word Count** | `4` | 2 to 12 words | Number of words sampled from the curated 2,048-word Diceware dictionary. |
+| **Word Separator** | `Hyphen (-)` | `-`, `_`, `.`, space | Separator delimiter placed between passphrase words. |
+| **Capitalize Words** | Enabled | On / Off | Capitalizes the first letter of each word (Title Case). |
+| **Include Trailing Number**| Enabled | On / Off | Appends a cryptographically random digit (0–9) to satisfy strict password policies. |
+| **1337 Leetspeak Mode** | `None` | `None`, `Visual`, `Phonetic`, `Combined` | Replaces characters with visual numbers or phonetic sound substitutions (`b4`, `gr8`). |
+| **1337 Intensity** | `Moderate` | `Light (25%)`, `Moderate (55%)`, `Aggressive (90%)` | Probability and frequency of Leetspeak transformations per word. |
+| **Default GUID Format** | `Standard Hyphenated` | Standard, UUIDv7, Uppercase, No Hyphens, Braced, Parentheses, URL-Safe Base64 | Default format produced when running `guid` without a format modifier. |
+| **Candidate Batch Size**| `10` | 1 to 25 items | Number of candidate values generated and listed simultaneously in the Alternative Choices drawer (`Alt+U`). |
+
+### Live Preview & Verification
+The Generators settings panel features an interactive **Live Sample Preview** box. As you adjust sliders, toggles, or Leetspeak intensity, click **`🔄 Refresh Live Sample`** to immediately verify how your generated passwords and passphrases will look prior to saving.
+

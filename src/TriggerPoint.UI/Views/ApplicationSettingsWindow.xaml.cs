@@ -48,7 +48,8 @@ public partial class ApplicationSettingsWindow : Window
         Updates,
         Data,
         Productivity,
-        Clipboard
+        Clipboard,
+        Generators
     }
 
     private SettingsCategory _selectedCategory = SettingsCategory.Appearance;
@@ -312,6 +313,7 @@ public partial class ApplicationSettingsWindow : Window
             CheatSheetHotkeyRecorder.Binding = _currentSettings.CheatSheetHotkey;
             GlobalClipboardHotkeyRecorder.Binding = _currentSettings.ClipboardHotkey;
             ShowSnippetKeywordsInCommandPaletteCheck.IsChecked = _currentSettings.ShowSnippetKeywordsInCommandPalette;
+            CommandPalettePinnedDefaultCheck.IsChecked = _currentSettings.CommandPalettePinnedDefault;
             CommandPaletteIncludeClipboardInAllCheck.IsChecked = _currentSettings.CommandPaletteIncludeClipboardInAll;
             SelectComboByTag(CommandPaletteMaxClipboardResultsCombo, _currentSettings.CommandPaletteMaxClipboardResultsInAll);
             CommandPaletteIncludeServicesInAllCheck.IsChecked = _currentSettings.CommandPaletteIncludeServicesInAll;
@@ -360,6 +362,30 @@ public partial class ApplicationSettingsWindow : Window
             SelectComboByTag(ClipboardRetentionDaysCombo, _currentSettings.ClipboardRetentionDays);
             SelectComboByTag(ClipboardMaxItemSizeCombo, _currentSettings.ClipboardMaxItemSizeMb);
             RefreshClipboardStorageText();
+
+            // Populate Generator Defaults
+            PasswordLengthSlider.Value = _currentSettings.DefaultPasswordLength;
+            PasswordLengthText.Text = $"{_currentSettings.DefaultPasswordLength} chars";
+            PasswordIncludeUppercaseCheck.IsChecked = _currentSettings.DefaultPasswordIncludeUppercase;
+            PasswordIncludeLowercaseCheck.IsChecked = _currentSettings.DefaultPasswordIncludeLowercase;
+            PasswordIncludeDigitsCheck.IsChecked = _currentSettings.DefaultPasswordIncludeDigits;
+            PasswordIncludeSpecialCheck.IsChecked = _currentSettings.DefaultPasswordIncludeSpecial;
+            PasswordExcludeAmbiguousCheck.IsChecked = _currentSettings.DefaultPasswordExcludeAmbiguous;
+
+            PassphraseWordCountSlider.Value = _currentSettings.DefaultPassphraseWordCount;
+            PassphraseWordCountText.Text = $"{_currentSettings.DefaultPassphraseWordCount} words";
+            SelectComboByTag(PassphraseSeparatorCombo, _currentSettings.DefaultPassphraseSeparator.ToString());
+            PassphraseCapitalizeCheck.IsChecked = _currentSettings.DefaultPassphraseCapitalize;
+            PassphraseIncludeNumberCheck.IsChecked = _currentSettings.DefaultPassphraseIncludeNumber;
+            SelectComboByTag(PassphraseLeetModeCombo, _currentSettings.DefaultPassphraseLeetMode.ToString());
+            SelectComboByTag(PassphraseLeetIntensityCombo, _currentSettings.DefaultPassphraseLeetIntensity.ToString());
+
+            SelectComboByTag(GuidFormatCombo, _currentSettings.DefaultGuidFormat.ToString());
+            GeneratorCandidateCountSlider.Value = _currentSettings.GeneratorCandidateCount;
+            GeneratorCandidateCountText.Text = $"{_currentSettings.GeneratorCandidateCount} candidates";
+
+            HookGeneratorEvents();
+            UpdateGeneratorPreview();
 
             // Populate Recycle Bin retention
             bool neverDelete = _currentSettings.RecycleBinRetentionDays == 0;
@@ -793,6 +819,7 @@ public partial class ApplicationSettingsWindow : Window
             _currentSettings.CommandPaletteHotkey = cmdPaletteHotkey;
             _currentSettings.CheatSheetHotkey = cheatSheetHotkey;
             _currentSettings.ShowSnippetKeywordsInCommandPalette = ShowSnippetKeywordsInCommandPaletteCheck.IsChecked == true;
+            _currentSettings.CommandPalettePinnedDefault = CommandPalettePinnedDefaultCheck.IsChecked == true;
             _currentSettings.CommandPaletteIncludeClipboardInAll = CommandPaletteIncludeClipboardInAllCheck.IsChecked == true;
             if (CommandPaletteMaxClipboardResultsCombo.SelectedItem is ComboBoxItem maxClipItem && int.TryParse(maxClipItem.Tag?.ToString(), out int maxClipVal))
             {
@@ -854,6 +881,41 @@ public partial class ApplicationSettingsWindow : Window
                 _currentSettings.ClipboardMaxItemSizeMb = sizeVal;
             }
             _clipboardService?.ReloadSettings();
+
+            // Generator defaults
+            _currentSettings.DefaultPasswordLength = (int)Math.Clamp(PasswordLengthSlider.Value, 4, 256);
+            _currentSettings.DefaultPasswordIncludeUppercase = PasswordIncludeUppercaseCheck.IsChecked == true;
+            _currentSettings.DefaultPasswordIncludeLowercase = PasswordIncludeLowercaseCheck.IsChecked == true;
+            _currentSettings.DefaultPasswordIncludeDigits = PasswordIncludeDigitsCheck.IsChecked == true;
+            _currentSettings.DefaultPasswordIncludeSpecial = PasswordIncludeSpecialCheck.IsChecked == true;
+            _currentSettings.DefaultPasswordExcludeAmbiguous = PasswordExcludeAmbiguousCheck.IsChecked == true;
+
+            _currentSettings.DefaultPassphraseWordCount = (int)Math.Clamp(PassphraseWordCountSlider.Value, 2, 12);
+            if (PassphraseSeparatorCombo.SelectedItem is ComboBoxItem sepItem &&
+                Enum.TryParse<PassphraseSeparatorOption>(sepItem.Tag?.ToString(), out var sepOpt))
+            {
+                _currentSettings.DefaultPassphraseSeparator = sepOpt;
+            }
+            _currentSettings.DefaultPassphraseCapitalize = PassphraseCapitalizeCheck.IsChecked == true;
+            _currentSettings.DefaultPassphraseIncludeNumber = PassphraseIncludeNumberCheck.IsChecked == true;
+            if (PassphraseLeetModeCombo.SelectedItem is ComboBoxItem leetItem &&
+                Enum.TryParse<PassphraseLeetMode>(leetItem.Tag?.ToString(), out var leetMode))
+            {
+                _currentSettings.DefaultPassphraseLeetMode = leetMode;
+            }
+            if (PassphraseLeetIntensityCombo.SelectedItem is ComboBoxItem intItem &&
+                Enum.TryParse<PassphraseLeetIntensity>(intItem.Tag?.ToString(), out var leetIntensity))
+            {
+                _currentSettings.DefaultPassphraseLeetIntensity = leetIntensity;
+            }
+
+            if (GuidFormatCombo.SelectedItem is ComboBoxItem guidItem &&
+                Enum.TryParse<GuidFormatOption>(guidItem.Tag?.ToString(), out var guidFmt))
+            {
+                _currentSettings.DefaultGuidFormat = guidFmt;
+            }
+
+            _currentSettings.GeneratorCandidateCount = (int)Math.Clamp(GeneratorCandidateCountSlider.Value, 1, 25);
 
             // 1. Persist to appsettings.json
             await _repository.SaveSettingsAsync(_currentSettings);
@@ -1579,6 +1641,7 @@ public partial class ApplicationSettingsWindow : Window
                 nameof(NavDataBtn) => SettingsCategory.Data,
                 nameof(NavProductivityBtn) => SettingsCategory.Productivity,
                 nameof(NavClipboardBtn) => SettingsCategory.Clipboard,
+                nameof(NavGeneratorsBtn) => SettingsCategory.Generators,
                 _ => SettingsCategory.Appearance
             };
 
@@ -1604,6 +1667,7 @@ public partial class ApplicationSettingsWindow : Window
         NavDataBtn.Tag = category == SettingsCategory.Data ? "Selected" : null;
         NavProductivityBtn.Tag = category == SettingsCategory.Productivity ? "Selected" : null;
         NavClipboardBtn.Tag = category == SettingsCategory.Clipboard ? "Selected" : null;
+        NavGeneratorsBtn.Tag = category == SettingsCategory.Generators ? "Selected" : null;
 
         // Toggle category panels
         CategoryAppearancePanel.Visibility = category == SettingsCategory.Appearance ? Visibility.Visible : Visibility.Collapsed;
@@ -1614,6 +1678,7 @@ public partial class ApplicationSettingsWindow : Window
         CategoryDataPanel.Visibility = category == SettingsCategory.Data ? Visibility.Visible : Visibility.Collapsed;
         CategoryProductivityPanel.Visibility = category == SettingsCategory.Productivity ? Visibility.Visible : Visibility.Collapsed;
         CategoryClipboardPanel.Visibility = category == SettingsCategory.Clipboard ? Visibility.Visible : Visibility.Collapsed;
+        CategoryGeneratorsPanel.Visibility = category == SettingsCategory.Generators ? Visibility.Visible : Visibility.Collapsed;
 
         NoSearchResultsPanel.Visibility = Visibility.Collapsed;
 
@@ -1653,6 +1718,11 @@ public partial class ApplicationSettingsWindow : Window
                 CategoryBreadcrumbText.Text = "Settings > Clipboard History";
                 CategorySubtitleText.Text = "Smart clipboard capture, storage retention, and unformatted paste";
                 RefreshClipboardStorageText();
+                break;
+            case SettingsCategory.Generators:
+                CategoryBreadcrumbText.Text = "Settings > Generators & Randomness";
+                CategorySubtitleText.Text = "Configure default parameters, formats, candidate batch sizes, and Leetspeak rules for quick calculations";
+                UpdateGeneratorPreview();
                 break;
         }
     }
@@ -1696,13 +1766,14 @@ public partial class ApplicationSettingsWindow : Window
     internal static readonly Dictionary<SettingsCategory, string[]> CategoryKeywords = new()
     {
         [SettingsCategory.Appearance] = ["appearance", "theme", "dark", "light", "system default", "mica", "acrylic", "material", "transparency", "translucent", "animation", "animations", "micro-transitions", "visual", "look", "accent", "color", "swatch", "indigo", "violet", "blue", "green", "orange", "crimson", "windows accent"],
-        [SettingsCategory.Shortcuts] = ["shortcut", "shortcuts", "hotkey", "hotkeys", "global", "action manager", "command palette", "cheat sheet", "hud", "overlay", "conflict", "key", "recorder", "abbreviation", "abbreviations", "expander", "expansion", "text expansion", "auto-expand", "snippet expander"],
+        [SettingsCategory.Shortcuts] = ["shortcut", "shortcuts", "hotkey", "hotkeys", "global", "action manager", "command palette", "cheat sheet", "hud", "overlay", "conflict", "key", "recorder", "abbreviation", "abbreviations", "expander", "expansion", "text expansion", "auto-expand", "snippet expander", "pin", "pinned", "window pin"],
         [SettingsCategory.System] = ["system", "startup", "login", "windows", "minimized", "tray", "system tray", "hide window", "crosshair", "targeting", "toast", "toasts", "notification", "notifications", "monitor", "display", "active monitor", "primary monitor", "screen", "location", "placement", "validate", "path", "revert", "confirm", "unsaved", "explorer", "context menu", "right-click", "add to triggerpoint", "shell"],
         [SettingsCategory.Logging] = ["serilog", "log", "logs", "logging", "diagnostics", "minimum log level", "retention", "days", "split", "threshold", "mb", "folder", "open logs", "verbose", "debug", "information", "warning", "error", "fatal"],
         [SettingsCategory.Updates] = ["update", "updates", "maintenance", "check for updates", "version", "latest", "frequency", "startup", "daily", "weekly", "monthly", "manual", "silent install", "restart", "pre-release", "beta", "preview", "ignored", "ignore", "release"],
         [SettingsCategory.Data] = ["backup", "data", "management", "recycle", "recycle bin", "retention", "purge", "empty", "delete", "telemetry", "export", "import", "restore", "json", "actions", "folders"],
         [SettingsCategory.Productivity] = ["productivity", "savings", "stats", "statistics", "keystrokes", "hours", "saved", "roi", "wpm", "speed", "analytics", "dashboard", "expansions", "volume"],
-        [SettingsCategory.Clipboard] = ["clipboard", "clip", "history", "paste", "copy", "retention", "images", "purge", "storage", "clips", "unformatted"]
+        [SettingsCategory.Clipboard] = ["clipboard", "clip", "history", "paste", "copy", "retention", "images", "purge", "storage", "clips", "unformatted"],
+        [SettingsCategory.Generators] = ["generator", "generators", "guid", "uuid", "password", "passphrase", "phrase", "diceware", "pin", "hash", "sha256", "md5", "leetspeak", "1337", "random", "dice", "lorem", "candidate", "candidates", "batch"]
     };
 
     internal static bool MatchesCategory(SettingsCategory cat, string query)
@@ -1734,6 +1805,7 @@ public partial class ApplicationSettingsWindow : Window
         NavDataBtn.Tag = null;
         NavProductivityBtn.Tag = null;
         NavClipboardBtn.Tag = null;
+        NavGeneratorsBtn.Tag = null;
 
         int matchCount = 0;
 
@@ -1745,6 +1817,7 @@ public partial class ApplicationSettingsWindow : Window
         bool matchData = MatchesCategory(SettingsCategory.Data, query);
         bool matchProd = MatchesCategory(SettingsCategory.Productivity, query);
         bool matchClip = MatchesCategory(SettingsCategory.Clipboard, query);
+        bool matchGen = MatchesCategory(SettingsCategory.Generators, query);
 
         CategoryAppearancePanel.Visibility = matchApp ? Visibility.Visible : Visibility.Collapsed;
         CategoryShortcutsPanel.Visibility = matchShort ? Visibility.Visible : Visibility.Collapsed;
@@ -1754,6 +1827,7 @@ public partial class ApplicationSettingsWindow : Window
         CategoryDataPanel.Visibility = matchData ? Visibility.Visible : Visibility.Collapsed;
         CategoryProductivityPanel.Visibility = matchProd ? Visibility.Visible : Visibility.Collapsed;
         CategoryClipboardPanel.Visibility = matchClip ? Visibility.Visible : Visibility.Collapsed;
+        CategoryGeneratorsPanel.Visibility = matchGen ? Visibility.Visible : Visibility.Collapsed;
 
         if (matchApp) matchCount++;
         if (matchShort) matchCount++;
@@ -1770,6 +1844,11 @@ public partial class ApplicationSettingsWindow : Window
         {
             matchCount++;
             RefreshClipboardStorageText();
+        }
+        if (matchGen)
+        {
+            matchCount++;
+            UpdateGeneratorPreview();
         }
 
         if (matchCount == 0)
@@ -2054,6 +2133,102 @@ public partial class ApplicationSettingsWindow : Window
         if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
         if (bytes < 1024L * 1024L * 1024L) return $"{bytes / (1024.0 * 1024.0):F2} MB";
         return $"{bytes / (1024.0 * 1024.0 * 1024.0):F2} GB";
+    }
+
+    private static void SelectComboByTag(ComboBox combo, string value)
+    {
+        foreach (ComboBoxItem item in combo.Items)
+        {
+            if (string.Equals(item.Tag?.ToString(), value, StringComparison.OrdinalIgnoreCase))
+            {
+                combo.SelectedItem = item;
+                return;
+            }
+        }
+        if (combo.Items.Count > 0) combo.SelectedIndex = 0;
+    }
+
+    #endregion
+
+    #region Generators Helpers & Live Preview
+
+    private bool _generatorEventsHooked;
+
+    private void HookGeneratorEvents()
+    {
+        if (_generatorEventsHooked) return;
+        _generatorEventsHooked = true;
+
+        PasswordLengthSlider.ValueChanged += (s, e) =>
+        {
+            PasswordLengthText.Text = $"{(int)PasswordLengthSlider.Value} chars";
+            UpdateGeneratorPreview();
+        };
+
+        PasswordIncludeUppercaseCheck.Click += (s, e) => UpdateGeneratorPreview();
+        PasswordIncludeLowercaseCheck.Click += (s, e) => UpdateGeneratorPreview();
+        PasswordIncludeDigitsCheck.Click += (s, e) => UpdateGeneratorPreview();
+        PasswordIncludeSpecialCheck.Click += (s, e) => UpdateGeneratorPreview();
+        PasswordExcludeAmbiguousCheck.Click += (s, e) => UpdateGeneratorPreview();
+
+        PassphraseWordCountSlider.ValueChanged += (s, e) =>
+        {
+            PassphraseWordCountText.Text = $"{(int)PassphraseWordCountSlider.Value} words";
+            UpdateGeneratorPreview();
+        };
+
+        PassphraseSeparatorCombo.SelectionChanged += (s, e) => UpdateGeneratorPreview();
+        PassphraseCapitalizeCheck.Click += (s, e) => UpdateGeneratorPreview();
+        PassphraseIncludeNumberCheck.Click += (s, e) => UpdateGeneratorPreview();
+        PassphraseLeetModeCombo.SelectionChanged += (s, e) => UpdateGeneratorPreview();
+        PassphraseLeetIntensityCombo.SelectionChanged += (s, e) => UpdateGeneratorPreview();
+
+        GuidFormatCombo.SelectionChanged += (s, e) => UpdateGeneratorPreview();
+        GeneratorCandidateCountSlider.ValueChanged += (s, e) =>
+        {
+            GeneratorCandidateCountText.Text = $"{(int)GeneratorCandidateCountSlider.Value} candidates";
+        };
+    }
+
+    private void RefreshGeneratorPreviewBtn_Click(object sender, RoutedEventArgs e)
+    {
+        UpdateGeneratorPreview();
+    }
+
+    private void UpdateGeneratorPreview()
+    {
+        if (PreviewPasswordText == null || PreviewPassphraseText == null || PreviewGuidText == null) return;
+
+        try
+        {
+            int passLen = (int)Math.Clamp(PasswordLengthSlider?.Value ?? 16, 4, 256);
+            bool upper = PasswordIncludeUppercaseCheck?.IsChecked == true;
+            bool lower = PasswordIncludeLowercaseCheck?.IsChecked == true;
+            bool digits = PasswordIncludeDigitsCheck?.IsChecked == true;
+            bool special = PasswordIncludeSpecialCheck?.IsChecked == true;
+            bool noAmbiguous = PasswordExcludeAmbiguousCheck?.IsChecked == true;
+
+            var passConfig = new GeneratorEngine.PasswordConfig(passLen, upper, lower, digits, special, noAmbiguous);
+            PreviewPasswordText.Text = GeneratorEngine.GenerateSinglePassword(passConfig);
+
+            int words = (int)Math.Clamp(PassphraseWordCountSlider?.Value ?? 4, 2, 12);
+            var sepOpt = PassphraseSeparatorCombo?.SelectedItem is ComboBoxItem sItem && Enum.TryParse<PassphraseSeparatorOption>(sItem.Tag?.ToString(), out var s) ? s : PassphraseSeparatorOption.Hyphen;
+            bool cap = PassphraseCapitalizeCheck?.IsChecked == true;
+            bool num = PassphraseIncludeNumberCheck?.IsChecked == true;
+            var leet = PassphraseLeetModeCombo?.SelectedItem is ComboBoxItem lItem && Enum.TryParse<PassphraseLeetMode>(lItem.Tag?.ToString(), out var l) ? l : PassphraseLeetMode.None;
+            var intens = PassphraseLeetIntensityCombo?.SelectedItem is ComboBoxItem iItem && Enum.TryParse<PassphraseLeetIntensity>(iItem.Tag?.ToString(), out var i) ? i : PassphraseLeetIntensity.Moderate;
+
+            var phraseConfig = new GeneratorEngine.PassphraseConfig(words, sepOpt, cap, num, leet, intens);
+            PreviewPassphraseText.Text = GeneratorEngine.GenerateSinglePassphrase(phraseConfig);
+
+            var guidFmt = GuidFormatCombo?.SelectedItem is ComboBoxItem gItem && Enum.TryParse<GuidFormatOption>(gItem.Tag?.ToString(), out var gf) ? gf : GuidFormatOption.StandardHyphenated;
+            var rawGuid = guidFmt == GuidFormatOption.UuidV7 ? GeneratorEngine.GenerateUuidV7() : Guid.NewGuid();
+            PreviewGuidText.Text = GeneratorEngine.FormatGuid(rawGuid, guidFmt);
+        }
+        catch (Exception ex)
+        {
+            Logger.Warning(ex, "Failed to update generator preview.");
+        }
     }
 
     #endregion
