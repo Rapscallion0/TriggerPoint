@@ -29,6 +29,9 @@ public class TrayIconService : IDisposable
 
     private readonly Action? _openCheatSheetAction;
     private readonly Action? _openClipboardAction;
+    private readonly Action? _restartAsAdminAction;
+    private readonly Action? _restartAsStandardUserAction;
+    private readonly Action? _restartAppAction;
     private readonly ToolStripMenuItem _settingsMenuItem;
     private readonly ToolStripMenuItem _paletteMenuItem;
     private readonly ToolStripMenuItem? _clipboardMenuItem;
@@ -51,7 +54,10 @@ public class TrayIconService : IDisposable
         string? cheatSheetHotkeyText = "Ctrl+Shift+/",
         Action? openClipboardAction = null,
         string? clipboardHotkeyText = "Ctrl+Shift+V",
-        bool enableClipboardHistory = true)
+        bool enableClipboardHistory = true,
+        Action? restartAsAdminAction = null,
+        Action? restartAsStandardUserAction = null,
+        Action? restartAppAction = null)
     {
         _shortcutListener = shortcutListener;
         _openSettingsAction = openSettingsAction;
@@ -62,6 +68,9 @@ public class TrayIconService : IDisposable
         _checkForUpdatesAction = checkForUpdatesAction;
         _openCheatSheetAction = openCheatSheetAction;
         _openClipboardAction = openClipboardAction;
+        _restartAsAdminAction = restartAsAdminAction;
+        _restartAsStandardUserAction = restartAsStandardUserAction;
+        _restartAppAction = restartAppAction;
 
         _notifyIcon = new NotifyIcon
         {
@@ -122,6 +131,42 @@ public class TrayIconService : IDisposable
         contextMenu.Items.Add(reloadItem);
 
         contextMenu.Items.Add(new ToolStripSeparator());
+
+        bool isElevated = TriggerPoint.Infrastructure.Services.WindowsServiceManager.IsRunningElevated();
+        if (isElevated)
+        {
+            var adminStatusItem = new ToolStripMenuItem("🛡️ Running as Administrator", null, (s, e) => { })
+            {
+                Enabled = false
+            };
+            contextMenu.Items.Add(adminStatusItem);
+
+            if (_restartAsStandardUserAction != null)
+            {
+                var standardUserItem = new ToolStripMenuItem("🔄 Restart as Standard User", null, (s, e) => _restartAsStandardUserAction());
+                contextMenu.Items.Add(standardUserItem);
+            }
+
+            if (_restartAppAction != null)
+            {
+                var restartItem = new ToolStripMenuItem("Restart TriggerPoint (Admin)", null, (s, e) => _restartAppAction());
+                contextMenu.Items.Add(restartItem);
+            }
+        }
+        else
+        {
+            if (_restartAsAdminAction != null)
+            {
+                var restartAdminItem = new ToolStripMenuItem("🛡️ Restart as Administrator", null, (s, e) => _restartAsAdminAction());
+                contextMenu.Items.Add(restartAdminItem);
+            }
+
+            if (_restartAppAction != null)
+            {
+                var restartItem = new ToolStripMenuItem("🔄 Restart TriggerPoint", null, (s, e) => _restartAppAction());
+                contextMenu.Items.Add(restartItem);
+            }
+        }
 
         var exitItem = new ToolStripMenuItem("Exit TriggerPoint", null, (s, e) => _exitAction());
         contextMenu.Items.Add(exitItem);

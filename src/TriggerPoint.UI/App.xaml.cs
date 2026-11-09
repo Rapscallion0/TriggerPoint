@@ -24,6 +24,11 @@ public partial class App : Application
     public static readonly Guid CommandPaletteActionId = Guid.Parse("00000000-0000-0000-0000-000000000002");
     public static readonly Guid CheatSheetActionId = Guid.Parse("00000000-0000-0000-0000-000000000003");
     public static readonly Guid ClipboardHistoryActionId = Guid.Parse("00000000-0000-0000-0000-000000000004");
+    public static readonly Guid CommandPaletteAppActionId = Guid.Parse("00000000-0000-0000-0000-000000000010");
+    public static readonly Guid CommandPaletteSnippetActionId = Guid.Parse("00000000-0000-0000-0000-000000000011");
+    public static readonly Guid CommandPaletteWorkflowActionId = Guid.Parse("00000000-0000-0000-0000-000000000012");
+    public static readonly Guid CommandPaletteFolderActionId = Guid.Parse("00000000-0000-0000-0000-000000000013");
+    public static readonly Guid CommandPaletteServiceActionId = Guid.Parse("00000000-0000-0000-0000-000000000014");
 
     private IServiceProvider? _serviceProvider;
     public IServiceProvider? ServiceProvider => _serviceProvider;
@@ -71,6 +76,66 @@ public partial class App : Application
                 Id = CommandPaletteActionId,
                 Name = "Open Command Palette",
                 Hotkey = settings.CommandPaletteHotkey,
+                IsEnabled = true,
+                PresentationMode = PresentationMode.Direct
+            });
+        }
+
+        if (settings.CommandPaletteAppHotkey != null && !settings.CommandPaletteAppHotkey.IsEmpty)
+        {
+            list.Add(new TriggerItem
+            {
+                Id = CommandPaletteAppActionId,
+                Name = "Command Palette - Apps (@app)",
+                Hotkey = settings.CommandPaletteAppHotkey,
+                IsEnabled = true,
+                PresentationMode = PresentationMode.Direct
+            });
+        }
+
+        if (settings.CommandPaletteSnippetHotkey != null && !settings.CommandPaletteSnippetHotkey.IsEmpty)
+        {
+            list.Add(new TriggerItem
+            {
+                Id = CommandPaletteSnippetActionId,
+                Name = "Command Palette - Snippets (@snip)",
+                Hotkey = settings.CommandPaletteSnippetHotkey,
+                IsEnabled = true,
+                PresentationMode = PresentationMode.Direct
+            });
+        }
+
+        if (settings.CommandPaletteWorkflowHotkey != null && !settings.CommandPaletteWorkflowHotkey.IsEmpty)
+        {
+            list.Add(new TriggerItem
+            {
+                Id = CommandPaletteWorkflowActionId,
+                Name = "Command Palette - Workflows (@flow)",
+                Hotkey = settings.CommandPaletteWorkflowHotkey,
+                IsEnabled = true,
+                PresentationMode = PresentationMode.Direct
+            });
+        }
+
+        if (settings.CommandPaletteFolderHotkey != null && !settings.CommandPaletteFolderHotkey.IsEmpty)
+        {
+            list.Add(new TriggerItem
+            {
+                Id = CommandPaletteFolderActionId,
+                Name = "Command Palette - Folders (@folder)",
+                Hotkey = settings.CommandPaletteFolderHotkey,
+                IsEnabled = true,
+                PresentationMode = PresentationMode.Direct
+            });
+        }
+
+        if (settings.CommandPaletteServiceHotkey != null && !settings.CommandPaletteServiceHotkey.IsEmpty)
+        {
+            list.Add(new TriggerItem
+            {
+                Id = CommandPaletteServiceActionId,
+                Name = "Command Palette - Services (@service)",
+                Hotkey = settings.CommandPaletteServiceHotkey,
                 IsEnabled = true,
                 PresentationMode = PresentationMode.Direct
             });
@@ -232,36 +297,44 @@ public partial class App : Application
         bool isPostUpdate = startupArgs.Any(a => string.Equals(a, "--post-update", StringComparison.OrdinalIgnoreCase));
 
         // Self-elevation via Task Scheduler if RunAsAdminAtStartup is configured and currently running un-elevated
+#if !DEBUG
         if (appSettings.RunAsAdminAtStartup && 
             !TriggerPoint.Infrastructure.Services.WindowsServiceManager.IsRunningElevated() &&
-            !startupArgs.Contains("--no-self-elevate", StringComparer.OrdinalIgnoreCase))
+            !pathsService.IsPortable &&
+            !startupArgs.Contains("--no-self-elevate", StringComparer.OrdinalIgnoreCase) &&
+            IsWindowsStartupLaunch(startupArgs, appSettings))
         {
-            try
+            var currentExe = Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule?.FileName;
+            if (!string.IsNullOrEmpty(currentExe) && currentExe.Contains("Program Files", StringComparison.OrdinalIgnoreCase))
             {
-                var psi = new ProcessStartInfo
+                try
                 {
-                    FileName = "schtasks.exe",
-                    Arguments = "/run /tn \"TriggerPoint\"",
-                    CreateNoWindow = true,
-                    UseShellExecute = false
-                };
-                using var proc = Process.Start(psi);
-                if (proc != null)
-                {
-                    proc.WaitForExit(1500);
-                    if (proc.ExitCode == 0)
+                    var psi = new ProcessStartInfo
                     {
-                        Log.Information("Delegated execution to elevated Task Scheduler instance 'TriggerPoint'. Exiting un-elevated process.");
-                        Shutdown();
-                        return;
+                        FileName = "schtasks.exe",
+                        Arguments = "/run /tn \"TriggerPoint\"",
+                        CreateNoWindow = true,
+                        UseShellExecute = false
+                    };
+                    using var proc = Process.Start(psi);
+                    if (proc != null)
+                    {
+                        proc.WaitForExit(1500);
+                        if (proc.ExitCode == 0)
+                        {
+                            Log.Information("Delegated execution to elevated Task Scheduler instance 'TriggerPoint'. Exiting un-elevated process.");
+                            Shutdown();
+                            return;
+                        }
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                Log.Warning(ex, "Failed to self-elevate via Task Scheduler 'TriggerPoint'. Continuing in standard mode.");
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "Failed to self-elevate via Task Scheduler 'TriggerPoint'. Continuing in standard mode.");
+                }
             }
         }
+#endif
 
         // 3. Single-Instance Enforcement
         string? scope = pathsService.IsPortable ? SingleInstanceService.ComputeScopeHash(pathsService.BaseDataDirectory) : null;
@@ -517,7 +590,10 @@ public partial class App : Application
             cheatSheetHotkeyText: appSettings.CheatSheetHotkey?.DisplayText ?? "Ctrl+Shift+/",
             openClipboardAction: () => Dispatcher.Invoke(() => OpenCommandPalette(initialFilter: CommandPaletteFilterType.Clipboard)),
             clipboardHotkeyText: appSettings.ClipboardHotkey?.DisplayText ?? "Ctrl+Shift+V",
-            enableClipboardHistory: appSettings.EnableClipboardHistory);
+            enableClipboardHistory: appSettings.EnableClipboardHistory,
+            restartAsAdminAction: () => Dispatcher.Invoke(() => RestartApplication(asAdmin: true)),
+            restartAsStandardUserAction: () => Dispatcher.Invoke(() => RestartApplication(asAdmin: false, forceUnelevated: true)),
+            restartAppAction: () => Dispatcher.Invoke(() => RestartApplication(asAdmin: false)));
 
         if (TryExtractAddActionPath(startupArgs, out var addPath))
         {
@@ -717,7 +793,37 @@ public partial class App : Application
 
             if (item.Id == CommandPaletteActionId)
             {
-                OpenCommandPalette(targetHwnd: targetHwnd);
+                OpenCommandPalette(targetHwnd: targetHwnd, initialFilter: CommandPaletteFilterType.All);
+                return;
+            }
+
+            if (item.Id == CommandPaletteAppActionId)
+            {
+                OpenCommandPalette(targetHwnd: targetHwnd, initialFilter: CommandPaletteFilterType.App);
+                return;
+            }
+
+            if (item.Id == CommandPaletteSnippetActionId)
+            {
+                OpenCommandPalette(targetHwnd: targetHwnd, initialFilter: CommandPaletteFilterType.Snippet);
+                return;
+            }
+
+            if (item.Id == CommandPaletteWorkflowActionId)
+            {
+                OpenCommandPalette(targetHwnd: targetHwnd, initialFilter: CommandPaletteFilterType.Workflow);
+                return;
+            }
+
+            if (item.Id == CommandPaletteFolderActionId)
+            {
+                OpenCommandPalette(targetHwnd: targetHwnd, initialFilter: CommandPaletteFilterType.Folder);
+                return;
+            }
+
+            if (item.Id == CommandPaletteServiceActionId)
+            {
+                OpenCommandPalette(targetHwnd: targetHwnd, initialFilter: CommandPaletteFilterType.Service);
                 return;
             }
 
@@ -809,6 +915,20 @@ public partial class App : Application
                 {
                     try
                     {
+                        var existingPalette = Windows.OfType<CommandPaletteView>().FirstOrDefault();
+                        if (existingPalette != null && existingPalette.IsLoaded)
+                        {
+                            existingPalette.SwitchToFilter(initialFilter);
+                            existingPalette.Activate();
+                            try
+                            {
+                                var h = new System.Windows.Interop.WindowInteropHelper(existingPalette).Handle;
+                                NativeMethods.SetForegroundWindow(h);
+                            }
+                            catch { }
+                            return;
+                        }
+
                         PaletteItemViewModel.DefaultAbbreviationCaseSensitive = _cachedSettings?.AbbreviationCaseSensitive ?? true;
                         var serviceManager = _serviceProvider?.GetService<IWindowsServiceManager>();
                         var palette = new CommandPaletteView(allItems, _executor, _repository, scopeId, scopeName, targetHwnd, serviceManager, _clipboardHistoryService, initialFilter);
@@ -866,7 +986,27 @@ public partial class App : Application
                                 }
                                 else if (targetItem.Id == CommandPaletteActionId)
                                 {
-                                    OpenCommandPalette(targetHwnd: targetHwnd);
+                                    OpenCommandPalette(targetHwnd: targetHwnd, initialFilter: CommandPaletteFilterType.All);
+                                }
+                                else if (targetItem.Id == CommandPaletteAppActionId)
+                                {
+                                    OpenCommandPalette(targetHwnd: targetHwnd, initialFilter: CommandPaletteFilterType.App);
+                                }
+                                else if (targetItem.Id == CommandPaletteSnippetActionId)
+                                {
+                                    OpenCommandPalette(targetHwnd: targetHwnd, initialFilter: CommandPaletteFilterType.Snippet);
+                                }
+                                else if (targetItem.Id == CommandPaletteWorkflowActionId)
+                                {
+                                    OpenCommandPalette(targetHwnd: targetHwnd, initialFilter: CommandPaletteFilterType.Workflow);
+                                }
+                                else if (targetItem.Id == CommandPaletteFolderActionId)
+                                {
+                                    OpenCommandPalette(targetHwnd: targetHwnd, initialFilter: CommandPaletteFilterType.Folder);
+                                }
+                                else if (targetItem.Id == CommandPaletteServiceActionId)
+                                {
+                                    OpenCommandPalette(targetHwnd: targetHwnd, initialFilter: CommandPaletteFilterType.Service);
                                 }
                                 else if (targetItem.Id == ClipboardHistoryActionId)
                                 {
@@ -1277,6 +1417,120 @@ public partial class App : Application
             }
         }
         return false;
+    }
+
+    public bool RestartApplication(bool asAdmin = false, bool forceUnelevated = false)
+    {
+        try
+        {
+            var exePath = Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule?.FileName;
+            if (string.IsNullOrWhiteSpace(exePath) || !File.Exists(exePath))
+            {
+                Log.Error("Cannot restart application: executable path could not be resolved.");
+                return false;
+            }
+
+            var currentArgs = Environment.GetCommandLineArgs();
+            var forwardArgsList = new List<string>();
+            if (currentArgs.Length > 1)
+            {
+                forwardArgsList.AddRange(currentArgs.Skip(1).Where(a =>
+                    !a.StartsWith("--add-action", StringComparison.OrdinalIgnoreCase) &&
+                    !a.Equals("--post-update", StringComparison.OrdinalIgnoreCase) &&
+                    !a.Equals("--no-self-elevate", StringComparison.OrdinalIgnoreCase)
+                ));
+            }
+
+            if (forceUnelevated)
+            {
+                forwardArgsList.Add("--no-self-elevate");
+            }
+
+            string forwardArgs = string.Join(" ", forwardArgsList);
+            bool isCurrentlyElevated = TriggerPoint.Infrastructure.Services.WindowsServiceManager.IsRunningElevated();
+
+            // If user wants to restart as standard user while currently running elevated:
+            if (forceUnelevated && isCurrentlyElevated)
+            {
+                Log.Information("De-elevating process to standard user privileges via Explorer token...");
+                bool launched = TriggerPoint.Infrastructure.Win32.ProcessDeElevator.LaunchUnelevated(exePath, forwardArgs);
+                if (launched)
+                {
+                    Log.Information("Restarting TriggerPoint as Standard User (Unelevated). Shutting down elevated instance.");
+                    _singleInstanceService?.Dispose();
+                    ExitApplication();
+                    return true;
+                }
+                Log.Warning("Failed to de-elevate via ProcessDeElevator. Falling back to standard launch.");
+            }
+
+            // If asAdmin requested and Task Scheduler elevated task is configured for the installed executable, attempt Task Scheduler first (bypasses UAC prompt)
+#if !DEBUG
+            if (asAdmin && _cachedSettings?.RunAsAdminAtStartup == true && exePath.Contains("Program Files", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    var schPsi = new ProcessStartInfo
+                    {
+                        FileName = "schtasks.exe",
+                        Arguments = "/run /tn \"TriggerPoint\"",
+                        CreateNoWindow = true,
+                        UseShellExecute = false
+                    };
+                    using var schProc = Process.Start(schPsi);
+                    if (schProc != null)
+                    {
+                        schProc.WaitForExit(1000);
+                        if (schProc.ExitCode == 0)
+                        {
+                            Log.Information("Successfully launched elevated TriggerPoint instance via Task Scheduler.");
+                            _singleInstanceService?.Dispose();
+                            ExitApplication();
+                            return true;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "Failed to launch via Task Scheduler, falling back to standard runas verb.");
+                }
+            }
+#endif
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = exePath,
+                UseShellExecute = true,
+                Verb = asAdmin ? "runas" : string.Empty,
+                Arguments = forwardArgs
+            };
+
+            Process? proc;
+            try
+            {
+                proc = Process.Start(psi);
+            }
+            catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223) // ERROR_CANCELLED (User dismissed UAC)
+            {
+                Log.Information("User cancelled UAC elevation prompt for application restart.");
+                return false;
+            }
+
+            if (proc != null)
+            {
+                Log.Information("Restarting TriggerPoint (Elevated: {Elevated}, ForceUnelevated: {ForceUnelevated}). Shutting down current instance.", asAdmin, forceUnelevated);
+                _singleInstanceService?.Dispose();
+                ExitApplication();
+                return true;
+            }
+
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to restart TriggerPoint (Elevated: {Elevated}, ForceUnelevated: {ForceUnelevated}).", asAdmin, forceUnelevated);
+            return false;
+        }
     }
 
     private void ExitApplication()

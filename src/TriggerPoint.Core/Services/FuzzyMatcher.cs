@@ -64,6 +64,76 @@ public static class FuzzyMatcher
             return (score, indices);
         }
 
+        // Multi-token match: if pattern contains whitespace, match each token independently
+        if (pattern.Contains(' '))
+        {
+            var tokens = pattern.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (tokens.Length > 1)
+            {
+                var combinedIndices = new SortedSet<int>();
+                double totalScore = 0.0;
+                bool allMatched = true;
+
+                foreach (var token in tokens)
+                {
+                    var tokenMatch = MatchSingleToken(candidate, token);
+                    if (tokenMatch == null)
+                    {
+                        allMatched = false;
+                        break;
+                    }
+
+                    totalScore += tokenMatch.Value.Score;
+                    foreach (var idx in tokenMatch.Value.MatchedIndices)
+                    {
+                        combinedIndices.Add(idx);
+                    }
+                }
+
+                if (allMatched)
+                {
+                    totalScore += tokens.Length * 25.0; // Multi-token completion bonus
+                    return (totalScore, combinedIndices.ToList());
+                }
+            }
+        }
+
+        return MatchSingleToken(candidate, pattern);
+    }
+
+    private static (double Score, IReadOnlyList<int> MatchedIndices)? MatchSingleToken(string candidate, string pattern)
+    {
+        if (string.IsNullOrWhiteSpace(pattern))
+        {
+            return (1.0, Array.Empty<int>());
+        }
+
+        if (string.IsNullOrEmpty(candidate))
+        {
+            return null;
+        }
+
+        // Exact match
+        if (string.Equals(candidate, pattern, StringComparison.OrdinalIgnoreCase))
+        {
+            var allIndices = new List<int>(candidate.Length);
+            for (int i = 0; i < candidate.Length; i++) allIndices.Add(i);
+            return (ExactMatchBonus, allIndices);
+        }
+
+        // Substring match
+        var subIdx = candidate.IndexOf(pattern, StringComparison.OrdinalIgnoreCase);
+        if (subIdx >= 0)
+        {
+            var indices = new List<int>(pattern.Length);
+            for (int i = 0; i < pattern.Length; i++) indices.Add(subIdx + i);
+
+            double score = 200.0 + (pattern.Length * 10);
+            if (subIdx == 0) score += PrefixMatchBonus;
+
+            return (score, indices);
+        }
+
         // Sequential fuzzy match
         var patternChars = pattern.AsSpan();
         var candidateChars = candidate.AsSpan();

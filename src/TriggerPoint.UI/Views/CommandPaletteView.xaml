@@ -1336,22 +1336,7 @@
                                                          Foreground="{DynamicResource AccentBrush}"/>
                                           </Border>
 
-                                         <!-- Fast Selection Number Badge (1-9) -->
-                                         <Border CornerRadius="3"
-                                                 BorderThickness="1"
-                                                 BorderBrush="{DynamicResource BorderSubtleBrush}"
-                                                 Background="{DynamicResource BgInputBrush}"
-                                                 Padding="4.5,1"
-                                                 Margin="0,0,6,0"
-                                                 ToolTip="{Binding FastSelectionTooltip}"
-                                                 Visibility="{Binding HasFastSelection}"
-                                                 VerticalAlignment="Center">
-                                             <TextBlock Text="{Binding FastSelectionBadgeText}"
-                                                        FontSize="9.5"
-                                                        FontWeight="Bold"
-                                                        FontFamily="{StaticResource CodeFont}"
-                                                        Foreground="{DynamicResource AccentBrush}"/>
-                                         </Border>
+
 
                                          <!-- Folder Drill-Down Chevron (Clickable for mouse users) -->
                                          <Button Visibility="{Binding IsFolder}"
@@ -2581,12 +2566,11 @@
                         </Border>
                     </Grid>
 
-                    <!-- Mode E: Windows Service Action Buttons Preview Strip -->
+                    <!-- Mode E: Windows Service Detail Preview Strip -->
                     <Grid x:Name="ServicePreviewGrid" Visibility="Collapsed">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
                         <Border Grid.Column="0"
@@ -2597,7 +2581,16 @@
                                 Margin="0,0,8,0"
                                 VerticalAlignment="Center">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock x:Name="ServicePreviewStatusEmoji" Text="🟢" FontSize="10.5" Margin="0,0,4,0"/>
+                                <Grid Width="14" Height="14" Margin="0,0,5,0" VerticalAlignment="Center">
+                                    <TextBlock x:Name="ServicePreviewStatusEmoji" Text="🟢" FontSize="10.5" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <Grid x:Name="ServicePreviewSpinner" Visibility="Collapsed" Width="13" Height="13" RenderTransformOrigin="0.5,0.5">
+                                        <Grid.RenderTransform>
+                                            <RotateTransform x:Name="ServicePreviewSpinnerTransform" Angle="0"/>
+                                        </Grid.RenderTransform>
+                                        <Ellipse Width="11" Height="11" Stroke="{DynamicResource BorderBrush}" StrokeThickness="2" Opacity="0.35"/>
+                                        <Path Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M 6.5,1 A 5.5,5.5 0 0 1 12,6.5"/>
+                                    </Grid>
+                                </Grid>
                                 <TextBlock x:Name="ServicePreviewStatusText" Text="RUNNING" FontSize="10" FontWeight="Bold"/>
                             </StackPanel>
                         </Border>
@@ -2609,8 +2602,7 @@
                                        FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextPrimaryBrush}"
                                        VerticalAlignment="Center"
-                                       TextTrimming="CharacterEllipsis"
-                                       MaxWidth="200"/>
+                                       TextTrimming="CharacterEllipsis"/>
                             <TextBlock Text=" • " FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
                             <TextBlock x:Name="ServicePreviewKeyText"
                                        Text="svc_key"
@@ -2618,70 +2610,13 @@
                                        FontFamily="{DynamicResource CodeFont}"
                                        Foreground="{DynamicResource AccentBrush}"
                                        VerticalAlignment="Center"
-                                       TextTrimming="CharacterEllipsis"
-                                       MaxWidth="140"/>
+                                       TextTrimming="CharacterEllipsis"/>
                             <TextBlock Text=" • " FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
                             <TextBlock x:Name="ServicePreviewStartupText"
                                        Text="Automatic"
                                        FontSize="10.5"
                                        Foreground="{DynamicResource TextSecondaryBrush}"
                                        VerticalAlignment="Center"/>
-                        </StackPanel>
-
-                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                            <Button x:Name="ServiceStartBtn"
-                                    Click="ServiceStartBtn_Click"
-                                    Content="▶ Start"
-                                    ToolTip="Start service (Ctrl+S)"
-                                    Style="{StaticResource SecondaryButtonStyle}"
-                                    FontSize="10"
-                                    FontWeight="SemiBold"
-                                    Padding="7,2"
-                                    Margin="0,0,4,0"/>
-                            <Button x:Name="ServiceStopBtn"
-                                    Click="ServiceStopBtn_Click"
-                                    Content="⏹ Stop"
-                                    ToolTip="Stop service (Ctrl+T)"
-                                    Style="{StaticResource SecondaryButtonStyle}"
-                                    FontSize="10"
-                                    FontWeight="SemiBold"
-                                    Padding="7,2"
-                                    Margin="0,0,4,0"/>
-                            <Button x:Name="ServiceRestartBtn"
-                                    Click="ServiceRestartBtn_Click"
-                                    Content="🔄 Restart"
-                                    ToolTip="Restart service (Ctrl+R)"
-                                    Style="{StaticResource SecondaryButtonStyle}"
-                                    FontSize="10"
-                                    FontWeight="SemiBold"
-                                    Padding="7,2"
-                                    Margin="0,0,4,0"/>
-                            <Button x:Name="ServicePropertiesBtn"
-                                    Click="ServicePropertiesBtn_Click"
-                                    Content="⚙ Properties"
-                                    ToolTip="View complete service properties and configuration (Alt+Enter)"
-                                    Style="{StaticResource SecondaryButtonStyle}"
-                                    FontSize="10"
-                                    FontWeight="SemiBold"
-                                    Padding="7,2"
-                                    Margin="0,0,4,0"/>
-                            <Button x:Name="ServiceOpenMscBtn"
-                                    Click="ServiceOpenMscBtn_Click"
-                                    Content="Services MMC ↗"
-                                    ToolTip="Open Windows Services management console (services.msc)"
-                                    Style="{StaticResource SecondaryButtonStyle}"
-                                    FontSize="10"
-                                    FontWeight="SemiBold"
-                                    Padding="7,2"
-                                    Margin="0,0,4,0"/>
-                            <Button x:Name="ServiceCopyNameBtn"
-                                    Click="ServiceCopyNameBtn_Click"
-                                    Content="📋"
-                                    ToolTip="Copy service key name to clipboard"
-                                    Style="{StaticResource SecondaryButtonStyle}"
-                                    FontSize="10"
-                                    FontWeight="SemiBold"
-                                    Padding="6,2"/>
                         </StackPanel>
                     </Grid>
                 </Grid>

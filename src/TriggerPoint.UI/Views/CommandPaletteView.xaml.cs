@@ -82,12 +82,14 @@ public class PaletteItemViewModel
     public bool IsSelectable => !IsSectionHeader;
     public Visibility HeaderVisibility => IsSectionHeader ? Visibility.Visible : Visibility.Collapsed;
     public Visibility ActionVisibility => IsSelectable ? Visibility.Visible : Visibility.Collapsed;
-    public bool IsSystemAction => Item != null && (Item.Id == App.OpenSettingsActionId || Item.Id == CommandPaletteView.AppSettingsVirtualId);
+    public bool IsSystemAction => Item != null && (Item.Id == App.OpenSettingsActionId || Item.Id == CommandPaletteView.AppSettingsVirtualId || Item.Id == CommandPaletteView.RestartAsAdminVirtualId || Item.Id == CommandPaletteView.RestartAsStandardUserVirtualId);
     public bool IsCalculatorResult { get; init; }
     public CalculatorResult? CalcResult { get; set; }
     public bool IsServiceItem { get; init; }
     public WindowsServiceItem? ServiceItem { get; init; }
     public WindowsServiceStatus? ServiceActionStatus { get; init; }
+    public bool IsServicePending { get; set; }
+    public string? ServicePendingStatusText { get; set; }
     public bool IsClipboardItem { get; init; }
     public ClipboardHistoryItem? ClipboardItem { get; init; }
     public Visibility PinBadgeVisibility => (IsClipboardItem && ClipboardItem?.IsPinned == true) ? Visibility.Visible : Visibility.Collapsed;
@@ -123,8 +125,8 @@ public class PaletteItemViewModel
 
     public int? FastSelectionNumber { get; set; }
     public string FastSelectionBadgeText => FastSelectionNumber.HasValue ? FastSelectionNumber.Value.ToString() : string.Empty;
-    public Visibility HasFastSelection => FastSelectionNumber.HasValue ? Visibility.Visible : Visibility.Collapsed;
-    public string FastSelectionTooltip => FastSelectionNumber.HasValue ? $"Fast select (Alt+{FastSelectionNumber.Value} or Ctrl+{FastSelectionNumber.Value})" : string.Empty;
+    public Visibility HasFastSelection => Visibility.Collapsed;
+    public string FastSelectionTooltip => FastSelectionNumber.HasValue ? $"Fast select (Alt+{FastSelectionNumber.Value})" : string.Empty;
 
     public string? RowTooltip
     {
@@ -288,9 +290,14 @@ public class PaletteItemViewModel
             }
             if (IsCalculatorResult) return "CALC";
             if (IsSystemAction) return "SYSTEM";
-            if (IsServiceItem && ServiceItem != null) return ServiceItem.Status.ToString().ToUpperInvariant();
+            if (IsServiceItem && ServiceItem != null)
+            {
+                if (IsServicePending) return ServicePendingStatusText ?? "PROCESSING...";
+                return ServiceItem.Status.ToString().ToUpperInvariant();
+            }
             if (Item?.ActionType == ActionType.Service)
             {
+                if (IsServicePending) return ServicePendingStatusText ?? "PROCESSING...";
                 if (ServiceActionStatus.HasValue && ServiceActionStatus.Value != WindowsServiceStatus.Unknown)
                 {
                     return ServiceActionStatus.Value.ToString().ToUpperInvariant();
@@ -314,6 +321,7 @@ public class PaletteItemViewModel
     {
         get
         {
+            if (IsServicePending) return Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.CornflowerBlue;
             if (IsClipboardItem) return Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.CornflowerBlue;
             if (IsCalculatorResult || IsSystemAction) return Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.CornflowerBlue;
             if (IsServiceItem && ServiceItem != null)
@@ -352,6 +360,7 @@ public class PaletteItemViewModel
     {
         get
         {
+            if (IsServicePending) return Application.Current.TryFindResource("AccentSubtleBrush") as Brush ?? new SolidColorBrush(Color.FromArgb(0x18, 0x00, 0x7A, 0xCC));
             if (IsClipboardItem) return Application.Current.TryFindResource("AccentSubtleBrush") as Brush ?? new SolidColorBrush(Color.FromArgb(0x18, 0x00, 0x7A, 0xCC));
             if (IsCalculatorResult || IsSystemAction) return Application.Current.TryFindResource("AccentSubtleBrush") as Brush ?? new SolidColorBrush(Color.FromArgb(0x18, 0x00, 0x7A, 0xCC));
             if (IsServiceItem && ServiceItem != null)
@@ -390,6 +399,7 @@ public class PaletteItemViewModel
     {
         get
         {
+            if (IsServicePending) return Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.CornflowerBlue;
             if (IsClipboardItem) return Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.CornflowerBlue;
             if (IsSystemAction) return Application.Current.TryFindResource("AccentBrush") as Brush ?? Brushes.CornflowerBlue;
             if (IsServiceItem && ServiceItem != null) return TypeForegroundBrush;
@@ -425,6 +435,7 @@ public class PaletteItemViewModel
                 };
             }
             if (IsCalculatorResult) return "🧮";
+            if (IsServicePending) return "🔄";
             if (IsServiceItem && ServiceItem != null) return ServiceItem.StatusBadgeEmoji;
             if (Item?.ActionType == ActionType.Service && ServiceActionStatus.HasValue && ServiceActionStatus.Value != WindowsServiceStatus.Unknown)
             {
@@ -439,6 +450,8 @@ public class PaletteItemViewModel
             }
             if (IsSystemAction)
             {
+                if (Item?.Id == CommandPaletteView.RestartAsAdminVirtualId) return "🛡️";
+                if (Item?.Id == CommandPaletteView.RestartAsStandardUserVirtualId) return "🔄";
                 return Item?.Id == App.OpenSettingsActionId ? "🎯" : "⚙️";
             }
             return Item?.ActionType switch
@@ -787,6 +800,8 @@ public sealed class FolderActionPreviewItem
 public partial class CommandPaletteView : Window
 {
     public static readonly Guid AppSettingsVirtualId = Guid.Parse("00000000-0000-0000-0000-000000000003");
+    public static readonly Guid RestartAsAdminVirtualId = Guid.Parse("00000000-0000-0000-0000-000000000004");
+    public static readonly Guid RestartAsStandardUserVirtualId = Guid.Parse("00000000-0000-0000-0000-000000000005");
 
     private readonly List<TriggerItem> _allItems;
     private readonly IActionExecutor _executor;
@@ -806,6 +821,7 @@ public partial class CommandPaletteView : Window
     private readonly DispatcherTimer _feedbackTimer;
     private bool _isLoaded;
     private bool _isPinned;
+    private bool _enableUiAnimations;
     private bool _isChildDialogOpen;
     private WindowsServiceItem? _activeServicePreviewItem;
     private bool _isCalcPromoted;
@@ -826,6 +842,10 @@ public partial class CommandPaletteView : Window
 
     private readonly TriggerItem _virtualActionManagerItem;
     private readonly TriggerItem _virtualAppSettingsItem;
+    private readonly TriggerItem _virtualRestartAdminItem;
+    private readonly TriggerItem _virtualRestartStandardUserItem;
+    private readonly Dictionary<string, string> _pendingServiceOperations = new(StringComparer.OrdinalIgnoreCase);
+    private Storyboard? _serviceSpinnerStoryboard;
 
     private static readonly IReadOnlyList<PrefixSuggestionItem> AllPrefixSuggestions =
     [
@@ -869,7 +889,19 @@ public partial class CommandPaletteView : Window
         InitializeComponent();
         _executor = executor;
         _repository = repository;
-        LoadSavedDimensions();
+
+        var settings = (Application.Current as App)?.CachedSettings;
+        if (settings == null && _repository != null)
+        {
+            try
+            {
+                settings = _repository.LoadSettingsAsync().GetAwaiter().GetResult();
+            }
+            catch { }
+        }
+        settings ??= new AppSettings();
+
+        LoadSavedDimensions(settings);
         _targetHwnd = targetHwnd;
         _serviceManager = serviceManager ?? new WindowsServiceManager();
         _clipboardService = clipboardService ?? (Application.Current as App)?.ClipboardHistoryService;
@@ -900,6 +932,29 @@ public partial class CommandPaletteView : Window
             Payload = new ActionPayload { Command = "Application Settings" }
         };
 
+        bool isElevated = TriggerPoint.Infrastructure.Services.WindowsServiceManager.IsRunningElevated();
+        _virtualRestartAdminItem = new TriggerItem
+        {
+            Id = RestartAsAdminVirtualId,
+            Name = isElevated ? "Restart TriggerPoint (Administrator Active)" : "Restart TriggerPoint as Administrator",
+            Description = isElevated
+                ? "Relaunch TriggerPoint daemon (elevated session active)"
+                : "Relaunch TriggerPoint with elevated Administrator privileges (UAC)",
+            ActionType = ActionType.Shell,
+            Payload = new ActionPayload { Command = isElevated ? "Restart as Administrator elevate uac admin daemon reboot" : "Restart as Administrator elevate uac admin reboot" }
+        };
+
+        _virtualRestartStandardUserItem = new TriggerItem
+        {
+            Id = RestartAsStandardUserVirtualId,
+            Name = isElevated ? "Restart TriggerPoint as Standard User" : "Restart TriggerPoint",
+            Description = isElevated
+                ? "Relaunch TriggerPoint without Administrator privileges (Standard User)"
+                : "Relaunch TriggerPoint standard process",
+            ActionType = ActionType.Shell,
+            Payload = new ActionPayload { Command = isElevated ? "Restart as Standard User unelevated de-elevate remove admin reboot" : "Restart TriggerPoint reboot reload daemon" }
+        };
+
         _feedbackTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
         _feedbackTimer.Tick += (s, e) =>
         {
@@ -908,9 +963,27 @@ public partial class CommandPaletteView : Window
         };
 
         UpdateScopeUi();
-        _isPinned = (Application.Current as App)?.CachedSettings?.CommandPalettePinnedDefault ?? false;
+        _enableUiAnimations = settings.EnableUiAnimations;
+        _currentSortMode = settings.CommandPaletteSortMode;
+        _showSnippetKeywords = settings.ShowSnippetKeywordsInCommandPalette;
+        _includeClipboardInAll = settings.CommandPaletteIncludeClipboardInAll;
+        _maxClipboardResultsInAll = settings.CommandPaletteMaxClipboardResultsInAll;
+        _includeServicesInAll = settings.CommandPaletteIncludeServicesInAll;
+        _maxServicesResultsInAll = settings.CommandPaletteMaxServiceResultsInAll;
+        _isPinned = settings.CommandPalettePinnedDefault;
+
+        if (_enableUiAnimations)
+        {
+            Opacity = 0.0;
+        }
+        else
+        {
+            Opacity = 1.0;
+        }
+
         UpdatePinButtonVisual();
-        LoadSortModePreference();
+        UpdateSortButtonText();
+        UpdateSortMenuCheckmarks();
 
         if (App.LatestAvailableUpdate?.IsUpdateAvailable == true && App.LatestAvailableUpdate.LatestUpdate != null)
         {
@@ -934,6 +1007,19 @@ public partial class CommandPaletteView : Window
             }
             catch { }
 
+            if (_enableUiAnimations)
+            {
+                var anim = new System.Windows.Media.Animation.DoubleAnimation(0.0, 1.0, TimeSpan.FromMilliseconds(120))
+                {
+                    EasingFunction = new System.Windows.Media.Animation.QuadraticEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+                };
+                BeginAnimation(OpacityProperty, anim);
+            }
+            else
+            {
+                Opacity = 1.0;
+            }
+
             SelectCalcGuideTab("Popular");
             SearchTextBox.Focus();
             Keyboard.Focus(SearchTextBox);
@@ -941,38 +1027,22 @@ public partial class CommandPaletteView : Window
         };
     }
 
-    private async void LoadSortModePreference()
+    private PaletteItemViewModel CreateActionViewModel(TriggerItem item, FuzzyMatchResult? matchResult, string? parentPath = null)
     {
-        if (_repository != null)
+        var vm = new PaletteItemViewModel(item, matchResult, parentPath, null, _showSnippetKeywords);
+        if (item.ActionType == ActionType.Service)
         {
-            try
+            string svcKey = !string.IsNullOrWhiteSpace(item.Payload?.ServiceName)
+                ? item.Payload.ServiceName
+                : (!string.IsNullOrWhiteSpace(item.Payload?.Command) ? item.Payload.Command : item.Name);
+            if (!string.IsNullOrEmpty(svcKey) && _pendingServiceOperations.TryGetValue(svcKey, out var pendingText))
             {
-                var settings = await _repository.LoadSettingsAsync();
-                _currentSortMode = settings.CommandPaletteSortMode;
-                _showSnippetKeywords = settings.ShowSnippetKeywordsInCommandPalette;
-                _includeClipboardInAll = settings.CommandPaletteIncludeClipboardInAll;
-                _maxClipboardResultsInAll = settings.CommandPaletteMaxClipboardResultsInAll;
-                _includeServicesInAll = settings.CommandPaletteIncludeServicesInAll;
-                _maxServicesResultsInAll = settings.CommandPaletteMaxServiceResultsInAll;
-                _isPinned = settings.CommandPalettePinnedDefault;
-                UpdatePinButtonVisual();
-                UpdateSortButtonText();
-                UpdateSortMenuCheckmarks();
-
-                if (settings.EnableUiAnimations)
-                {
-                    var anim = new System.Windows.Media.Animation.DoubleAnimation(0.0, 1.0, TimeSpan.FromMilliseconds(120));
-                    BeginAnimation(OpacityProperty, anim);
-                }
-
-                FilterResults();
+                vm.IsServicePending = true;
+                vm.ServicePendingStatusText = pendingText;
             }
-            catch { }
         }
+        return vm;
     }
-
-    private PaletteItemViewModel CreateActionViewModel(TriggerItem item, FuzzyMatchResult? matchResult, string? parentPath = null) =>
-        new(item, matchResult, parentPath, null, _showSnippetKeywords);
 
     private static Dictionary<Guid, string> BuildFolderPaths(IEnumerable<TriggerItem> allItems)
     {
@@ -1265,8 +1335,13 @@ public partial class CommandPaletteView : Window
         }
     }
 
-    internal void FilterResults()
+    internal void FilterResults(string? preserveServiceName = null, bool preserveSelection = false)
     {
+        var prevSelected = ResultsListBox.SelectedItem as PaletteItemViewModel;
+        string? targetServiceName = preserveServiceName ?? (preserveSelection && prevSelected?.IsServiceItem == true ? prevSelected.ServiceItem?.ServiceName : null);
+        Guid? targetItemId = preserveSelection ? prevSelected?.Item?.Id : null;
+        Guid? targetClipId = preserveSelection ? prevSelected?.ClipboardItem?.Id : null;
+
         var rawQuery = SearchTextBox.Text.Trim();
         var effectiveQuery = rawQuery;
 
@@ -1350,6 +1425,8 @@ public partial class CommandPaletteView : Window
             var list = new List<TriggerItem>(_allItems.Where(x => x.IsEnabled));
             list.Add(_virtualActionManagerItem);
             list.Add(_virtualAppSettingsItem);
+            list.Add(_virtualRestartAdminItem);
+            list.Add(_virtualRestartStandardUserItem);
             scopeCandidates = list;
         }
 
@@ -1375,7 +1452,7 @@ public partial class CommandPaletteView : Window
 
             return _activeFilter switch
             {
-                CommandPaletteFilterType.App => x.ActionType == ActionType.Shell && x.Id != App.OpenSettingsActionId && x.Id != AppSettingsVirtualId,
+                CommandPaletteFilterType.App => x.ActionType == ActionType.Shell && x.Id != App.OpenSettingsActionId && x.Id != AppSettingsVirtualId && x.Id != RestartAsAdminVirtualId && x.Id != RestartAsStandardUserVirtualId,
                 CommandPaletteFilterType.Snippet => x.ActionType == ActionType.Snippet,
                 CommandPaletteFilterType.Workflow => x.ActionType == ActionType.Workflow,
                 CommandPaletteFilterType.Folder => x.ActionType == ActionType.Folder,
@@ -1810,7 +1887,7 @@ public partial class CommandPaletteView : Window
             int fastIndex = 1;
             foreach (var item in vms)
             {
-                if (item.IsSelectable && fastIndex <= 9)
+                if (_activeFilter != CommandPaletteFilterType.Service && !item.IsServiceItem && item.Item?.ActionType != ActionType.Service && item.IsSelectable && fastIndex <= 9)
                 {
                     item.FastSelectionNumber = fastIndex++;
                 }
@@ -1822,9 +1899,33 @@ public partial class CommandPaletteView : Window
 
             ResultsListBox.ItemsSource = vms;
 
-            if (!string.IsNullOrWhiteSpace(effectiveQuery) && _activeFilter == CommandPaletteFilterType.All)
+            if (!string.IsNullOrWhiteSpace(effectiveQuery))
             {
-                FilterCountAll.Text = FormatPillCount("All", vms.Count(x => x.IsSelectable));
+                int selectableCount = vms.Count(x => x.IsSelectable);
+                switch (_activeFilter)
+                {
+                    case CommandPaletteFilterType.All:
+                        if (FilterCountAll != null) FilterCountAll.Text = FormatPillCount("All", selectableCount);
+                        break;
+                    case CommandPaletteFilterType.App:
+                        if (FilterCountApp != null) FilterCountApp.Text = FormatPillCount("Apps", selectableCount);
+                        break;
+                    case CommandPaletteFilterType.Snippet:
+                        if (FilterCountSnippet != null) FilterCountSnippet.Text = FormatPillCount("Snippets", selectableCount);
+                        break;
+                    case CommandPaletteFilterType.Workflow:
+                        if (FilterCountWorkflow != null) FilterCountWorkflow.Text = FormatPillCount("Workflows", selectableCount);
+                        break;
+                    case CommandPaletteFilterType.Folder:
+                        if (FilterCountFolder != null) FilterCountFolder.Text = FormatPillCount("Folders", selectableCount);
+                        break;
+                    case CommandPaletteFilterType.Service:
+                        if (FilterCountService != null) FilterCountService.Text = FormatPillCount("Services", selectableCount);
+                        break;
+                    case CommandPaletteFilterType.Clipboard:
+                        if (FilterCountClipboard != null) FilterCountClipboard.Text = FormatPillCount("Clipboard", selectableCount);
+                        break;
+                }
             }
 
             bool hasSelectable = vms.Any(x => x.IsSelectable);
@@ -1875,15 +1976,57 @@ public partial class CommandPaletteView : Window
             else
             {
                 EmptyStateCard.Visibility = Visibility.Collapsed;
-                var firstSelectable = vms.FirstOrDefault(x => x.IsSelectable);
-                if (firstSelectable != null)
+                PaletteItemViewModel? targetItem = null;
+
+                if (!string.IsNullOrEmpty(targetServiceName))
                 {
-                    ResultsListBox.SelectedItem = firstSelectable;
+                    targetItem = vms.FirstOrDefault(x => x.IsSelectable && (
+                        (x.IsServiceItem && x.ServiceItem != null && string.Equals(x.ServiceItem.ServiceName, targetServiceName, StringComparison.OrdinalIgnoreCase)) ||
+                        (x.Item?.ActionType == ActionType.Service && (
+                            string.Equals(x.Item.Payload?.ServiceName, targetServiceName, StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(x.Item.Payload?.Command, targetServiceName, StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(x.Item.Name, targetServiceName, StringComparison.OrdinalIgnoreCase)
+                        ))
+                    ));
+                }
+                else if (targetClipId.HasValue)
+                {
+                    targetItem = vms.FirstOrDefault(x => x.IsSelectable && x.IsClipboardItem && x.ClipboardItem?.Id == targetClipId.Value);
+                }
+                else if (targetItemId.HasValue)
+                {
+                    targetItem = vms.FirstOrDefault(x => x.IsSelectable && x.Item != null && x.Item.Id == targetItemId.Value);
+                }
+
+                var selectedItem = targetItem ?? vms.FirstOrDefault(x => x.IsSelectable);
+                if (selectedItem != null)
+                {
+                    ResultsListBox.SelectedItem = selectedItem;
                 }
             }
         }
 
-        ResetResultsScrollToTop();
+        bool hasSpecificTarget = !string.IsNullOrEmpty(targetServiceName) || targetItemId.HasValue || targetClipId.HasValue;
+        if (hasSpecificTarget && ResultsListBox.SelectedItem != null)
+        {
+            ResultsListBox.ScrollIntoView(ResultsListBox.SelectedItem);
+            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+            {
+                try
+                {
+                    if (ResultsListBox.SelectedItem != null)
+                    {
+                        ResultsListBox.ScrollIntoView(ResultsListBox.SelectedItem);
+                    }
+                }
+                catch { }
+            }));
+        }
+        else
+        {
+            ResetResultsScrollToTop();
+        }
+
         UpdatePreviewAndHints();
     }
 
@@ -2158,8 +2301,8 @@ public partial class CommandPaletteView : Window
     private void UpdatePillCounts(IEnumerable<TriggerItem> scopeItems)
     {
         var list = scopeItems.ToList();
-        int allCount = list.Count(x => x.Id != App.OpenSettingsActionId && x.Id != AppSettingsVirtualId);
-        int appCount = list.Count(x => x.ActionType == ActionType.Shell && x.Id != App.OpenSettingsActionId && x.Id != AppSettingsVirtualId);
+        int allCount = list.Count(x => x.Id != App.OpenSettingsActionId && x.Id != AppSettingsVirtualId && x.Id != RestartAsAdminVirtualId && x.Id != RestartAsStandardUserVirtualId);
+        int appCount = list.Count(x => x.ActionType == ActionType.Shell && x.Id != App.OpenSettingsActionId && x.Id != AppSettingsVirtualId && x.Id != RestartAsAdminVirtualId && x.Id != RestartAsStandardUserVirtualId);
         int snipCount = list.Count(x => x.ActionType == ActionType.Snippet);
         int wfCount = list.Count(x => x.ActionType == ActionType.Workflow);
         int folderCount = list.Count(x => x.ActionType == ActionType.Folder);
@@ -2172,6 +2315,7 @@ public partial class CommandPaletteView : Window
         FilterCountFolder.Text = FormatPillCount("Folders", folderCount);
         if (FilterCountService != null)
         {
+            _cachedServices ??= _serviceManager?.GetServices();
             int totalServices = (_cachedServices?.Count ?? 0) + dedicatedServiceCount;
             FilterCountService.Text = FormatPillCount("Services", totalServices);
         }
@@ -2229,6 +2373,84 @@ public partial class CommandPaletteView : Window
         FilterPillsScrollViewer.ScrollToHorizontalOffset(Math.Min(FilterPillsScrollViewer.ScrollableWidth, FilterPillsScrollViewer.HorizontalOffset + 120));
     }
 
+    public void SwitchToFilter(CommandPaletteFilterType filter)
+    {
+        if (PrefixAutoCompletePopup != null)
+        {
+            PrefixAutoCompletePopup.IsOpen = false;
+        }
+        if (CheatSheetOverlay != null && CheatSheetOverlay.Visibility == Visibility.Visible)
+        {
+            CheatSheetOverlay.Visibility = Visibility.Collapsed;
+        }
+        if (CalculatorUnitsOverlay != null && CalculatorUnitsOverlay.Visibility == Visibility.Visible)
+        {
+            CloseCalculatorUnitsOverlay();
+        }
+        _activeFilter = filter;
+        UpdateFilterPillsUi();
+        SearchTextBox.Focus();
+        FilterResults();
+    }
+
+    private void UpdateFilterPillTooltips()
+    {
+        var settings = (Application.Current as App)?.CachedSettings;
+
+        static string BuildTip(string title, string inPaletteHint, ShortcutBinding? globalHotkey)
+        {
+            if (globalHotkey != null && !string.IsNullOrWhiteSpace(globalHotkey.DisplayText))
+            {
+                return $"{title} ({inPaletteHint}, Global: {globalHotkey.DisplayText})";
+            }
+            return $"{title} ({inPaletteHint})";
+        }
+
+        if (FilterPillAll != null)
+            FilterPillAll.ToolTip = BuildTip("All Actions", "Ctrl+1", settings?.CommandPaletteHotkey);
+
+        if (FilterPillApp != null)
+            FilterPillApp.ToolTip = BuildTip("Apps & Commands", "Ctrl+2", settings?.CommandPaletteAppHotkey);
+
+        if (FilterPillSnippet != null)
+            FilterPillSnippet.ToolTip = BuildTip("Snippets & Templates", "Ctrl+3", settings?.CommandPaletteSnippetHotkey);
+
+        if (FilterPillWorkflow != null)
+            FilterPillWorkflow.ToolTip = BuildTip("Workflows", "Ctrl+4", settings?.CommandPaletteWorkflowHotkey);
+
+        if (FilterPillFolder != null)
+            FilterPillFolder.ToolTip = BuildTip("Folders", "Ctrl+5", settings?.CommandPaletteFolderHotkey);
+
+        if (FilterPillService != null)
+            FilterPillService.ToolTip = BuildTip("Windows Services", "Ctrl+6", settings?.CommandPaletteServiceHotkey);
+
+        if (FilterPillClipboard != null)
+            FilterPillClipboard.ToolTip = BuildTip("Clipboard History", "Ctrl+7", settings?.ClipboardHotkey);
+    }
+
+    private static bool MatchesBinding(KeyEventArgs e, ShortcutBinding? binding)
+    {
+        if (binding == null || binding.VirtualKey == 0) return false;
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin)
+            return false;
+
+        int vk = KeyInterop.VirtualKeyFromKey(key);
+        if (vk != binding.VirtualKey) return false;
+
+        var modifiers = TriggerPoint.Core.Models.ModifierKeys.None;
+        if (Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl))
+            modifiers |= TriggerPoint.Core.Models.ModifierKeys.Control;
+        if (Keyboard.IsKeyDown(Key.LeftAlt) || Keyboard.IsKeyDown(Key.RightAlt))
+            modifiers |= TriggerPoint.Core.Models.ModifierKeys.Alt;
+        if (Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift))
+            modifiers |= TriggerPoint.Core.Models.ModifierKeys.Shift;
+        if (Keyboard.IsKeyDown(Key.LWin) || Keyboard.IsKeyDown(Key.RWin))
+            modifiers |= TriggerPoint.Core.Models.ModifierKeys.Windows;
+
+        return modifiers == binding.Modifiers;
+    }
+
     private void UpdateFilterPillsUi()
     {
         FilterPillAll.Tag = _activeFilter == CommandPaletteFilterType.All ? "Selected" : "";
@@ -2244,6 +2466,8 @@ public partial class CommandPaletteView : Window
         {
             FilterPillClipboard.Tag = _activeFilter == CommandPaletteFilterType.Clipboard ? "Selected" : "";
         }
+
+        UpdateFilterPillTooltips();
 
         Button? activePill = _activeFilter switch
         {
@@ -2527,27 +2751,7 @@ public partial class CommandPaletteView : Window
                 {
                     ServicePreviewStartupText.Text = svc.StartType;
                 }
-                if (ServicePreviewStatusEmoji != null)
-                {
-                    ServicePreviewStatusEmoji.Text = svc.StatusBadgeEmoji;
-                }
-                if (ServicePreviewStatusText != null)
-                {
-                    ServicePreviewStatusText.Text = svc.StatusText.ToUpperInvariant();
-                }
-
-                if (ServicePreviewStatusPill != null && ServicePreviewStatusText != null)
-                {
-                    ApplyServicePreviewStatusStyling(svc.Status);
-                }
-
-                bool isRunning = svc.Status == WindowsServiceStatus.Running;
-                bool isPending = svc.Status is WindowsServiceStatus.StartPending or WindowsServiceStatus.StopPending or WindowsServiceStatus.ContinuePending or WindowsServiceStatus.PausePending;
-
-                if (ServiceStartBtn != null) ServiceStartBtn.IsEnabled = !isRunning && !isPending;
-                if (ServiceStopBtn != null) ServiceStopBtn.IsEnabled = isRunning && svc.CanStop && !isPending;
-                if (ServiceRestartBtn != null) ServiceRestartBtn.IsEnabled = isRunning && !isPending;
-
+                UpdateServicePreviewStrip(svc);
                 return;
             }
         }
@@ -2963,6 +3167,54 @@ public partial class CommandPaletteView : Window
             }
         }
 
+        // Direct Tab Switch Hotkeys (configured in Application Settings)
+        var tabAppSettings = (Application.Current as App)?.CachedSettings;
+        if (tabAppSettings != null)
+        {
+            if (MatchesBinding(e, tabAppSettings.CommandPaletteHotkey))
+            {
+                SwitchToFilter(CommandPaletteFilterType.All);
+                e.Handled = true;
+                return;
+            }
+            if (MatchesBinding(e, tabAppSettings.CommandPaletteAppHotkey))
+            {
+                SwitchToFilter(CommandPaletteFilterType.App);
+                e.Handled = true;
+                return;
+            }
+            if (MatchesBinding(e, tabAppSettings.CommandPaletteSnippetHotkey))
+            {
+                SwitchToFilter(CommandPaletteFilterType.Snippet);
+                e.Handled = true;
+                return;
+            }
+            if (MatchesBinding(e, tabAppSettings.CommandPaletteWorkflowHotkey))
+            {
+                SwitchToFilter(CommandPaletteFilterType.Workflow);
+                e.Handled = true;
+                return;
+            }
+            if (MatchesBinding(e, tabAppSettings.CommandPaletteFolderHotkey))
+            {
+                SwitchToFilter(CommandPaletteFilterType.Folder);
+                e.Handled = true;
+                return;
+            }
+            if (MatchesBinding(e, tabAppSettings.CommandPaletteServiceHotkey))
+            {
+                SwitchToFilter(CommandPaletteFilterType.Service);
+                e.Handled = true;
+                return;
+            }
+            if (MatchesBinding(e, tabAppSettings.ClipboardHotkey))
+            {
+                SwitchToFilter(CommandPaletteFilterType.Clipboard);
+                e.Handled = true;
+                return;
+            }
+        }
+
         // Autocomplete Popup Navigation
         if (PrefixAutoCompletePopup.IsOpen)
         {
@@ -3212,7 +3464,7 @@ public partial class CommandPaletteView : Window
 
                 if (digit <= 7)
                 {
-                    _activeFilter = key switch
+                    SwitchToFilter(key switch
                     {
                         Key.D2 => CommandPaletteFilterType.App,
                         Key.D3 => CommandPaletteFilterType.Snippet,
@@ -3221,8 +3473,7 @@ public partial class CommandPaletteView : Window
                         Key.D6 => CommandPaletteFilterType.Service,
                         Key.D7 => CommandPaletteFilterType.Clipboard,
                         _ => CommandPaletteFilterType.All
-                    };
-                    FilterResults();
+                    });
                     e.Handled = true;
                     return;
                 }
@@ -3530,12 +3781,15 @@ public partial class CommandPaletteView : Window
         catch { }
     }
 
-    private void ShowInlineFeedback(string message)
+    private void ShowInlineFeedback(string message, bool keepOpen = false)
     {
         FeedbackText.Text = message;
         FeedbackBadge.Visibility = Visibility.Visible;
         _feedbackTimer.Stop();
-        _feedbackTimer.Start();
+        if (!keepOpen)
+        {
+            _feedbackTimer.Start();
+        }
     }
 
     private void OpenSortMenu()
@@ -3792,11 +4046,11 @@ public partial class CommandPaletteView : Window
         base.OnClosing(e);
     }
 
-    internal void LoadSavedDimensions()
+    internal void LoadSavedDimensions(AppSettings? settings = null)
     {
         try
         {
-            AppSettings? settings = (Application.Current as App)?.CachedSettings;
+            settings ??= (Application.Current as App)?.CachedSettings;
             if (settings == null && _repository != null)
             {
                 settings = _repository.LoadSettingsAsync().GetAwaiter().GetResult();
@@ -3986,6 +4240,24 @@ public partial class CommandPaletteView : Window
                 return;
             }
 
+            // Virtual: Restart as Administrator / Restart TriggerPoint
+            if (vm.Item.Id == RestartAsAdminVirtualId)
+            {
+                SafeClose();
+                bool isElevated = TriggerPoint.Infrastructure.Services.WindowsServiceManager.IsRunningElevated();
+                (Application.Current as App)?.RestartApplication(asAdmin: !isElevated);
+                return;
+            }
+
+            // Virtual: Restart as Standard User
+            if (vm.Item.Id == RestartAsStandardUserVirtualId)
+            {
+                SafeClose();
+                bool isElevated = TriggerPoint.Infrastructure.Services.WindowsServiceManager.IsRunningElevated();
+                (Application.Current as App)?.RestartApplication(asAdmin: false, forceUnelevated: isElevated);
+                return;
+            }
+
             // Folder
             if (vm.Item.ActionType == ActionType.Folder)
             {
@@ -4025,14 +4297,146 @@ public partial class CommandPaletteView : Window
                 return;
             }
 
-            SafeClose();
-            _ = _executor.ExecuteAsync(vm.Item, executionOverride, _targetHwnd);
+            // Dedicated Service Action (ActionType.Service)
+            if (vm.Item?.ActionType == ActionType.Service)
+            {
+                if (executionOverride == ExecutionOverride.OpenSettings)
+                {
+                    SafeClose();
+                    (Application.Current as App)?.ShowSettingsWindow(vm.Item);
+                    return;
+                }
+
+                var svc = GetSelectedServiceItem();
+                if (svc != null)
+                {
+                    bool runAsAdmin = executionOverride == ExecutionOverride.RunAsAdmin || vm.Item.Payload?.ServiceRunAsAdmin == true;
+                    var op = vm.Item.Payload?.ServiceOperation ?? ServiceOperation.Toggle;
+                    switch (op)
+                    {
+                        case ServiceOperation.Start:
+                            StartServiceAction(svc, runAsAdmin);
+                            break;
+                        case ServiceOperation.Stop:
+                            StopServiceAction(svc, runAsAdmin);
+                            break;
+                        case ServiceOperation.Restart:
+                            RestartServiceAction(svc, runAsAdmin);
+                            break;
+                        default:
+                            ToggleServiceAction(svc, runAsAdmin);
+                            break;
+                    }
+                    return;
+                }
+            }
+
+            if (vm.Item != null)
+            {
+                SafeClose();
+                _ = _executor.ExecuteAsync(vm.Item, executionOverride, _targetHwnd);
+            }
         }
     }
 
-    private static PaletteItemViewModel CreateServiceViewModel(WindowsServiceItem service, IReadOnlyList<int>? matchedIndices, double score)
+    private PaletteItemViewModel CreateServiceViewModel(WindowsServiceItem service, IReadOnlyList<int>? matchedIndices, double score)
     {
-        return new PaletteItemViewModel(service, matchedIndices, score);
+        var vm = new PaletteItemViewModel(service, matchedIndices, score);
+        if (_pendingServiceOperations.TryGetValue(service.ServiceName, out var pendingText))
+        {
+            vm.IsServicePending = true;
+            vm.ServicePendingStatusText = pendingText;
+        }
+        return vm;
+    }
+
+    private void StartServiceSpinner()
+    {
+        if (ServicePreviewStatusEmoji != null)
+            ServicePreviewStatusEmoji.Visibility = Visibility.Collapsed;
+        if (ServicePreviewSpinner != null)
+            ServicePreviewSpinner.Visibility = Visibility.Visible;
+
+        if (_serviceSpinnerStoryboard == null && ServicePreviewSpinnerTransform != null)
+        {
+            var anim = new DoubleAnimation
+            {
+                From = 0.0,
+                To = 360.0,
+                Duration = TimeSpan.FromSeconds(0.9),
+                RepeatBehavior = RepeatBehavior.Forever
+            };
+            Storyboard.SetTarget(anim, ServicePreviewSpinnerTransform);
+            Storyboard.SetTargetProperty(anim, new PropertyPath(RotateTransform.AngleProperty));
+
+            _serviceSpinnerStoryboard = new Storyboard();
+            _serviceSpinnerStoryboard.Children.Add(anim);
+        }
+
+        _serviceSpinnerStoryboard?.Begin();
+    }
+
+    private void StopServiceSpinner()
+    {
+        _serviceSpinnerStoryboard?.Stop();
+        if (ServicePreviewSpinner != null)
+            ServicePreviewSpinner.Visibility = Visibility.Collapsed;
+        if (ServicePreviewStatusEmoji != null)
+            ServicePreviewStatusEmoji.Visibility = Visibility.Visible;
+    }
+
+    private void UpdateServicePreviewStrip(WindowsServiceItem svc)
+    {
+        if (ServicePreviewStatusPill == null || ServicePreviewStatusText == null) return;
+
+        bool isPending = _pendingServiceOperations.TryGetValue(svc.ServiceName, out var pendingOpText);
+
+        if (isPending)
+        {
+            StartServiceSpinner();
+            ServicePreviewStatusText.Text = pendingOpText ?? "PROCESSING...";
+            var accentSubtle = TryFindResource("AccentSubtleBrush") as Brush ?? new SolidColorBrush(Color.FromArgb(40, 52, 152, 219));
+            var accent = TryFindResource("AccentBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(52, 152, 219));
+            ServicePreviewStatusPill.Background = accentSubtle;
+            ServicePreviewStatusPill.BorderBrush = accent;
+            ServicePreviewStatusText.Foreground = accent;
+            return;
+        }
+
+        StopServiceSpinner();
+        if (ServicePreviewStatusEmoji != null)
+            ServicePreviewStatusEmoji.Text = svc.StatusBadgeEmoji;
+        ServicePreviewStatusText.Text = svc.StatusText.ToUpperInvariant();
+        ApplyServicePreviewStatusStyling(svc.Status);
+    }
+
+    private void UpdatePendingServiceRowInResults(string serviceName, string? pendingStatus)
+    {
+        foreach (var item in ResultsListBox.Items)
+        {
+            if (item is PaletteItemViewModel vm)
+            {
+                bool matches = false;
+                if (vm.IsServiceItem && vm.ServiceItem != null)
+                {
+                    matches = string.Equals(vm.ServiceItem.ServiceName, serviceName, StringComparison.OrdinalIgnoreCase);
+                }
+                else if (vm.Item?.ActionType == ActionType.Service)
+                {
+                    string key = !string.IsNullOrWhiteSpace(vm.Item.Payload?.ServiceName)
+                        ? vm.Item.Payload.ServiceName
+                        : (!string.IsNullOrWhiteSpace(vm.Item.Payload?.Command) ? vm.Item.Payload.Command : vm.Item.Name);
+                    matches = string.Equals(key, serviceName, StringComparison.OrdinalIgnoreCase);
+                }
+
+                if (matches)
+                {
+                    vm.IsServicePending = !string.IsNullOrEmpty(pendingStatus);
+                    vm.ServicePendingStatusText = pendingStatus;
+                }
+            }
+        }
+        ResultsListBox.Items.Refresh();
     }
 
     private void ToggleServiceAction(WindowsServiceItem service, bool runAsAdmin)
@@ -4047,50 +4451,86 @@ public partial class CommandPaletteView : Window
         }
     }
 
+    private void EnsurePaletteForeground()
+    {
+        try
+        {
+            Activate();
+            Focus();
+            var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            if (hwnd != IntPtr.Zero)
+            {
+                NativeMethods.SetForegroundWindow(hwnd);
+            }
+        }
+        catch { }
+    }
+
     private void StartServiceAction(WindowsServiceItem service, bool runAsAdmin)
     {
-        ShowInlineFeedback($"Starting service '{service.DisplayName}'... 🔄");
+        _pendingServiceOperations[service.ServiceName] = "STARTING...";
+        UpdatePendingServiceRowInResults(service.ServiceName, "STARTING...");
+        UpdateServicePreviewStrip(service);
+        ShowInlineFeedback($"Starting service '{service.DisplayName}'... 🔄", keepOpen: true);
         Task.Run(async () =>
         {
             var res = await _serviceManager.StartServiceAsync(service.ServiceName, runAsAdmin);
             await Dispatcher.InvokeAsync(() =>
             {
+                _pendingServiceOperations.Remove(service.ServiceName);
                 service.Status = res.NewStatus;
                 _cachedServices = null;
-                ShowInlineFeedback(res.Success ? $"Started '{service.DisplayName}' 🟢" : $"Failed: {res.Message} ⚠️");
-                FilterResults();
+                UpdatePendingServiceRowInResults(service.ServiceName, null);
+                UpdateServicePreviewStrip(service);
+                ShowInlineFeedback(res.Success ? $"Started '{service.DisplayName}' 🟢" : $"Failed: {res.Message} ⚠️", keepOpen: false);
+                EnsurePaletteForeground();
+                FilterResults(preserveServiceName: service.ServiceName);
             });
         });
     }
 
     private void StopServiceAction(WindowsServiceItem service, bool runAsAdmin)
     {
-        ShowInlineFeedback($"Stopping service '{service.DisplayName}'... ⏳");
+        _pendingServiceOperations[service.ServiceName] = "STOPPING...";
+        UpdatePendingServiceRowInResults(service.ServiceName, "STOPPING...");
+        UpdateServicePreviewStrip(service);
+        ShowInlineFeedback($"Stopping service '{service.DisplayName}'... ⏳", keepOpen: true);
         Task.Run(async () =>
         {
             var res = await _serviceManager.StopServiceAsync(service.ServiceName, runAsAdmin);
             await Dispatcher.InvokeAsync(() =>
             {
+                _pendingServiceOperations.Remove(service.ServiceName);
                 service.Status = res.NewStatus;
                 _cachedServices = null;
-                ShowInlineFeedback(res.Success ? $"Stopped '{service.DisplayName}' ⚪" : $"Failed: {res.Message} ⚠️");
-                FilterResults();
+                UpdatePendingServiceRowInResults(service.ServiceName, null);
+                UpdateServicePreviewStrip(service);
+                ShowInlineFeedback(res.Success ? $"Stopped '{service.DisplayName}' ⚪" : $"Failed: {res.Message} ⚠️", keepOpen: false);
+                EnsurePaletteForeground();
+                FilterResults(preserveServiceName: service.ServiceName);
             });
         });
     }
 
     private void RestartServiceAction(WindowsServiceItem service, bool runAsAdmin)
     {
-        ShowInlineFeedback($"Restarting service '{service.DisplayName}'... 🔄");
+        _pendingServiceOperations[service.ServiceName] = "RESTARTING...";
+        UpdatePendingServiceRowInResults(service.ServiceName, "RESTARTING...");
+        UpdateServicePreviewStrip(service);
+        ShowInlineFeedback($"Restarting service '{service.DisplayName}'... 🔄", keepOpen: true);
         Task.Run(async () =>
         {
             var res = await _serviceManager.RestartServiceAsync(service.ServiceName, runAsAdmin);
             await Dispatcher.InvokeAsync(() =>
             {
+                _pendingServiceOperations.Remove(service.ServiceName);
                 service.Status = res.NewStatus;
                 _cachedServices = null;
-                ShowInlineFeedback(res.Success ? $"Restarted '{service.DisplayName}' 🟢" : $"Failed: {res.Message} ⚠️");
-                FilterResults();
+                UpdatePendingServiceRowInResults(service.ServiceName, null);
+                UpdateServicePreviewStrip(service);
+                ShowInlineFeedback(res.Success ? $"Restarted '{service.DisplayName}' 🟢" : $"Failed: {res.Message} ⚠️", keepOpen: false);
+                EnsurePaletteForeground();
+                FilterResults(preserveServiceName: service.ServiceName);
             });
         });
     }
@@ -4127,73 +4567,6 @@ public partial class CommandPaletteView : Window
         return null;
     }
 
-    private void ServiceStartBtn_Click(object sender, RoutedEventArgs e)
-    {
-        var svc = GetSelectedServiceItem();
-        if (svc != null)
-        {
-            StartServiceAction(svc, runAsAdmin: false);
-        }
-    }
-
-    private void ServiceStopBtn_Click(object sender, RoutedEventArgs e)
-    {
-        var svc = GetSelectedServiceItem();
-        if (svc != null)
-        {
-            StopServiceAction(svc, runAsAdmin: false);
-        }
-    }
-
-    private void ServiceRestartBtn_Click(object sender, RoutedEventArgs e)
-    {
-        var svc = GetSelectedServiceItem();
-        if (svc != null)
-        {
-            RestartServiceAction(svc, runAsAdmin: false);
-        }
-    }
-
-    private void ServicePropertiesBtn_Click(object sender, RoutedEventArgs e)
-    {
-        var svc = GetSelectedServiceItem();
-        if (svc != null)
-        {
-            OpenServiceProperties(svc);
-        }
-    }
-
-    private void ServiceOpenMscBtn_Click(object sender, RoutedEventArgs e)
-    {
-        var svc = GetSelectedServiceItem();
-        try
-        {
-            _serviceManager.OpenServicesMsc(svc?.ServiceName);
-            ShowInlineFeedback("Opened Windows Services (services.msc) ↗");
-        }
-        catch (Exception ex)
-        {
-            ShowInlineFeedback($"Failed to open Services MMC: {ex.Message} ⚠️");
-        }
-    }
-
-    private void ServiceCopyNameBtn_Click(object sender, RoutedEventArgs e)
-    {
-        var svc = GetSelectedServiceItem();
-        if (svc != null)
-        {
-            try
-            {
-                Clipboard.SetText(svc.ServiceName);
-                ShowInlineFeedback($"Copied service key ({svc.ServiceName})! 📋");
-            }
-            catch (Exception ex)
-            {
-                ShowInlineFeedback($"Copy failed: {ex.Message} ⚠️");
-            }
-        }
-    }
-
     private void OpenServiceProperties(WindowsServiceItem service)
     {
         try
@@ -4202,7 +4575,7 @@ public partial class CommandPaletteView : Window
             var dialog = new ServicePropertiesDialog(service, _serviceManager, this);
             dialog.ShowDialog();
             _cachedServices = null;
-            FilterResults();
+            FilterResults(preserveServiceName: service.ServiceName);
         }
         catch (Exception ex)
         {
@@ -4356,7 +4729,7 @@ public partial class CommandPaletteView : Window
     {
         SetFilterPillCtrlHintsVisibility(Visibility.Collapsed);
         if (!_isLoaded) return;
-        if (_isPinned || _isChildDialogOpen) return;
+        if (_isPinned || _isChildDialogOpen || _pendingServiceOperations.Count > 0) return;
         SafeClose();
     }
 

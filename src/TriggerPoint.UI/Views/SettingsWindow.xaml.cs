@@ -787,6 +787,8 @@ public partial class SettingsWindow : Window
             {
                 NotifyUpdateAvailable(App.LatestAvailableUpdate);
             }
+
+            UpdateElevationStatusUi();
         };
     }
 
@@ -1320,6 +1322,7 @@ public partial class SettingsWindow : Window
         RegisterShortcuts();
         RebuildTree();
         UpdateSnoozeButtonUi();
+        UpdateElevationStatusUi();
     }
 
     private void RegisterShortcuts()
@@ -4174,6 +4177,48 @@ public partial class SettingsWindow : Window
     private void SnoozeToggleBtn_Click(object sender, RoutedEventArgs e)
     {
         _shortcutListener.IsSnoozed = !_shortcutListener.IsSnoozed;
+    }
+
+    private void UpdateElevationStatusUi()
+    {
+        bool isElevated = TriggerPoint.Infrastructure.Services.WindowsServiceManager.IsRunningElevated();
+        if (RestartAsAdminToolbarBtn != null)
+        {
+            RestartAsAdminToolbarBtn.Visibility = Visibility.Visible;
+            if (isElevated)
+            {
+                RestartAsAdminToolbarBtn.Content = "🔄 Restart as Standard User";
+                RestartAsAdminToolbarBtn.ToolTip = "Restart TriggerPoint without Administrator privileges (Standard User)";
+            }
+            else
+            {
+                RestartAsAdminToolbarBtn.Content = "🛡️ Restart as Admin";
+                RestartAsAdminToolbarBtn.ToolTip = "Restart TriggerPoint with Administrator privileges";
+            }
+        }
+        if (AdminStatusToolbarBadge != null)
+        {
+            AdminStatusToolbarBadge.Visibility = isElevated ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
+    private void RestartAsAdminToolbarBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (!PromptSaveIfDirty()) return;
+
+        bool isElevated = TriggerPoint.Infrastructure.Services.WindowsServiceManager.IsRunningElevated();
+        StatusText.Text = isElevated
+            ? "Restarting TriggerPoint as Standard User... 🔄"
+            : "Prompting for Administrator elevation... 🛡️";
+
+        bool restarted = isElevated
+            ? (Application.Current as App)?.RestartApplication(asAdmin: false, forceUnelevated: true) ?? false
+            : (Application.Current as App)?.RestartApplication(asAdmin: true) ?? false;
+
+        if (!restarted)
+        {
+            StatusText.Text = "Restart cancelled or failed.";
+        }
     }
 
     private void UpdateSnoozeButtonUi()

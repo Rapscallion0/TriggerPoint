@@ -60,6 +60,78 @@ public static class HotkeyRegistryValidator
                     continue;
                 }
 
+                if (appSettings.CommandPaletteAppHotkey != null && item.Hotkey == appSettings.CommandPaletteAppHotkey)
+                {
+                    var conflict = HotkeyConflictStatus.CreateInternal(
+                        Guid.Empty,
+                        "Command Palette (Apps)",
+                        "Application Settings",
+                        item.Hotkey.DisplayText);
+                    conflicts[item.Id] = conflict;
+                    item.ConflictStatus = conflict;
+                    continue;
+                }
+
+                if (appSettings.CommandPaletteSnippetHotkey != null && item.Hotkey == appSettings.CommandPaletteSnippetHotkey)
+                {
+                    var conflict = HotkeyConflictStatus.CreateInternal(
+                        Guid.Empty,
+                        "Command Palette (Snippets)",
+                        "Application Settings",
+                        item.Hotkey.DisplayText);
+                    conflicts[item.Id] = conflict;
+                    item.ConflictStatus = conflict;
+                    continue;
+                }
+
+                if (appSettings.CommandPaletteWorkflowHotkey != null && item.Hotkey == appSettings.CommandPaletteWorkflowHotkey)
+                {
+                    var conflict = HotkeyConflictStatus.CreateInternal(
+                        Guid.Empty,
+                        "Command Palette (Workflows)",
+                        "Application Settings",
+                        item.Hotkey.DisplayText);
+                    conflicts[item.Id] = conflict;
+                    item.ConflictStatus = conflict;
+                    continue;
+                }
+
+                if (appSettings.CommandPaletteFolderHotkey != null && item.Hotkey == appSettings.CommandPaletteFolderHotkey)
+                {
+                    var conflict = HotkeyConflictStatus.CreateInternal(
+                        Guid.Empty,
+                        "Command Palette (Folders)",
+                        "Application Settings",
+                        item.Hotkey.DisplayText);
+                    conflicts[item.Id] = conflict;
+                    item.ConflictStatus = conflict;
+                    continue;
+                }
+
+                if (appSettings.CommandPaletteServiceHotkey != null && item.Hotkey == appSettings.CommandPaletteServiceHotkey)
+                {
+                    var conflict = HotkeyConflictStatus.CreateInternal(
+                        Guid.Empty,
+                        "Command Palette (Services)",
+                        "Application Settings",
+                        item.Hotkey.DisplayText);
+                    conflicts[item.Id] = conflict;
+                    item.ConflictStatus = conflict;
+                    continue;
+                }
+
+                if (appSettings.ClipboardHotkey != null && item.Hotkey == appSettings.ClipboardHotkey)
+                {
+                    var conflict = HotkeyConflictStatus.CreateInternal(
+                        Guid.Empty,
+                        "Clipboard History",
+                        "Application Settings",
+                        item.Hotkey.DisplayText);
+                    conflicts[item.Id] = conflict;
+                    item.ConflictStatus = conflict;
+                    continue;
+                }
+
                 if (appSettings.CheatSheetHotkey != null && item.Hotkey == appSettings.CheatSheetHotkey)
                 {
                     var conflict = HotkeyConflictStatus.CreateInternal(
@@ -272,69 +344,35 @@ public static class HotkeyRegistryValidator
         ShortcutBinding? commandPaletteHotkey,
         IEnumerable<TriggerItem> allItems,
         ShortcutBinding? cheatSheetHotkey = null,
-        ShortcutBinding? clipboardHotkey = null)
+        ShortcutBinding? clipboardHotkey = null,
+        ShortcutBinding? commandPaletteAppHotkey = null,
+        ShortcutBinding? commandPaletteSnippetHotkey = null,
+        ShortcutBinding? commandPaletteWorkflowHotkey = null,
+        ShortcutBinding? commandPaletteFolderHotkey = null,
+        ShortcutBinding? commandPaletteServiceHotkey = null)
     {
-        if (openSettingsHotkey != null && !openSettingsHotkey.IsEmpty)
+        var appHotkeys = new (string Name, ShortcutBinding? Binding)[]
         {
-            var conflict = CheckApplicationHotkeyConflict(
-                "Open Action Manager", 
-                openSettingsHotkey, 
-                allItems, 
-                ("Command Palette", commandPaletteHotkey),
-                ("Cheat Sheet HUD", cheatSheetHotkey),
-                ("Clipboard History", clipboardHotkey));
+            ("Open Action Manager", openSettingsHotkey),
+            ("Command Palette", commandPaletteHotkey),
+            ("Command Palette (Apps)", commandPaletteAppHotkey),
+            ("Command Palette (Snippets)", commandPaletteSnippetHotkey),
+            ("Command Palette (Workflows)", commandPaletteWorkflowHotkey),
+            ("Command Palette (Folders)", commandPaletteFolderHotkey),
+            ("Command Palette (Services)", commandPaletteServiceHotkey),
+            ("Clipboard History", clipboardHotkey),
+            ("Cheat Sheet HUD", cheatSheetHotkey)
+        };
 
+        foreach (var (name, binding) in appHotkeys)
+        {
+            if (binding == null || binding.IsEmpty) continue;
+
+            var others = appHotkeys.Where(x => x.Name != name).ToArray();
+            var conflict = CheckApplicationHotkeyConflict(name, binding, allItems, others);
             if (conflict != null)
             {
-                return (false, $"The shortcut '{openSettingsHotkey.DisplayText}' for 'Open Action Manager' conflicts with '{conflict.ConflictingActionName}' ({conflict.ConflictingFolderName}).");
-            }
-        }
-
-        if (commandPaletteHotkey != null && !commandPaletteHotkey.IsEmpty)
-        {
-            var conflict = CheckApplicationHotkeyConflict(
-                "Command Palette", 
-                commandPaletteHotkey, 
-                allItems, 
-                ("Open Action Manager", openSettingsHotkey),
-                ("Cheat Sheet HUD", cheatSheetHotkey),
-                ("Clipboard History", clipboardHotkey));
-
-            if (conflict != null)
-            {
-                return (false, $"The shortcut '{commandPaletteHotkey.DisplayText}' for 'Command Palette' conflicts with '{conflict.ConflictingActionName}' ({conflict.ConflictingFolderName}).");
-            }
-        }
-
-        if (cheatSheetHotkey != null && !cheatSheetHotkey.IsEmpty)
-        {
-            var conflict = CheckApplicationHotkeyConflict(
-                "Cheat Sheet HUD", 
-                cheatSheetHotkey, 
-                allItems, 
-                ("Open Action Manager", openSettingsHotkey),
-                ("Command Palette", commandPaletteHotkey),
-                ("Clipboard History", clipboardHotkey));
-
-            if (conflict != null)
-            {
-                return (false, $"The shortcut '{cheatSheetHotkey.DisplayText}' for 'Cheat Sheet HUD' conflicts with '{conflict.ConflictingActionName}' ({conflict.ConflictingFolderName}).");
-            }
-        }
-
-        if (clipboardHotkey != null && !clipboardHotkey.IsEmpty)
-        {
-            var conflict = CheckApplicationHotkeyConflict(
-                "Clipboard History", 
-                clipboardHotkey, 
-                allItems, 
-                ("Open Action Manager", openSettingsHotkey),
-                ("Command Palette", commandPaletteHotkey),
-                ("Cheat Sheet HUD", cheatSheetHotkey));
-
-            if (conflict != null)
-            {
-                return (false, $"The shortcut '{clipboardHotkey.DisplayText}' for 'Clipboard History' conflicts with '{conflict.ConflictingActionName}' ({conflict.ConflictingFolderName}).");
+                return (false, $"The shortcut '{binding.DisplayText}' for '{name}' conflicts with '{conflict.ConflictingActionName}' ({conflict.ConflictingFolderName}).");
             }
         }
 

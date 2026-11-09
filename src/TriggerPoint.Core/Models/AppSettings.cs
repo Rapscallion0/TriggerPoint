@@ -86,6 +86,11 @@ public class AppSettings
     public int RecycleBinRetentionDays { get; set; } = 30;
     public ShortcutBinding? OpenSettingsHotkey { get; set; } = new(ModifierKeys.Control | ModifierKeys.Alt, 84, "T");
     public ShortcutBinding? CommandPaletteHotkey { get; set; } = new(ModifierKeys.Control | ModifierKeys.Shift, 32, "Space");
+    public ShortcutBinding? CommandPaletteAppHotkey { get; set; }
+    public ShortcutBinding? CommandPaletteSnippetHotkey { get; set; }
+    public ShortcutBinding? CommandPaletteWorkflowHotkey { get; set; }
+    public ShortcutBinding? CommandPaletteFolderHotkey { get; set; }
+    public ShortcutBinding? CommandPaletteServiceHotkey { get; set; }
     public ShortcutBinding? CheatSheetHotkey { get; set; } = new(ModifierKeys.Control | ModifierKeys.Shift, 191, "/");
     public ThemePreference Theme { get; set; } = ThemePreference.System;
     public AccentColorChoice AccentColor { get; set; } = AccentColorChoice.Indigo;

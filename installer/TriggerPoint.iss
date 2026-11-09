@@ -4,7 +4,7 @@
 ; =====================================================================
 
 #ifndef AppVersion
-#define AppVersion "2.2.9"
+#define AppVersion "2.2.10"
 #endif
 
 #ifndef PublishDir

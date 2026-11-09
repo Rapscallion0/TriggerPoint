@@ -146,6 +146,31 @@
                                    FontWeight="Bold" 
                                    Foreground="{DynamicResource AccentBrush}"/>
                     </Border>
+                    <Button x:Name="HeaderRestartAsAdminBtn"
+                            Content="🛡️ Restart as Admin"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            WindowChrome.IsHitTestVisibleInChrome="True"
+                            Padding="8,2"
+                            Margin="10,0,0,0"
+                            FontSize="11"
+                            VerticalAlignment="Center"
+                            ToolTip="Restart TriggerPoint with Administrator privileges"
+                            Click="RestartAsAdminBtn_Click"/>
+                    <Border x:Name="HeaderAdminBadge"
+                            Visibility="Collapsed"
+                            Margin="10,0,0,0"
+                            Padding="6,2"
+                            CornerRadius="4"
+                            Background="{DynamicResource SuccessSubtleBrush}"
+                            BorderBrush="{DynamicResource SuccessBrush}"
+                            BorderThickness="1"
+                            VerticalAlignment="Center"
+                            ToolTip="TriggerPoint is currently running with Administrator privileges">
+                        <TextBlock Text="🛡️ ADMIN" 
+                                   FontSize="10" 
+                                   FontWeight="Bold" 
+                                   Foreground="{DynamicResource SuccessBrush}"/>
+                    </Border>
                 </StackPanel>
                 <TextBlock Text="Configure daemon behavior, hotkeys, themes, updates, and maintenance" 
                            FontSize="11.5" 
@@ -671,9 +696,41 @@
                                     <TextBlock Text="Open Action Manager" FontWeight="SemiBold" FontSize="12.5" Margin="0,0,0,4"/>
                                     <controls:HotkeyRecorderControl x:Name="OpenSettingsHotkeyRecorder" Margin="0,0,0,12"/>
 
-                                    <!-- Command Palette -->
-                                    <TextBlock Text="Open Command Palette" FontWeight="SemiBold" FontSize="12.5" Margin="0,0,0,4"/>
-                                    <controls:HotkeyRecorderControl x:Name="CommandPaletteHotkeyRecorder" Margin="0,0,0,6"/>
+                                    <!-- Command Palette Direct Tab Shortcuts -->
+                                    <TextBlock Text="Command Palette Direct Tab Shortcuts" FontWeight="Bold" FontSize="13" Margin="0,4,0,2" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                    <TextBlock Text="Assign global hotkeys to open the Command Palette directly into specific category tabs:" 
+                                               FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,10" TextWrapping="Wrap"/>
+
+                                    <!-- All Actions (@all) -->
+                                    <TextBlock Text="All Actions Tab (@all)" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,4"/>
+                                    <controls:HotkeyRecorderControl x:Name="CommandPaletteHotkeyRecorder" Margin="0,0,0,10"/>
+
+                                    <!-- Apps & Commands (@app) -->
+                                    <TextBlock Text="Apps &amp; Commands Tab (@app)" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,4"/>
+                                    <controls:HotkeyRecorderControl x:Name="CommandPaletteAppHotkeyRecorder" Margin="0,0,0,10"/>
+
+                                    <!-- Snippets & Templates (@snip) -->
+                                    <TextBlock Text="Snippets &amp; Templates Tab (@snip)" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,4"/>
+                                    <controls:HotkeyRecorderControl x:Name="CommandPaletteSnippetHotkeyRecorder" Margin="0,0,0,10"/>
+
+                                    <!-- Workflows (@flow) -->
+                                    <TextBlock Text="Workflows Tab (@flow)" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,4"/>
+                                    <controls:HotkeyRecorderControl x:Name="CommandPaletteWorkflowHotkeyRecorder" Margin="0,0,0,10"/>
+
+                                    <!-- Folders (@folder) -->
+                                    <TextBlock Text="Folders Tab (@folder)" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,4"/>
+                                    <controls:HotkeyRecorderControl x:Name="CommandPaletteFolderHotkeyRecorder" Margin="0,0,0,10"/>
+
+                                    <!-- Windows Services (@service) -->
+                                    <TextBlock Text="Windows Services Tab (@service)" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,4"/>
+                                    <controls:HotkeyRecorderControl x:Name="CommandPaletteServiceHotkeyRecorder" Margin="0,0,0,10"/>
+
+                                    <!-- Clipboard History Tab (@clip) -->
+                                    <TextBlock Text="Clipboard History Tab (@clip)" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,4"/>
+                                    <controls:HotkeyRecorderControl x:Name="GlobalClipboardHotkeyRecorder" Margin="0,0,0,14"/>
+
+                                    <!-- Command Palette Options -->
+                                    <TextBlock Text="Command Palette Options" FontWeight="SemiBold" FontSize="12.5" Margin="0,0,0,6"/>
                                     <CheckBox x:Name="ShowSnippetKeywordsInCommandPaletteCheck"
                                               Content="Show snippet trigger keywords in Command Palette"
                                               FontSize="12"
@@ -737,10 +794,6 @@
                                             </ComboBox>
                                         </StackPanel>
                                     </Grid>
-
-                                    <!-- Clipboard History Palette -->
-                                    <TextBlock Text="Clipboard History Palette (@clip)" FontWeight="SemiBold" FontSize="12.5" Margin="0,0,0,4"/>
-                                    <controls:HotkeyRecorderControl x:Name="GlobalClipboardHotkeyRecorder" Margin="0,0,0,12"/>
 
                                     <!-- Shortcut Cheat Sheet HUD -->
                                     <TextBlock Text="Shortcut Cheat Sheet HUD Overlay" FontWeight="SemiBold" FontSize="12.5" Margin="0,0,0,4"/>
@@ -892,6 +945,42 @@
                                             Margin="24,0,0,10">
                                         <TextBlock Text="⚠️ Portable Mode Advisory: Drive letters on removable drives may change between ports or PCs. Windows startup uses the current executable path."
                                                    FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}" TextWrapping="Wrap"/>
+                                    </Border>
+
+                                    <!-- Current Elevation Status & On-Demand Restart -->
+                                    <Border Background="{DynamicResource BgSecondaryBrush}"
+                                            BorderBrush="{DynamicResource BorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="6"
+                                            Padding="12,10"
+                                            Margin="0,4,0,12">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="🛡️ Current Elevation Status" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                    <Border x:Name="CurrentElevationStatusBadge" Margin="8,0,0,0" Padding="7,2" CornerRadius="4" Background="{DynamicResource BgTertiaryBrush}" VerticalAlignment="Center">
+                                                        <TextBlock x:Name="CurrentElevationStatusText" Text="Standard User" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                                    </Border>
+                                                </StackPanel>
+                                                <TextBlock x:Name="CurrentElevationDescriptionText"
+                                                           Text="TriggerPoint is currently running un-elevated. Some actions (like Windows Service control or controlling high-privilege windows) require Administrator rights."
+                                                           FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,3,12,0" TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                            <Button x:Name="RestartAsAdminBtn"
+                                                    Grid.Column="1"
+                                                    Click="RestartAsAdminBtn_Click"
+                                                    Content="🛡️ Restart as Administrator"
+                                                    Style="{DynamicResource SecondaryButtonStyle}"
+                                                    FontSize="11.5"
+                                                    FontWeight="SemiBold"
+                                                    Padding="12,6"
+                                                    VerticalAlignment="Center"
+                                                    ToolTip="Relaunches TriggerPoint with elevated Administrator privileges"/>
+                                        </Grid>
                                     </Border>
 
                                     <CheckBox x:Name="StartMinimizedCheck" 

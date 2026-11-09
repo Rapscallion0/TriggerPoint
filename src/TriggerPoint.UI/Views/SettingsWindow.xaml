@@ -72,6 +72,31 @@
                             Orientation="Horizontal" 
                             VerticalAlignment="Center"
                             WindowChrome.IsHitTestVisibleInChrome="True">
+                    <Button x:Name="RestartAsAdminToolbarBtn"
+                            Content="🛡️ Restart as Admin" 
+                            Style="{StaticResource SecondaryButtonStyle}" 
+                            WindowChrome.IsHitTestVisibleInChrome="True"
+                            Margin="0,0,8,0"
+                            ToolTip="Restart TriggerPoint with Administrator privileges"
+                            Click="RestartAsAdminToolbarBtn_Click"/>
+
+                    <Border x:Name="AdminStatusToolbarBadge"
+                            Background="{DynamicResource SuccessSubtleBrush}"
+                            BorderBrush="{DynamicResource SuccessBrush}"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            Padding="8,4"
+                            Margin="0,0,8,0"
+                            Visibility="Collapsed"
+                            VerticalAlignment="Center"
+                            ToolTip="TriggerPoint is currently running with Administrator privileges">
+                        <TextBlock Text="🛡️ Administrator" 
+                                   FontSize="11" 
+                                   FontWeight="SemiBold" 
+                                   Foreground="{DynamicResource SuccessBrush}"
+                                   VerticalAlignment="Center"/>
+                    </Border>
+
                     <Button x:Name="SnoozeToggleBtn"
                             Content="🔔 Active" 
                             Style="{StaticResource SecondaryButtonStyle}" 

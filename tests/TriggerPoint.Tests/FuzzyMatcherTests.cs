@@ -241,5 +241,60 @@ public class FuzzyMatcherTests
 
         Assert.Equal(matchRegular.Score, matchSnippet.Score);
     }
+
+    [Fact]
+    public void MatchText_MultiToken_MatchesWhenTokensAreSeparatedInCandidate()
+    {
+        string candidate = "SmsHttps_StoreC3_Lane_001_001";
+        var match = FuzzyMatcher.MatchText(candidate, "SMS C3");
+
+        Assert.NotNull(match);
+        Assert.True(match.Value.Score > 0);
+        // "SMS" matches Sms at 0..2, "C3" matches C3 at 14..15
+        Assert.Contains(0, match.Value.MatchedIndices);
+        Assert.Contains(1, match.Value.MatchedIndices);
+        Assert.Contains(2, match.Value.MatchedIndices);
+        Assert.Contains(14, match.Value.MatchedIndices);
+        Assert.Contains(15, match.Value.MatchedIndices);
+    }
+
+    [Fact]
+    public void MatchText_MultiToken_OrderIndependent()
+    {
+        string candidate = "SmsHttps_StoreC3_Lane_001_001";
+        var match = FuzzyMatcher.MatchText(candidate, "C3 SMS");
+
+        Assert.NotNull(match);
+        Assert.True(match.Value.Score > 0);
+        Assert.Contains(0, match.Value.MatchedIndices);
+        Assert.Contains(14, match.Value.MatchedIndices);
+    }
+
+    [Fact]
+    public void Match_TriggerItemMultiToken_MatchesItemNameAcrossTokens()
+    {
+        var item = new TriggerItem
+        {
+            Name = "Visual Studio 2022 Enterprise",
+            ActionType = ActionType.Shell
+        };
+
+        var match = FuzzyMatcher.Match(item, "VS 2022");
+        Assert.True(match.IsMatch);
+        Assert.True(match.Score > 0);
+        Assert.NotEmpty(match.MatchedIndices);
+    }
+
+    [Fact]
+    public void SearchQuery_MultiTokenWithExclusion_ExcludesProperly()
+    {
+        var query = SearchQueryParser.Parse("SMS -Lane");
+        var matchWithExcluded = query.Match("SmsHttps_StoreC3_Lane_001_001");
+        var matchWithoutExcluded = query.Match("SmsHttps_StoreC3_Warehouse");
+
+        Assert.Null(matchWithExcluded);
+        Assert.NotNull(matchWithoutExcluded);
+    }
 }
+
 

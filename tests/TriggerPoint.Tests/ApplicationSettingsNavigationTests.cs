@@ -141,4 +141,91 @@ public class ApplicationSettingsNavigationTests
             Assert.True(keywords.Length >= 5);
         }
     }
+
+    [Theory]
+    [InlineData("tab")]
+    [InlineData("tabs")]
+    [InlineData("filter")]
+    [InlineData("services")]
+    [InlineData("snippets")]
+    [InlineData("workflows")]
+    [InlineData("folders")]
+    public void MatchesCategory_TabShortcutQueries_MatchShortcutsCategory(string query)
+    {
+        bool matches = ApplicationSettingsWindow.MatchesCategory(ApplicationSettingsWindow.SettingsCategory.Shortcuts, query);
+        Assert.True(matches);
+    }
+
+    [Fact]
+    public void ValidateApplicationHotkeys_DetectsConflictBetweenTabHotkeys()
+    {
+        var appHotkey = new TriggerPoint.Core.Models.ShortcutBinding(TriggerPoint.Core.Models.ModifierKeys.Control | TriggerPoint.Core.Models.ModifierKeys.Shift, 0x41, "A");
+        var snippetHotkey = new TriggerPoint.Core.Models.ShortcutBinding(TriggerPoint.Core.Models.ModifierKeys.Control | TriggerPoint.Core.Models.ModifierKeys.Shift, 0x41, "A"); // duplicate
+
+        var result = TriggerPoint.Core.Services.HotkeyRegistryValidator.ValidateApplicationHotkeys(
+            openSettingsHotkey: null,
+            commandPaletteHotkey: null,
+            allItems: [],
+            commandPaletteAppHotkey: appHotkey,
+            commandPaletteSnippetHotkey: snippetHotkey);
+
+        Assert.False(result.IsValid);
+        Assert.Contains("conflict", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void CreateVirtualApplicationItems_IncludesConfiguredTabShortcuts()
+    {
+        var settings = new TriggerPoint.Core.Models.AppSettings
+        {
+            CommandPaletteAppHotkey = new TriggerPoint.Core.Models.ShortcutBinding(TriggerPoint.Core.Models.ModifierKeys.Control | TriggerPoint.Core.Models.ModifierKeys.Alt, 0x41, "A"),
+            CommandPaletteSnippetHotkey = new TriggerPoint.Core.Models.ShortcutBinding(TriggerPoint.Core.Models.ModifierKeys.Control | TriggerPoint.Core.Models.ModifierKeys.Alt, 0x53, "S"),
+            CommandPaletteWorkflowHotkey = new TriggerPoint.Core.Models.ShortcutBinding(TriggerPoint.Core.Models.ModifierKeys.Control | TriggerPoint.Core.Models.ModifierKeys.Alt, 0x57, "W"),
+            CommandPaletteFolderHotkey = new TriggerPoint.Core.Models.ShortcutBinding(TriggerPoint.Core.Models.ModifierKeys.Control | TriggerPoint.Core.Models.ModifierKeys.Alt, 0x46, "F"),
+            CommandPaletteServiceHotkey = new TriggerPoint.Core.Models.ShortcutBinding(TriggerPoint.Core.Models.ModifierKeys.Control | TriggerPoint.Core.Models.ModifierKeys.Alt, 0x56, "V"),
+        };
+
+        var virtualItems = TriggerPoint.UI.App.CreateVirtualApplicationItems(settings);
+
+        Assert.Contains(virtualItems, x => x.Id == TriggerPoint.UI.App.CommandPaletteAppActionId && x.Hotkey?.DisplayText == "Ctrl + Alt + A");
+        Assert.Contains(virtualItems, x => x.Id == TriggerPoint.UI.App.CommandPaletteSnippetActionId && x.Hotkey?.DisplayText == "Ctrl + Alt + S");
+        Assert.Contains(virtualItems, x => x.Id == TriggerPoint.UI.App.CommandPaletteWorkflowActionId && x.Hotkey?.DisplayText == "Ctrl + Alt + W");
+        Assert.Contains(virtualItems, x => x.Id == TriggerPoint.UI.App.CommandPaletteFolderActionId && x.Hotkey?.DisplayText == "Ctrl + Alt + F");
+        Assert.Contains(virtualItems, x => x.Id == TriggerPoint.UI.App.CommandPaletteServiceActionId && x.Hotkey?.DisplayText == "Ctrl + Alt + V");
+    }
+
+    [Fact]
+    public void ServiceItemViewModel_DoesNotHaveFastSelectionNumberByDefault()
+    {
+        var svc = new TriggerPoint.Core.Models.WindowsServiceItem
+        {
+            ServiceName = "wuauserv",
+            DisplayName = "Windows Update",
+            Status = TriggerPoint.Core.Models.WindowsServiceStatus.Running,
+            StartType = "Manual"
+        };
+
+        var vm = new PaletteItemViewModel(svc);
+        Assert.Null(vm.FastSelectionNumber);
+        Assert.Equal(System.Windows.Visibility.Collapsed, vm.HasFastSelection);
+        Assert.Empty(vm.FastSelectionBadgeText);
+    }
+
+    [Fact]
+    public void PaletteItemViewModel_HasFastSelection_IsCollapsedAndTooltipUsesAlt()
+    {
+        var item = new TriggerPoint.Core.Models.TriggerItem
+        {
+            Id = Guid.NewGuid(),
+            Name = "Test App",
+            ActionType = TriggerPoint.Core.Models.ActionType.Shell
+        };
+        var vm = new PaletteItemViewModel(item, matchResult: null)
+        {
+            FastSelectionNumber = 3
+        };
+
+        Assert.Equal(System.Windows.Visibility.Collapsed, vm.HasFastSelection);
+        Assert.Equal("Fast select (Alt+3)", vm.FastSelectionTooltip);
+    }
 }

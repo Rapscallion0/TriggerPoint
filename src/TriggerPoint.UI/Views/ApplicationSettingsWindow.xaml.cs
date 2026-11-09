@@ -284,6 +284,7 @@ public partial class ApplicationSettingsWindow : Window
             RunAtStartupCheck.Checked += (s, e) => RunAsAdminStartupCheck.IsEnabled = true;
             RunAtStartupCheck.Unchecked += (s, e) => { RunAsAdminStartupCheck.IsEnabled = false; RunAsAdminStartupCheck.IsChecked = false; };
             StartMinimizedCheck.IsChecked = _currentSettings.StartMinimized;
+            UpdateCurrentElevationStatusUI();
             HideWindowOnTargetCheck.IsChecked = _currentSettings.HideOnTargetWindow;
             ShowSuccessToastsCheck.IsChecked = _currentSettings.ShowSuccessToasts;
             ToastPlacementCombo.SelectedIndex = _currentSettings.ToastPlacement == ToastMonitorPlacement.ActiveMonitor ? 1 : 0;
@@ -310,6 +311,11 @@ public partial class ApplicationSettingsWindow : Window
             // Populate Global Shortcuts
             OpenSettingsHotkeyRecorder.Binding = _currentSettings.OpenSettingsHotkey;
             CommandPaletteHotkeyRecorder.Binding = _currentSettings.CommandPaletteHotkey;
+            CommandPaletteAppHotkeyRecorder.Binding = _currentSettings.CommandPaletteAppHotkey;
+            CommandPaletteSnippetHotkeyRecorder.Binding = _currentSettings.CommandPaletteSnippetHotkey;
+            CommandPaletteWorkflowHotkeyRecorder.Binding = _currentSettings.CommandPaletteWorkflowHotkey;
+            CommandPaletteFolderHotkeyRecorder.Binding = _currentSettings.CommandPaletteFolderHotkey;
+            CommandPaletteServiceHotkeyRecorder.Binding = _currentSettings.CommandPaletteServiceHotkey;
             CheatSheetHotkeyRecorder.Binding = _currentSettings.CheatSheetHotkey;
             GlobalClipboardHotkeyRecorder.Binding = _currentSettings.ClipboardHotkey;
             ShowSnippetKeywordsInCommandPaletteCheck.IsChecked = _currentSettings.ShowSnippetKeywordsInCommandPalette;
@@ -320,6 +326,11 @@ public partial class ApplicationSettingsWindow : Window
             SelectComboByTag(CommandPaletteMaxServicesResultsCombo, _currentSettings.CommandPaletteMaxServiceResultsInAll);
             OpenSettingsHotkeyRecorder.BindingRecorded += (s, b) => CheckHotkeyConflicts();
             CommandPaletteHotkeyRecorder.BindingRecorded += (s, b) => CheckHotkeyConflicts();
+            CommandPaletteAppHotkeyRecorder.BindingRecorded += (s, b) => CheckHotkeyConflicts();
+            CommandPaletteSnippetHotkeyRecorder.BindingRecorded += (s, b) => CheckHotkeyConflicts();
+            CommandPaletteWorkflowHotkeyRecorder.BindingRecorded += (s, b) => CheckHotkeyConflicts();
+            CommandPaletteFolderHotkeyRecorder.BindingRecorded += (s, b) => CheckHotkeyConflicts();
+            CommandPaletteServiceHotkeyRecorder.BindingRecorded += (s, b) => CheckHotkeyConflicts();
             CheatSheetHotkeyRecorder.BindingRecorded += (s, b) => CheckHotkeyConflicts();
             GlobalClipboardHotkeyRecorder.BindingRecorded += (s, b) =>
             {
@@ -440,10 +451,25 @@ public partial class ApplicationSettingsWindow : Window
     {
         var openHotkey = OpenSettingsHotkeyRecorder.Binding;
         var cmdHotkey = CommandPaletteHotkeyRecorder.Binding;
+        var cmdAppHotkey = CommandPaletteAppHotkeyRecorder.Binding;
+        var cmdSnippetHotkey = CommandPaletteSnippetHotkeyRecorder.Binding;
+        var cmdWorkflowHotkey = CommandPaletteWorkflowHotkeyRecorder.Binding;
+        var cmdFolderHotkey = CommandPaletteFolderHotkeyRecorder.Binding;
+        var cmdServiceHotkey = CommandPaletteServiceHotkeyRecorder.Binding;
         var cheatSheetHotkey = CheatSheetHotkeyRecorder.Binding;
         var clipHotkey = GlobalClipboardHotkeyRecorder?.Binding ?? ClipboardHotkeyRecorder.Binding;
 
-        var validation = HotkeyRegistryValidator.ValidateApplicationHotkeys(openHotkey, cmdHotkey, _allItems, cheatSheetHotkey, clipHotkey);
+        var validation = HotkeyRegistryValidator.ValidateApplicationHotkeys(
+            openHotkey, 
+            cmdHotkey, 
+            _allItems, 
+            cheatSheetHotkey, 
+            clipHotkey,
+            cmdAppHotkey,
+            cmdSnippetHotkey,
+            cmdWorkflowHotkey,
+            cmdFolderHotkey,
+            cmdServiceHotkey);
         if (!validation.IsValid)
         {
             ShortcutConflictWarningText.Text = validation.ErrorMessage;
@@ -729,10 +755,25 @@ public partial class ApplicationSettingsWindow : Window
         {
             var openSettingsHotkey = OpenSettingsHotkeyRecorder.Binding;
             var cmdPaletteHotkey = CommandPaletteHotkeyRecorder.Binding;
+            var cmdAppHotkey = CommandPaletteAppHotkeyRecorder.Binding;
+            var cmdSnippetHotkey = CommandPaletteSnippetHotkeyRecorder.Binding;
+            var cmdWorkflowHotkey = CommandPaletteWorkflowHotkeyRecorder.Binding;
+            var cmdFolderHotkey = CommandPaletteFolderHotkeyRecorder.Binding;
+            var cmdServiceHotkey = CommandPaletteServiceHotkeyRecorder.Binding;
             var cheatSheetHotkey = CheatSheetHotkeyRecorder.Binding;
             var clipHotkey = GlobalClipboardHotkeyRecorder?.Binding ?? ClipboardHotkeyRecorder.Binding;
 
-            var validation = HotkeyRegistryValidator.ValidateApplicationHotkeys(openSettingsHotkey, cmdPaletteHotkey, _allItems, cheatSheetHotkey, clipHotkey);
+            var validation = HotkeyRegistryValidator.ValidateApplicationHotkeys(
+                openSettingsHotkey, 
+                cmdPaletteHotkey, 
+                _allItems, 
+                cheatSheetHotkey, 
+                clipHotkey,
+                cmdAppHotkey,
+                cmdSnippetHotkey,
+                cmdWorkflowHotkey,
+                cmdFolderHotkey,
+                cmdServiceHotkey);
             if (!validation.IsValid)
             {
                 CheckHotkeyConflicts();
@@ -817,6 +858,11 @@ public partial class ApplicationSettingsWindow : Window
 
             _currentSettings.OpenSettingsHotkey = openSettingsHotkey;
             _currentSettings.CommandPaletteHotkey = cmdPaletteHotkey;
+            _currentSettings.CommandPaletteAppHotkey = cmdAppHotkey;
+            _currentSettings.CommandPaletteSnippetHotkey = cmdSnippetHotkey;
+            _currentSettings.CommandPaletteWorkflowHotkey = cmdWorkflowHotkey;
+            _currentSettings.CommandPaletteFolderHotkey = cmdFolderHotkey;
+            _currentSettings.CommandPaletteServiceHotkey = cmdServiceHotkey;
             _currentSettings.CheatSheetHotkey = cheatSheetHotkey;
             _currentSettings.ShowSnippetKeywordsInCommandPalette = ShowSnippetKeywordsInCommandPaletteCheck.IsChecked == true;
             _currentSettings.CommandPalettePinnedDefault = CommandPalettePinnedDefaultCheck.IsChecked == true;
@@ -981,6 +1027,69 @@ public partial class ApplicationSettingsWindow : Window
     private void OpenLogsFolderBtn_Click(object sender, RoutedEventArgs e)
     {
         _logManagerService.OpenLogDirectory();
+    }
+
+    private void UpdateCurrentElevationStatusUI()
+    {
+        if (CurrentElevationStatusBadge == null || CurrentElevationStatusText == null || CurrentElevationDescriptionText == null || RestartAsAdminBtn == null) return;
+
+        bool isElevated = TriggerPoint.Infrastructure.Services.WindowsServiceManager.IsRunningElevated();
+        if (HeaderRestartAsAdminBtn != null && HeaderAdminBadge != null)
+        {
+            HeaderRestartAsAdminBtn.Visibility = Visibility.Visible;
+            if (isElevated)
+            {
+                HeaderRestartAsAdminBtn.Content = "🔄 Restart as Standard User";
+                HeaderRestartAsAdminBtn.ToolTip = "Restart TriggerPoint without Administrator privileges (Standard User)";
+                HeaderAdminBadge.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                HeaderRestartAsAdminBtn.Content = "🛡️ Restart as Admin";
+                HeaderRestartAsAdminBtn.ToolTip = "Restart TriggerPoint with Administrator privileges";
+                HeaderAdminBadge.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        if (isElevated)
+        {
+            CurrentElevationStatusBadge.Background = TryFindResource("SuccessSubtleBrush") as System.Windows.Media.Brush ?? new SolidColorBrush(Color.FromArgb(40, 46, 204, 113));
+            CurrentElevationStatusText.Text = "Running as Administrator";
+            CurrentElevationStatusText.Foreground = TryFindResource("SuccessBrush") as System.Windows.Media.Brush ?? new SolidColorBrush(Color.FromRgb(46, 204, 113));
+            CurrentElevationDescriptionText.Text = "TriggerPoint is running with full elevated privileges. Windows service operations and administrative hotkeys can run without UAC restrictions.";
+            RestartAsAdminBtn.Content = "🔄 Restart as Standard User";
+            RestartAsAdminBtn.ToolTip = "Relaunches TriggerPoint with standard user privileges, removing Administrator elevation";
+        }
+        else
+        {
+            CurrentElevationStatusBadge.Background = TryFindResource("BgTertiaryBrush") as System.Windows.Media.Brush;
+            CurrentElevationStatusText.Text = "Standard User (Un-elevated)";
+            CurrentElevationStatusText.Foreground = TryFindResource("TextSecondaryBrush") as System.Windows.Media.Brush;
+            CurrentElevationDescriptionText.Text = "TriggerPoint is running as a standard user. Windows Service operations and controlling elevated windows require Administrator privileges.";
+            RestartAsAdminBtn.Content = "🛡️ Restart as Administrator";
+            RestartAsAdminBtn.ToolTip = "Relaunches TriggerPoint with elevated Administrator privileges via Windows UAC";
+        }
+    }
+
+    private void RestartAsAdminBtn_Click(object sender, RoutedEventArgs e)
+    {
+        bool isElevated = TriggerPoint.Infrastructure.Services.WindowsServiceManager.IsRunningElevated();
+
+        SettingsStatusText.Text = isElevated
+            ? "Restarting TriggerPoint as Standard User... 🔄"
+            : "Prompting for Administrator elevation... 🛡️";
+
+        if (Application.Current is App app)
+        {
+            bool started = isElevated
+                ? app.RestartApplication(asAdmin: false, forceUnelevated: true)
+                : app.RestartApplication(asAdmin: true);
+
+            if (!started)
+            {
+                SettingsStatusText.Text = "Restart was cancelled or failed.";
+            }
+        }
     }
 
     private void OpenDataFolderBtn_Click(object sender, RoutedEventArgs e)
@@ -1766,8 +1875,8 @@ public partial class ApplicationSettingsWindow : Window
     internal static readonly Dictionary<SettingsCategory, string[]> CategoryKeywords = new()
     {
         [SettingsCategory.Appearance] = ["appearance", "theme", "dark", "light", "system default", "mica", "acrylic", "material", "transparency", "translucent", "animation", "animations", "micro-transitions", "visual", "look", "accent", "color", "swatch", "indigo", "violet", "blue", "green", "orange", "crimson", "windows accent"],
-        [SettingsCategory.Shortcuts] = ["shortcut", "shortcuts", "hotkey", "hotkeys", "global", "action manager", "command palette", "cheat sheet", "hud", "overlay", "conflict", "key", "recorder", "abbreviation", "abbreviations", "expander", "expansion", "text expansion", "auto-expand", "snippet expander", "pin", "pinned", "window pin"],
-        [SettingsCategory.System] = ["system", "startup", "login", "windows", "minimized", "tray", "system tray", "hide window", "crosshair", "targeting", "toast", "toasts", "notification", "notifications", "monitor", "display", "active monitor", "primary monitor", "screen", "location", "placement", "validate", "path", "revert", "confirm", "unsaved", "explorer", "context menu", "right-click", "add to triggerpoint", "shell"],
+        [SettingsCategory.Shortcuts] = ["shortcut", "shortcuts", "hotkey", "hotkeys", "global", "action manager", "command palette", "cheat sheet", "hud", "overlay", "conflict", "key", "recorder", "abbreviation", "abbreviations", "expander", "expansion", "text expansion", "auto-expand", "snippet expander", "pin", "pinned", "window pin", "tab", "tabs", "filter", "filters", "services", "apps", "snippets", "workflows", "folders"],
+        [SettingsCategory.System] = ["system", "startup", "login", "windows", "minimized", "tray", "system tray", "hide window", "crosshair", "targeting", "toast", "toasts", "notification", "notifications", "monitor", "display", "active monitor", "primary monitor", "screen", "location", "placement", "validate", "path", "revert", "confirm", "unsaved", "explorer", "context menu", "right-click", "add to triggerpoint", "shell", "admin", "administrator", "elevation", "elevate", "uac", "restart", "reboot"],
         [SettingsCategory.Logging] = ["serilog", "log", "logs", "logging", "diagnostics", "minimum log level", "retention", "days", "split", "threshold", "mb", "folder", "open logs", "verbose", "debug", "information", "warning", "error", "fatal"],
         [SettingsCategory.Updates] = ["update", "updates", "maintenance", "check for updates", "version", "latest", "frequency", "startup", "daily", "weekly", "monthly", "manual", "silent install", "restart", "pre-release", "beta", "preview", "ignored", "ignore", "release"],
         [SettingsCategory.Data] = ["backup", "data", "management", "recycle", "recycle bin", "retention", "purge", "empty", "delete", "telemetry", "export", "import", "restore", "json", "actions", "folders"],
