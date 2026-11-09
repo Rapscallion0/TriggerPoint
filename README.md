@@ -5,9 +5,9 @@
 
 [![.NET](https://img.shields.io/badge/.NET-9.0--windows-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011%20x64-0078D6?logo=windows)](https://microsoft.com/windows)
-[![Version](https://img.shields.io/badge/Version-v2.2.8-blue.svg)](https://github.com/Rapscallion0/TriggerPoint/releases/tag/v2.2.8)
+[![Version](https://img.shields.io/badge/Version-v2.2.9-blue.svg)](https://github.com/Rapscallion0/TriggerPoint/releases/tag/v2.2.9)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-934%20Passed%20(100%25)-brightgreen)]()
+[![Tests](https://img.shields.io/badge/Tests-937%20Passed%20(100%25)-brightgreen)]()
 
 ---
 
@@ -61,6 +61,10 @@ Designed to stay out of your way, TriggerPoint runs quietly in your system tray 
   - **Hashes & Encodings**: Instant hash digests (`sha256`, `md5`, `crc32`) and text encodings (`base64`, `urlencode`, `slug`).
   - **Mock Data & Lorem**: Multi-paragraph Lorem ipsum (`lorem 3p`) and mock entities (`mock email`, `mock ip`).
   - **In-Place Regeneration & Candidate Batch**: Re-roll on the fly with `🔄`, <kbd>Tab</kbd>, <kbd>F5</kbd>, or open the Candidate Batch Drawer (<kbd>Alt</kbd>+<kbd>U</kbd>) to choose from multiple candidates with configurable batch sizes in Settings.
+- **Windows Service Control & Live Properties ⚙️**:
+  - Direct inline actions in the Command Palette preview strip: **▶ Start**, **⏹ Stop**, **🔄 Restart**, **⚙ Properties**, **MMC (services.msc)**, and **📋 Copy Key**.
+  - Right-click context menu and keyboard shortcuts (<kbd>Ctrl+S</kbd> Start, <kbd>Ctrl+T</kbd> Stop, <kbd>Ctrl+R</kbd> Restart, <kbd>Alt+Enter</kbd> Properties).
+  - Dedicated **Service Properties Dialog** displaying live status, startup type, process ID, binary path, service account / log on as, dependency hierarchy, and interactive controls with smart automatic elevation.
 
 ### ⌨ Shortcut Cheat Sheet & Chord HUD
 - **Shortcut Cheat Sheet HUD (`Ctrl+Shift+/`)**: Instantly view all shortcuts across all folders in a sleek, non-intrusive floating HUD with real-time filtering.
@@ -188,7 +192,7 @@ dotnet run --project src/TriggerPoint.UI
 #### Package Installer & Portable Archive
 To package the app into both the Inno Setup installer and the standalone portable zip:
 ```powershell
-powershell -ExecutionPolicy Bypass -File build/package.ps1 -AppVersion "2.2.8"
+powershell -ExecutionPolicy Bypass -File build/package.ps1 -AppVersion "2.2.9"
 ```
 The output artifacts will be produced in the `artifacts/` directory:
 - `artifacts/TriggerPointSetup.exe`

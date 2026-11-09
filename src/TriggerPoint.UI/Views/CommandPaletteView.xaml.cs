@@ -806,6 +806,8 @@ public partial class CommandPaletteView : Window
     private readonly DispatcherTimer _feedbackTimer;
     private bool _isLoaded;
     private bool _isPinned;
+    private bool _isChildDialogOpen;
+    private WindowsServiceItem? _activeServicePreviewItem;
     private bool _isCalcPromoted;
     private string _currentGuideTab = "Popular";
     private bool _showSnippetKeywords = true;
@@ -2353,7 +2355,7 @@ public partial class CommandPaletteView : Window
             }
             else if (vm.IsServiceItem && vm.ServiceItem != null)
             {
-                FooterHintsText.Text = "↵ Toggle (Start/Stop)   •   Ctrl+S Start   •   Ctrl+T Stop   •   Ctrl+R Restart   •   Ctrl+↵ Run as Admin";
+                FooterHintsText.Text = "↵ Toggle (Start/Stop)   •   Ctrl+S Start   •   Ctrl+T Stop   •   Ctrl+R Restart   •   Alt+Enter Properties";
             }
             else if (vm.IsCalculatorResult)
             {
@@ -2423,7 +2425,7 @@ public partial class CommandPaletteView : Window
             }
             else if (vm.Item.ActionType == ActionType.Service)
             {
-                FooterHintsText.Text = "Enter Execute Service   •   Ctrl+Enter Run as Admin   •   Alt+Enter Edit in Action Manager";
+                FooterHintsText.Text = "Enter Execute   •   Ctrl+S Start   •   Ctrl+T Stop   •   Ctrl+R Restart   •   Alt+Enter Action Manager";
             }
         }
         else
@@ -2433,7 +2435,7 @@ public partial class CommandPaletteView : Window
         }
     }
 
-    private enum PreviewStripMode { Standard, File, Image, RichText }
+    private enum PreviewStripMode { Standard, File, Image, RichText, Service }
 
     private void SetPreviewMode(PreviewStripMode mode)
     {
@@ -2442,12 +2444,17 @@ public partial class CommandPaletteView : Window
         FilePreviewGrid.Visibility = mode == PreviewStripMode.File ? Visibility.Visible : Visibility.Collapsed;
         ImagePreviewGrid.Visibility = mode == PreviewStripMode.Image ? Visibility.Visible : Visibility.Collapsed;
         RichTextPreviewGrid.Visibility = mode == PreviewStripMode.RichText ? Visibility.Visible : Visibility.Collapsed;
+        if (ServicePreviewGrid != null)
+        {
+            ServicePreviewGrid.Visibility = mode == PreviewStripMode.Service ? Visibility.Visible : Visibility.Collapsed;
+        }
     }
 
     private void UpdatePreviewStrip(PaletteItemViewModel? vm)
     {
         if (vm == null || !vm.IsSelectable)
         {
+            _activeServicePreviewItem = null;
             SetPreviewMode(PreviewStripMode.Standard);
             if (PreviewDetailText != null)
             {
@@ -2459,6 +2466,7 @@ public partial class CommandPaletteView : Window
 
         if (vm.IsClipboardItem && vm.ClipboardItem != null)
         {
+            _activeServicePreviewItem = null;
             if (vm.ClipboardItem.Type == ClipboardItemType.FileList)
             {
                 SetPreviewMode(PreviewStripMode.File);
@@ -2497,6 +2505,54 @@ public partial class CommandPaletteView : Window
             }
         }
 
+        // Service Actions Preview Strip
+        if ((vm.IsServiceItem && vm.ServiceItem != null) || (vm.Item?.ActionType == ActionType.Service))
+        {
+            var svc = vm.ServiceItem ?? GetSelectedServiceItem();
+            if (svc != null)
+            {
+                _activeServicePreviewItem = svc;
+                SetPreviewMode(PreviewStripMode.Service);
+                if (ServicePreviewNameText != null)
+                {
+                    ServicePreviewNameText.Text = svc.DisplayName;
+                    ServicePreviewNameText.ToolTip = svc.DisplayName;
+                }
+                if (ServicePreviewKeyText != null)
+                {
+                    ServicePreviewKeyText.Text = svc.ServiceName;
+                    ServicePreviewKeyText.ToolTip = $"Service Key: {svc.ServiceName}";
+                }
+                if (ServicePreviewStartupText != null)
+                {
+                    ServicePreviewStartupText.Text = svc.StartType;
+                }
+                if (ServicePreviewStatusEmoji != null)
+                {
+                    ServicePreviewStatusEmoji.Text = svc.StatusBadgeEmoji;
+                }
+                if (ServicePreviewStatusText != null)
+                {
+                    ServicePreviewStatusText.Text = svc.StatusText.ToUpperInvariant();
+                }
+
+                if (ServicePreviewStatusPill != null && ServicePreviewStatusText != null)
+                {
+                    ApplyServicePreviewStatusStyling(svc.Status);
+                }
+
+                bool isRunning = svc.Status == WindowsServiceStatus.Running;
+                bool isPending = svc.Status is WindowsServiceStatus.StartPending or WindowsServiceStatus.StopPending or WindowsServiceStatus.ContinuePending or WindowsServiceStatus.PausePending;
+
+                if (ServiceStartBtn != null) ServiceStartBtn.IsEnabled = !isRunning && !isPending;
+                if (ServiceStopBtn != null) ServiceStopBtn.IsEnabled = isRunning && svc.CanStop && !isPending;
+                if (ServiceRestartBtn != null) ServiceRestartBtn.IsEnabled = isRunning && !isPending;
+
+                return;
+            }
+        }
+
+        _activeServicePreviewItem = null;
         SetPreviewMode(PreviewStripMode.Standard);
         if (PreviewDetailText != null)
         {
@@ -3049,9 +3105,10 @@ public partial class CommandPaletteView : Window
 
             if (key == Key.S)
             {
-                if (ResultsListBox.SelectedItem is PaletteItemViewModel selSvc && selSvc.IsServiceItem && selSvc.ServiceItem != null)
+                var selSvc = GetSelectedServiceItem();
+                if (selSvc != null)
                 {
-                    StartServiceAction(selSvc.ServiceItem, runAsAdmin: false);
+                    StartServiceAction(selSvc, runAsAdmin: false);
                     e.Handled = true;
                     return;
                 }
@@ -3062,9 +3119,10 @@ public partial class CommandPaletteView : Window
 
             if (key == Key.T)
             {
-                if (ResultsListBox.SelectedItem is PaletteItemViewModel selSvc && selSvc.IsServiceItem && selSvc.ServiceItem != null)
+                var selSvc = GetSelectedServiceItem();
+                if (selSvc != null)
                 {
-                    StopServiceAction(selSvc.ServiceItem, runAsAdmin: false);
+                    StopServiceAction(selSvc, runAsAdmin: false);
                     e.Handled = true;
                     return;
                 }
@@ -3072,9 +3130,10 @@ public partial class CommandPaletteView : Window
 
             if (key == Key.R)
             {
-                if (ResultsListBox.SelectedItem is PaletteItemViewModel selSvc && selSvc.IsServiceItem && selSvc.ServiceItem != null)
+                var selSvc = GetSelectedServiceItem();
+                if (selSvc != null)
                 {
-                    RestartServiceAction(selSvc.ServiceItem, runAsAdmin: false);
+                    RestartServiceAction(selSvc, runAsAdmin: false);
                     e.Handled = true;
                     return;
                 }
@@ -3957,6 +4016,11 @@ public partial class CommandPaletteView : Window
             // Windows Service
             if (vm.IsServiceItem && vm.ServiceItem != null)
             {
+                if (executionOverride == ExecutionOverride.OpenSettings)
+                {
+                    OpenServiceProperties(vm.ServiceItem);
+                    return;
+                }
                 ToggleServiceAction(vm.ServiceItem, runAsAdmin: executionOverride == ExecutionOverride.RunAsAdmin);
                 return;
             }
@@ -4031,11 +4095,268 @@ public partial class CommandPaletteView : Window
         });
     }
 
+    private WindowsServiceItem? GetSelectedServiceItem()
+    {
+        if (ResultsListBox.SelectedItem is PaletteItemViewModel vm)
+        {
+            if (vm.IsServiceItem && vm.ServiceItem != null) return vm.ServiceItem;
+            if (vm.Item?.ActionType == ActionType.Service)
+            {
+                string svcKey = !string.IsNullOrWhiteSpace(vm.Item.Payload?.ServiceName)
+                    ? vm.Item.Payload.ServiceName
+                    : (!string.IsNullOrWhiteSpace(vm.Item.Payload?.Command) ? vm.Item.Payload.Command : vm.Item.Name);
+
+                var cached = _cachedServices?.FirstOrDefault(s => string.Equals(s.ServiceName, svcKey, StringComparison.OrdinalIgnoreCase));
+                if (cached != null) return cached;
+
+                return new WindowsServiceItem
+                {
+                    ServiceName = svcKey,
+                    DisplayName = vm.Item.Name,
+                    Status = vm.ServiceActionStatus ?? WindowsServiceStatus.Unknown,
+                    StartType = "Automatic"
+                };
+            }
+        }
+
+        if (_activeServicePreviewItem != null)
+        {
+            return _activeServicePreviewItem;
+        }
+
+        return null;
+    }
+
+    private void ServiceStartBtn_Click(object sender, RoutedEventArgs e)
+    {
+        var svc = GetSelectedServiceItem();
+        if (svc != null)
+        {
+            StartServiceAction(svc, runAsAdmin: false);
+        }
+    }
+
+    private void ServiceStopBtn_Click(object sender, RoutedEventArgs e)
+    {
+        var svc = GetSelectedServiceItem();
+        if (svc != null)
+        {
+            StopServiceAction(svc, runAsAdmin: false);
+        }
+    }
+
+    private void ServiceRestartBtn_Click(object sender, RoutedEventArgs e)
+    {
+        var svc = GetSelectedServiceItem();
+        if (svc != null)
+        {
+            RestartServiceAction(svc, runAsAdmin: false);
+        }
+    }
+
+    private void ServicePropertiesBtn_Click(object sender, RoutedEventArgs e)
+    {
+        var svc = GetSelectedServiceItem();
+        if (svc != null)
+        {
+            OpenServiceProperties(svc);
+        }
+    }
+
+    private void ServiceOpenMscBtn_Click(object sender, RoutedEventArgs e)
+    {
+        var svc = GetSelectedServiceItem();
+        try
+        {
+            _serviceManager.OpenServicesMsc(svc?.ServiceName);
+            ShowInlineFeedback("Opened Windows Services (services.msc) ↗");
+        }
+        catch (Exception ex)
+        {
+            ShowInlineFeedback($"Failed to open Services MMC: {ex.Message} ⚠️");
+        }
+    }
+
+    private void ServiceCopyNameBtn_Click(object sender, RoutedEventArgs e)
+    {
+        var svc = GetSelectedServiceItem();
+        if (svc != null)
+        {
+            try
+            {
+                Clipboard.SetText(svc.ServiceName);
+                ShowInlineFeedback($"Copied service key ({svc.ServiceName})! 📋");
+            }
+            catch (Exception ex)
+            {
+                ShowInlineFeedback($"Copy failed: {ex.Message} ⚠️");
+            }
+        }
+    }
+
+    private void OpenServiceProperties(WindowsServiceItem service)
+    {
+        try
+        {
+            _isChildDialogOpen = true;
+            var dialog = new ServicePropertiesDialog(service, _serviceManager, this);
+            dialog.ShowDialog();
+            _cachedServices = null;
+            FilterResults();
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Error(ex, "Failed to open properties dialog for service '{ServiceName}'.", service.ServiceName);
+            ShowInlineFeedback($"Failed to open properties: {ex.Message} ⚠️");
+        }
+        finally
+        {
+            _isChildDialogOpen = false;
+        }
+    }
+
+    private void ApplyServicePreviewStatusStyling(WindowsServiceStatus status)
+    {
+        if (ServicePreviewStatusPill == null || ServicePreviewStatusText == null) return;
+
+        Brush bgBrush;
+        Brush borderBrush;
+        Brush textBrush;
+
+        switch (status)
+        {
+            case WindowsServiceStatus.Running:
+                bgBrush = TryFindResource("SuccessBgBrush") as Brush ?? new SolidColorBrush(Color.FromArgb(40, 46, 204, 113));
+                borderBrush = TryFindResource("SuccessBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(46, 204, 113));
+                textBrush = TryFindResource("SuccessBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(46, 204, 113));
+                break;
+            case WindowsServiceStatus.Paused:
+                bgBrush = TryFindResource("WarningBgBrush") as Brush ?? new SolidColorBrush(Color.FromArgb(40, 241, 196, 15));
+                borderBrush = TryFindResource("WarningBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(241, 196, 15));
+                textBrush = TryFindResource("WarningBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(241, 196, 15));
+                break;
+            case WindowsServiceStatus.StartPending:
+            case WindowsServiceStatus.StopPending:
+            case WindowsServiceStatus.ContinuePending:
+            case WindowsServiceStatus.PausePending:
+                bgBrush = TryFindResource("AccentSubtleBrush") as Brush ?? new SolidColorBrush(Color.FromArgb(40, 52, 152, 219));
+                borderBrush = TryFindResource("AccentBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(52, 152, 219));
+                textBrush = TryFindResource("AccentBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(52, 152, 219));
+                break;
+            default:
+                bgBrush = TryFindResource("BgSecondaryBrush") as Brush ?? new SolidColorBrush(Color.FromArgb(40, 127, 140, 141));
+                borderBrush = TryFindResource("BorderSubtleBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(127, 140, 141));
+                textBrush = TryFindResource("TextSecondaryBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(189, 195, 199));
+                break;
+        }
+
+        ServicePreviewStatusPill.Background = bgBrush;
+        ServicePreviewStatusPill.BorderBrush = borderBrush;
+        ServicePreviewStatusText.Foreground = textBrush;
+    }
+
+    private void ResultsListBox_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is DependencyObject dep)
+        {
+            var item = FindVisualParent<ListBoxItem>(dep);
+            if (item?.DataContext is PaletteItemViewModel vm && vm.IsSelectable)
+            {
+                ResultsListBox.SelectedItem = vm;
+                if (vm.IsServiceItem && vm.ServiceItem != null)
+                {
+                    _activeServicePreviewItem = vm.ServiceItem;
+                }
+            }
+        }
+    }
+
+    private void ResultsListBox_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        WindowsServiceItem? svc = null;
+
+        if (e.OriginalSource is DependencyObject dep)
+        {
+            var item = FindVisualParent<ListBoxItem>(dep);
+            if (item?.DataContext is PaletteItemViewModel vm && vm.IsSelectable)
+            {
+                ResultsListBox.SelectedItem = vm;
+                svc = vm.ServiceItem;
+            }
+        }
+
+        svc ??= GetSelectedServiceItem();
+
+        if (svc != null)
+        {
+            var menu = ServiceContextMenu ?? new ContextMenu();
+            PopulateServiceContextMenu(menu, svc);
+
+            menu.PlacementTarget = ResultsListBox;
+            menu.Placement = (e.CursorLeft >= 0 && e.CursorTop >= 0)
+                ? PlacementMode.MousePoint
+                : PlacementMode.Bottom;
+            menu.IsOpen = true;
+            e.Handled = true;
+            return;
+        }
+
+        e.Handled = true;
+    }
+
+    private void PopulateServiceContextMenu(ContextMenu menu, WindowsServiceItem svc)
+    {
+        menu.Items.Clear();
+
+        var startItem = new MenuItem { Header = "▶ Start Service\t(Ctrl+S)" };
+        startItem.IsEnabled = svc.Status != WindowsServiceStatus.Running;
+        startItem.Click += (s, args) => StartServiceAction(svc, runAsAdmin: false);
+        menu.Items.Add(startItem);
+
+        var stopItem = new MenuItem { Header = "⏹ Stop Service\t(Ctrl+T)" };
+        stopItem.IsEnabled = svc.Status == WindowsServiceStatus.Running && svc.CanStop;
+        stopItem.Click += (s, args) => StopServiceAction(svc, runAsAdmin: false);
+        menu.Items.Add(stopItem);
+
+        var restartItem = new MenuItem { Header = "🔄 Restart Service\t(Ctrl+R)" };
+        restartItem.IsEnabled = svc.Status == WindowsServiceStatus.Running;
+        restartItem.Click += (s, args) => RestartServiceAction(svc, runAsAdmin: false);
+        menu.Items.Add(restartItem);
+
+        menu.Items.Add(new Separator());
+
+        var propItem = new MenuItem { Header = "⚙ Service Properties...\t(Alt+Enter)" };
+        propItem.Click += (s, args) => OpenServiceProperties(svc);
+        menu.Items.Add(propItem);
+
+        var mmcItem = new MenuItem { Header = "Services MMC (services.msc) ↗" };
+        mmcItem.Click += (s, args) =>
+        {
+            _serviceManager.OpenServicesMsc(svc.ServiceName);
+            ShowInlineFeedback("Opened Services MMC ↗");
+        };
+        menu.Items.Add(mmcItem);
+
+        menu.Items.Add(new Separator());
+
+        var copyItem = new MenuItem { Header = "📋 Copy Service Key Name\t(Ctrl+C)" };
+        copyItem.Click += (s, args) =>
+        {
+            try
+            {
+                Clipboard.SetText(svc.ServiceName);
+                ShowInlineFeedback($"Copied service key ({svc.ServiceName})! 📋");
+            }
+            catch { }
+        };
+        menu.Items.Add(copyItem);
+    }
+
     private void Window_Deactivated(object sender, EventArgs e)
     {
         SetFilterPillCtrlHintsVisibility(Visibility.Collapsed);
         if (!_isLoaded) return;
-        if (_isPinned) return;
+        if (_isPinned || _isChildDialogOpen) return;
         SafeClose();
     }
 

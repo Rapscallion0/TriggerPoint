@@ -334,4 +334,98 @@ public class WindowsServiceTests
 
         if (caughtEx != null) throw caughtEx;
     }
+
+    [Fact]
+    public void WindowsServiceDetails_Properties_MatchStatusTextAndEmoji()
+    {
+        var details = new WindowsServiceDetails
+        {
+            ServiceName = "Spooler",
+            DisplayName = "Print Spooler",
+            Status = WindowsServiceStatus.Running,
+            StartType = "Automatic",
+            Description = "Spools print jobs",
+            BinaryPath = @"C:\Windows\System32\spoolsv.exe",
+            ServiceAccount = "LocalSystem",
+            ProcessId = 1234,
+            CanStop = true
+        };
+
+        Assert.Equal("Spooler", details.ServiceName);
+        Assert.Equal("Print Spooler", details.DisplayName);
+        Assert.Equal("Running", details.StatusText);
+        Assert.Equal("🟢", details.StatusBadgeEmoji);
+        Assert.Equal("Automatic", details.StartType);
+        Assert.Equal("Spools print jobs", details.Description);
+        Assert.Equal(@"C:\Windows\System32\spoolsv.exe", details.BinaryPath);
+        Assert.Equal("LocalSystem", details.ServiceAccount);
+        Assert.Equal(1234, details.ProcessId);
+        Assert.True(details.CanStop);
+    }
+
+    [Fact]
+    public void WindowsServiceManager_GetServiceDetails_ReturnsValidMetadataOrGracefulFallback()
+    {
+        var manager = new WindowsServiceManager();
+
+        // Test with known standard Windows service
+        var details = manager.GetServiceDetails("RpcSs");
+        if (details != null)
+        {
+            Assert.Equal("RpcSs", details.ServiceName);
+            Assert.False(string.IsNullOrWhiteSpace(details.DisplayName));
+        }
+
+        // Test with non-existent service name returns null
+        var notFound = manager.GetServiceDetails("NonExistentService_123456789");
+        Assert.Null(notFound);
+
+        // Test with empty/null name returns null
+        Assert.Null(manager.GetServiceDetails(""));
+        Assert.Null(manager.GetServiceDetails("   "));
+    }
+
+    [Fact]
+    public void ServicePropertiesDialog_CanInstantiateOnStaThread()
+    {
+        Exception? caughtEx = null;
+        var thread = new System.Threading.Thread(() =>
+        {
+            try
+            {
+                var service = new WindowsServiceItem
+                {
+                    ServiceName = "RpcSs",
+                    DisplayName = "Remote Procedure Call (RPC)",
+                    Status = WindowsServiceStatus.Running,
+                    StartType = "Automatic"
+                };
+                var manager = new WindowsServiceManager();
+                var dlg = new ServicePropertiesDialog(service, manager);
+                Assert.NotNull(dlg);
+
+                var timer = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(50)
+                };
+                timer.Tick += (s, e) =>
+                {
+                    timer.Stop();
+                    dlg.Close();
+                };
+                timer.Start();
+                dlg.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                caughtEx = ex;
+            }
+        });
+
+        thread.SetApartmentState(System.Threading.ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        if (caughtEx != null) throw caughtEx;
+    }
 }

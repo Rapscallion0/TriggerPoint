@@ -331,4 +331,107 @@ public class WindowsServiceManager : IWindowsServiceManager
             return WindowsServiceStatus.Unknown;
         }
     }
+
+    public WindowsServiceDetails? GetServiceDetails(string serviceName)
+    {
+        if (string.IsNullOrWhiteSpace(serviceName)) return null;
+
+        try
+        {
+            using var sc = new ServiceController(serviceName);
+            string displayName = sc.DisplayName;
+            var status = (WindowsServiceStatus)(int)sc.Status;
+            string startType = "Automatic";
+            bool canStop = true;
+            bool canPause = false;
+            bool canShutdown = false;
+
+            try { startType = sc.StartType.ToString(); } catch { }
+            try { canStop = sc.CanStop; } catch { }
+            try { canPause = sc.CanPauseAndContinue; } catch { }
+            try { canShutdown = sc.CanShutdown; } catch { }
+
+            string description = string.Empty;
+            string binaryPath = string.Empty;
+            string serviceAccount = string.Empty;
+            int processId = 0;
+
+            try
+            {
+                using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey($@"SYSTEM\CurrentControlSet\Services\{serviceName}", false);
+                if (key != null)
+                {
+                    description = key.GetValue("Description") as string ?? string.Empty;
+                    var rawImagePath = key.GetValue("ImagePath") as string ?? string.Empty;
+                    binaryPath = !string.IsNullOrWhiteSpace(rawImagePath)
+                        ? Environment.ExpandEnvironmentVariables(rawImagePath)
+                        : string.Empty;
+                    serviceAccount = key.GetValue("ObjectName") as string ?? string.Empty;
+
+                    if (key.GetValue("DelayedAutoStart") is int delayed && delayed == 1 && startType.Equals("Automatic", StringComparison.OrdinalIgnoreCase))
+                    {
+                        startType = "Automatic (Delayed Start)";
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Debug(ex, "Failed to read registry metadata for service '{ServiceName}'.", serviceName);
+            }
+
+            if (status == WindowsServiceStatus.Running && !string.IsNullOrWhiteSpace(binaryPath))
+            {
+                try
+                {
+                    string exeName = binaryPath.Trim('\"', ' ');
+                    int spaceIdx = exeName.IndexOf(".exe", StringComparison.OrdinalIgnoreCase);
+                    if (spaceIdx > 0) exeName = exeName.Substring(0, spaceIdx + 4).Trim('\"');
+                    string procName = System.IO.Path.GetFileNameWithoutExtension(exeName);
+                    if (!string.Equals(procName, "svchost", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var procs = Process.GetProcessesByName(procName);
+                        if (procs.Length == 1) processId = procs[0].Id;
+                    }
+                }
+                catch { }
+            }
+
+            return new WindowsServiceDetails
+            {
+                ServiceName = serviceName,
+                DisplayName = string.IsNullOrWhiteSpace(displayName) ? serviceName : displayName,
+                Status = status,
+                StartType = startType,
+                Description = description,
+                BinaryPath = binaryPath,
+                ServiceAccount = serviceAccount,
+                ProcessId = processId,
+                CanStop = canStop,
+                CanPauseAndContinue = canPause,
+                CanShutdown = canShutdown
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "Failed to retrieve service details for '{ServiceName}'.", serviceName);
+            return null;
+        }
+    }
+
+    public void OpenServicesMsc(string? serviceName = null)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "services.msc",
+                UseShellExecute = true
+            });
+            _logger.Information("Launched services.msc");
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Failed to launch services.msc");
+        }
+    }
 }

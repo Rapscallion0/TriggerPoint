@@ -241,6 +241,8 @@ public interface IWindowsServiceManager
     Task<ServiceOperationResult> StopServiceAsync(string serviceName, bool runAsAdmin = false, int timeoutSeconds = 30, CancellationToken cancellationToken = default);
     Task<ServiceOperationResult> RestartServiceAsync(string serviceName, bool runAsAdmin = false, int timeoutSeconds = 30, CancellationToken cancellationToken = default);
     Task<ServiceOperationResult> ToggleServiceAsync(string serviceName, bool runAsAdmin = false, int timeoutSeconds = 30, CancellationToken cancellationToken = default);
+    WindowsServiceDetails? GetServiceDetails(string serviceName) => null;
+    void OpenServicesMsc(string? serviceName = null) { }
 }
 
 public interface IAbbreviationExpanderService : IDisposable

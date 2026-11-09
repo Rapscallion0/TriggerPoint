@@ -1081,7 +1081,12 @@
                          ScrollViewer.VerticalScrollBarVisibility="Auto"
                          SelectionMode="Single"
                          SelectionChanged="ResultsListBox_SelectionChanged"
-                         MouseDoubleClick="ResultsListBox_MouseDoubleClick">
+                         MouseDoubleClick="ResultsListBox_MouseDoubleClick"
+                         PreviewMouseRightButtonDown="ResultsListBox_PreviewMouseRightButtonDown"
+                         ContextMenuOpening="ResultsListBox_ContextMenuOpening">
+                    <ListBox.ContextMenu>
+                        <ContextMenu x:Name="ServiceContextMenu"/>
+                    </ListBox.ContextMenu>
                     <ListBox.ItemContainerStyle>
                         <Style TargetType="ListBoxItem">
                             <Setter Property="Background" Value="Transparent"/>
@@ -2574,6 +2579,110 @@
                                          VerticalScrollBarVisibility="Auto"
                                          MaxHeight="46"/>
                         </Border>
+                    </Grid>
+
+                    <!-- Mode E: Windows Service Action Buttons Preview Strip -->
+                    <Grid x:Name="ServicePreviewGrid" Visibility="Collapsed">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0"
+                                x:Name="ServicePreviewStatusPill"
+                                CornerRadius="4"
+                                BorderThickness="1"
+                                Padding="6,2"
+                                Margin="0,0,8,0"
+                                VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock x:Name="ServicePreviewStatusEmoji" Text="🟢" FontSize="10.5" Margin="0,0,4,0"/>
+                                <TextBlock x:Name="ServicePreviewStatusText" Text="RUNNING" FontSize="10" FontWeight="Bold"/>
+                            </StackPanel>
+                        </Border>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock x:Name="ServicePreviewNameText"
+                                       Text="Service Name"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextPrimaryBrush}"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"
+                                       MaxWidth="200"/>
+                            <TextBlock Text=" • " FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="ServicePreviewKeyText"
+                                       Text="svc_key"
+                                       FontSize="10.5"
+                                       FontFamily="{DynamicResource CodeFont}"
+                                       Foreground="{DynamicResource AccentBrush}"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"
+                                       MaxWidth="140"/>
+                            <TextBlock Text=" • " FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="ServicePreviewStartupText"
+                                       Text="Automatic"
+                                       FontSize="10.5"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="ServiceStartBtn"
+                                    Click="ServiceStartBtn_Click"
+                                    Content="▶ Start"
+                                    ToolTip="Start service (Ctrl+S)"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    FontSize="10"
+                                    FontWeight="SemiBold"
+                                    Padding="7,2"
+                                    Margin="0,0,4,0"/>
+                            <Button x:Name="ServiceStopBtn"
+                                    Click="ServiceStopBtn_Click"
+                                    Content="⏹ Stop"
+                                    ToolTip="Stop service (Ctrl+T)"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    FontSize="10"
+                                    FontWeight="SemiBold"
+                                    Padding="7,2"
+                                    Margin="0,0,4,0"/>
+                            <Button x:Name="ServiceRestartBtn"
+                                    Click="ServiceRestartBtn_Click"
+                                    Content="🔄 Restart"
+                                    ToolTip="Restart service (Ctrl+R)"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    FontSize="10"
+                                    FontWeight="SemiBold"
+                                    Padding="7,2"
+                                    Margin="0,0,4,0"/>
+                            <Button x:Name="ServicePropertiesBtn"
+                                    Click="ServicePropertiesBtn_Click"
+                                    Content="⚙ Properties"
+                                    ToolTip="View complete service properties and configuration (Alt+Enter)"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    FontSize="10"
+                                    FontWeight="SemiBold"
+                                    Padding="7,2"
+                                    Margin="0,0,4,0"/>
+                            <Button x:Name="ServiceOpenMscBtn"
+                                    Click="ServiceOpenMscBtn_Click"
+                                    Content="Services MMC ↗"
+                                    ToolTip="Open Windows Services management console (services.msc)"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    FontSize="10"
+                                    FontWeight="SemiBold"
+                                    Padding="7,2"
+                                    Margin="0,0,4,0"/>
+                            <Button x:Name="ServiceCopyNameBtn"
+                                    Click="ServiceCopyNameBtn_Click"
+                                    Content="📋"
+                                    ToolTip="Copy service key name to clipboard"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    FontSize="10"
+                                    FontWeight="SemiBold"
+                                    Padding="6,2"/>
+                        </StackPanel>
                     </Grid>
                 </Grid>
             </Border>

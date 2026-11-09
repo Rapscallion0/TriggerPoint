@@ -56,4 +56,42 @@ public sealed class WindowsServiceItem
     public bool CanShutdown { get; init; } = false;
 }
 
+public sealed class WindowsServiceDetails
+{
+    public string ServiceName { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
+    public WindowsServiceStatus Status { get; set; } = WindowsServiceStatus.Unknown;
+
+    public string StatusText => Status switch
+    {
+        WindowsServiceStatus.Running => "Running",
+        WindowsServiceStatus.Stopped => "Stopped",
+        WindowsServiceStatus.Paused => "Paused",
+        WindowsServiceStatus.StartPending => "Starting...",
+        WindowsServiceStatus.StopPending => "Stopping...",
+        WindowsServiceStatus.ContinuePending => "Continuing...",
+        WindowsServiceStatus.PausePending => "Pausing...",
+        _ => "Unknown"
+    };
+
+    public string StatusBadgeEmoji => Status switch
+    {
+        WindowsServiceStatus.Running => "🟢",
+        WindowsServiceStatus.Stopped => "⚪",
+        WindowsServiceStatus.Paused => "🟡",
+        WindowsServiceStatus.StartPending or WindowsServiceStatus.ContinuePending => "🔄",
+        WindowsServiceStatus.StopPending or WindowsServiceStatus.PausePending => "⏳",
+        _ => "⚪"
+    };
+
+    public string StartType { get; init; } = "Automatic";
+    public string Description { get; init; } = string.Empty;
+    public string BinaryPath { get; init; } = string.Empty;
+    public string ServiceAccount { get; init; } = string.Empty;
+    public int ProcessId { get; init; } = 0;
+    public bool CanStop { get; init; } = true;
+    public bool CanPauseAndContinue { get; init; } = false;
+    public bool CanShutdown { get; init; } = false;
+}
+
 public record ServiceOperationResult(bool Success, string Message, WindowsServiceStatus NewStatus);
