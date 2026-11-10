@@ -187,7 +187,9 @@ public partial class App : Application
                 flushToDiskInterval: TimeSpan.FromSeconds(1),
                 shared: true,
                 outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff}] [{Level:u3}] ({SourceContext}) {Message:lj}{NewLine}{Exception}")
+#if DEBUG
             .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] ({SourceContext}) {Message:lj}{NewLine}{Exception}")
+#endif
             .CreateLogger();
 
         // Global unhandled exception handlers for fatal logging and crash prevention
@@ -243,7 +245,9 @@ public partial class App : Application
                 flushToDiskInterval: TimeSpan.FromSeconds(1),
                 retainedFileCountLimit: appSettings.LogRetentionDays,
                 outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff}] [{Level:u3}] ({SourceContext}) {Message:lj}{NewLine}{Exception}")
+#if DEBUG
             .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] ({SourceContext}) {Message:lj}{NewLine}{Exception}")
+#endif
             .CreateLogger();
 
         var startupArgs = e.Args ?? [];

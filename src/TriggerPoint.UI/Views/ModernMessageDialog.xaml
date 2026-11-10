@@ -45,15 +45,19 @@
                            VerticalAlignment="Center"/>
             </StackPanel>
 
-            <!-- Message Body -->
-            <TextBlock Grid.Row="1"
-                       x:Name="DialogMessageText"
-                       Text="Are you sure you want to proceed?"
-                       FontSize="13"
-                       Foreground="{DynamicResource TextSecondaryBrush}"
-                       TextWrapping="Wrap"
-                       Margin="0,0,0,18"
-                       LineHeight="19"/>
+            <!-- Message Body & Optional Choice Options -->
+            <StackPanel Grid.Row="1">
+                <TextBlock x:Name="DialogMessageText"
+                           Text="Are you sure you want to proceed?"
+                           FontSize="13"
+                           Foreground="{DynamicResource TextSecondaryBrush}"
+                           TextWrapping="Wrap"
+                           Margin="0,0,0,18"
+                           LineHeight="19"/>
+                <StackPanel x:Name="ChoiceOptionsPanel"
+                            Visibility="Collapsed"
+                            Margin="0,-6,0,16"/>
+            </StackPanel>
 
             <!-- Buttons Row -->
             <Grid Grid.Row="2">

@@ -108,6 +108,7 @@ public class Win32IconService : IIconService
                         var bi = new BitmapImage();
                         bi.BeginInit();
                         bi.UriSource = new Uri(p, UriKind.Absolute);
+                        bi.DecodePixelWidth = 48;
                         bi.CacheOption = BitmapCacheOption.OnLoad;
                         bi.EndInit();
                         bi.Freeze();
@@ -279,28 +280,96 @@ public class Win32IconService : IIconService
     }
 }
 
-public class TelemetryService : ITelemetryService
+public class TelemetryService : ITelemetryService, IDisposable
 {
     private readonly IConfigRepository _repository;
+    private readonly TimeSpan _flushDelay;
+    private readonly System.Threading.Timer _flushTimer;
+    private readonly System.Threading.SemaphoreSlim _flushLock = new(1, 1);
+    private volatile bool _hasPendingChanges;
+    private bool _disposed;
 
     public TelemetryService(IConfigRepository repository)
+        : this(repository, TimeSpan.FromSeconds(5))
+    {
+    }
+
+    public TelemetryService(IConfigRepository repository, TimeSpan flushDelay)
     {
         _repository = repository;
+        _flushDelay = flushDelay;
+        _flushTimer = new System.Threading.Timer(OnFlushTimerElapsed, null, System.Threading.Timeout.InfiniteTimeSpan, System.Threading.Timeout.InfiniteTimeSpan);
     }
 
     public async Task RecordExecutionAsync(Guid itemId)
     {
         try
         {
+            var now = DateTime.UtcNow;
+            var updatedInMemory = await _repository.UpdateUsageStatsInMemoryAsync(itemId, now).ConfigureAwait(false);
+            if (updatedInMemory)
+            {
+                _hasPendingChanges = true;
+                if (_flushDelay <= TimeSpan.Zero)
+                {
+                    await FlushAsync().ConfigureAwait(false);
+                }
+                else
+                {
+                    _flushTimer.Change(_flushDelay, System.Threading.Timeout.InfiniteTimeSpan);
+                }
+                return;
+            }
+
             var items = await _repository.LoadAsync().ConfigureAwait(false);
             var item = items.FirstOrDefault(x => x.Id == itemId);
             if (item != null)
             {
                 item.UsageStats.LaunchCount++;
-                item.UsageStats.LastExecutedUtc = DateTime.UtcNow;
-                await _repository.SaveAsync(items).ConfigureAwait(false);
+                item.UsageStats.LastExecutedUtc = now;
+                await _repository.SaveAsync(items, createHistoricalSnapshot: false).ConfigureAwait(false);
             }
         }
         catch { }
+    }
+
+    private void OnFlushTimerElapsed(object? state)
+    {
+        _ = FlushAsync();
+    }
+
+    public async Task FlushAsync()
+    {
+        if (!_hasPendingChanges) return;
+
+        await _flushLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (!_hasPendingChanges) return;
+            _hasPendingChanges = false;
+            var items = await _repository.LoadAsync().ConfigureAwait(false);
+            await _repository.SaveAsync(items, createHistoricalSnapshot: false).ConfigureAwait(false);
+        }
+        catch { }
+        finally
+        {
+            _flushLock.Release();
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _flushTimer.Dispose();
+        if (_hasPendingChanges)
+        {
+            try
+            {
+                FlushAsync().GetAwaiter().GetResult();
+            }
+            catch { }
+        }
+        _flushLock.Dispose();
     }
 }

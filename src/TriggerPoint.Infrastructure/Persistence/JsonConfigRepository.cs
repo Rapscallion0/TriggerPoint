@@ -22,6 +22,14 @@ public class JsonConfigRepository : IConfigRepository
     private readonly ISecretsVaultService _secretsVault;
     private readonly SemaphoreSlim _fileLock = new(1, 1);
 
+    private List<TriggerItem>? _cachedItems;
+    private DateTime _cachedConfigLastWriteUtc;
+    private long _cachedConfigLength = -1;
+
+    private AppSettings? _cachedSettings;
+    private DateTime _cachedSettingsLastWriteUtc;
+    private long _cachedSettingsLength = -1;
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -185,105 +193,188 @@ public class JsonConfigRepository : IConfigRepository
         catch { }
     }
 
+    private static List<TriggerItem> CloneItems(List<TriggerItem> source)
+    {
+        var clones = new List<TriggerItem>(source.Count);
+        for (int i = 0; i < source.Count; i++)
+        {
+            clones.Add(source[i].Clone());
+        }
+        return clones;
+    }
+
+    private void UpdateItemsCache(List<TriggerItem> items)
+    {
+        _cachedItems = CloneItems(items);
+        if (File.Exists(_configFilePath))
+        {
+            var info = new FileInfo(_configFilePath);
+            _cachedConfigLastWriteUtc = info.LastWriteTimeUtc;
+            _cachedConfigLength = info.Length;
+        }
+        else
+        {
+            _cachedConfigLastWriteUtc = default;
+            _cachedConfigLength = -1;
+        }
+    }
+
+    private void UpdateSettingsCache(AppSettings settings)
+    {
+        _cachedSettings = settings.Clone();
+        if (File.Exists(_appSettingsFilePath))
+        {
+            var info = new FileInfo(_appSettingsFilePath);
+            _cachedSettingsLastWriteUtc = info.LastWriteTimeUtc;
+            _cachedSettingsLength = info.Length;
+        }
+        else
+        {
+            _cachedSettingsLastWriteUtc = default;
+            _cachedSettingsLength = -1;
+        }
+    }
+
     public async Task<IReadOnlyList<TriggerItem>> LoadAsync()
     {
         await _fileLock.WaitAsync().ConfigureAwait(false);
         try
         {
-            if (File.Exists(_configFilePath))
-            {
-                try
-                {
-                    if (new FileInfo(_configFilePath).Length > 0)
-                    {
-                        using var stream = File.OpenRead(_configFilePath);
-                        var items = await JsonSerializer.DeserializeAsync<List<TriggerItem>>(stream, JsonOptions).ConfigureAwait(false);
-                        if (items != null && items.Count > 0)
-                        {
-                            DecryptSecrets(items);
-                            return items;
-                        }
+            return await LoadInternalUnlockedAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            _fileLock.Release();
+        }
+    }
 
-                        // If file contained a valid empty list (count == 0), check if initial setup was completed
-                        if (items != null && items.Count == 0 && File.Exists(_appSettingsFilePath))
+    private async Task<List<TriggerItem>> LoadInternalUnlockedAsync()
+    {
+        if (File.Exists(_configFilePath))
+        {
+            var fileInfo = new FileInfo(_configFilePath);
+            if (_cachedItems != null &&
+                fileInfo.Length > 0 &&
+                fileInfo.LastWriteTimeUtc == _cachedConfigLastWriteUtc &&
+                fileInfo.Length == _cachedConfigLength)
+            {
+                return CloneItems(_cachedItems);
+            }
+
+            try
+            {
+                if (fileInfo.Length > 0)
+                {
+                    using var stream = File.OpenRead(_configFilePath);
+                    var items = await JsonSerializer.DeserializeAsync<List<TriggerItem>>(stream, JsonOptions).ConfigureAwait(false);
+                    if (items != null && items.Count > 0)
+                    {
+                        DecryptSecrets(items);
+                        UpdateItemsCache(items);
+                        return items;
+                    }
+
+                    // If file contained a valid empty list (count == 0), check if initial setup was completed
+                    if (items != null && items.Count == 0 && File.Exists(_appSettingsFilePath))
+                    {
+                        try
                         {
-                            try
+                            using var sStream = File.OpenRead(_appSettingsFilePath);
+                            var s = await JsonSerializer.DeserializeAsync<AppSettings>(sStream, JsonOptions).ConfigureAwait(false);
+                            if (s?.HasCompletedInitialSetup == true)
                             {
-                                using var sStream = File.OpenRead(_appSettingsFilePath);
-                                var s = await JsonSerializer.DeserializeAsync<AppSettings>(sStream, JsonOptions).ConfigureAwait(false);
-                                if (s?.HasCompletedInitialSetup == true)
-                                {
-                                    return items;
-                                }
+                                UpdateItemsCache(items);
+                                return items;
                             }
-                            catch { }
                         }
+                        catch { }
                     }
-                }
-                catch (Exception)
-                {
-                    // Primary file corrupted or invalid JSON. Preserve copy before attempting backup recovery
-                    try
-                    {
-                        var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
-                        var corruptedPath = Path.Combine(_backupsDir, $"triggerpoint_corrupted_{timestamp}.json");
-                        File.Copy(_configFilePath, corruptedPath, true);
-                    }
-                    catch { }
-                }
-
-                // If primary file was 0-bytes, empty array, or corrupted, attempt recovery
-                var recovered = TryRecoverFromBackups();
-                if (recovered != null && recovered.Count > 0)
-                {
-                    return recovered;
                 }
             }
-            else
+            catch (Exception)
             {
-                // File does not exist yet; check if backups exist before creating defaults
-                var recovered = TryRecoverFromBackups();
-                if (recovered != null && recovered.Count > 0)
-                {
-                    return recovered;
-                }
-
-                if (File.Exists(_appSettingsFilePath))
-                {
-                    try
-                    {
-                        using var sStream = File.OpenRead(_appSettingsFilePath);
-                        var s = await JsonSerializer.DeserializeAsync<AppSettings>(sStream, JsonOptions).ConfigureAwait(false);
-                        if (s?.HasCompletedInitialSetup == true)
-                        {
-                            var emptyList = new List<TriggerItem>();
-                            await SaveInternalAsync(emptyList, isGeneratingDefaults: true).ConfigureAwait(false);
-                            return emptyList;
-                        }
-                    }
-                    catch { }
-                }
-            }
-
-            // Before generating defaults, ensure any existing non-empty file was backed up as corrupted
-            if (File.Exists(_configFilePath) && new FileInfo(_configFilePath).Length > 0)
-            {
+                // Primary file corrupted or invalid JSON. Preserve copy before attempting backup recovery
                 try
                 {
                     var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
                     var corruptedPath = Path.Combine(_backupsDir, $"triggerpoint_corrupted_{timestamp}.json");
-                    if (!File.Exists(corruptedPath))
-                    {
-                        File.Copy(_configFilePath, corruptedPath, true);
-                    }
+                    File.Copy(_configFilePath, corruptedPath, true);
                 }
                 catch { }
             }
 
-            // Only if primary doesn't exist and no backups exist, generate defaults
-            var defaults = CreateDefaultItems();
-            await SaveInternalAsync(defaults, isGeneratingDefaults: true).ConfigureAwait(false);
-            return defaults;
+            // If primary file was 0-bytes, empty array, or corrupted, attempt recovery
+            var recovered = TryRecoverFromBackups();
+            if (recovered != null && recovered.Count > 0)
+            {
+                UpdateItemsCache(recovered);
+                return recovered;
+            }
+        }
+        else
+        {
+            // File does not exist yet; check if backups exist before creating defaults
+            var recovered = TryRecoverFromBackups();
+            if (recovered != null && recovered.Count > 0)
+            {
+                UpdateItemsCache(recovered);
+                return recovered;
+            }
+
+            if (File.Exists(_appSettingsFilePath))
+            {
+                try
+                {
+                    using var sStream = File.OpenRead(_appSettingsFilePath);
+                    var s = await JsonSerializer.DeserializeAsync<AppSettings>(sStream, JsonOptions).ConfigureAwait(false);
+                    if (s?.HasCompletedInitialSetup == true)
+                    {
+                        var emptyList = new List<TriggerItem>();
+                        await SaveInternalAsync(emptyList, isGeneratingDefaults: true, createHistoricalSnapshot: true).ConfigureAwait(false);
+                        return emptyList;
+                    }
+                }
+                catch { }
+            }
+        }
+
+        // Before generating defaults, ensure any existing non-empty file was backed up as corrupted
+        if (File.Exists(_configFilePath) && new FileInfo(_configFilePath).Length > 0)
+        {
+            try
+            {
+                var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
+                var corruptedPath = Path.Combine(_backupsDir, $"triggerpoint_corrupted_{timestamp}.json");
+                if (!File.Exists(corruptedPath))
+                {
+                    File.Copy(_configFilePath, corruptedPath, true);
+                }
+            }
+            catch { }
+        }
+
+        // Only if primary doesn't exist and no backups exist, generate defaults
+        var defaults = CreateDefaultItems();
+        await SaveInternalAsync(defaults, isGeneratingDefaults: true, createHistoricalSnapshot: true).ConfigureAwait(false);
+        return defaults;
+    }
+
+    public async Task<bool> UpdateUsageStatsInMemoryAsync(Guid itemId, DateTime executedUtc)
+    {
+        await _fileLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (_cachedItems == null)
+            {
+                await LoadInternalUnlockedAsync().ConfigureAwait(false);
+            }
+
+            var item = _cachedItems?.FirstOrDefault(x => x.Id == itemId);
+            if (item == null) return false;
+
+            item.UsageStats.LaunchCount++;
+            item.UsageStats.LastExecutedUtc = executedUtc;
+            return true;
         }
         finally
         {
@@ -328,12 +419,12 @@ public class JsonConfigRepository : IConfigRepository
                 if (installStarterPack)
                 {
                     var defaults = CreateDefaultItems();
-                    await SaveInternalAsync(defaults, isGeneratingDefaults: true).ConfigureAwait(false);
+                    await SaveInternalAsync(defaults, isGeneratingDefaults: true, createHistoricalSnapshot: true).ConfigureAwait(false);
                 }
                 else
                 {
                     var empty = new List<TriggerItem>();
-                    await SaveInternalAsync(empty, isGeneratingDefaults: true).ConfigureAwait(false);
+                    await SaveInternalAsync(empty, isGeneratingDefaults: true, createHistoricalSnapshot: true).ConfigureAwait(false);
                 }
             }
         }
@@ -380,12 +471,15 @@ public class JsonConfigRepository : IConfigRepository
         }
     }
 
-    public async Task SaveAsync(IEnumerable<TriggerItem> items)
+    public Task SaveAsync(IEnumerable<TriggerItem> items) =>
+        SaveAsync(items, createHistoricalSnapshot: true);
+
+    public async Task SaveAsync(IEnumerable<TriggerItem> items, bool createHistoricalSnapshot)
     {
         await _fileLock.WaitAsync().ConfigureAwait(false);
         try
         {
-            await SaveInternalAsync(items, isGeneratingDefaults: false).ConfigureAwait(false);
+            await SaveInternalAsync(items, isGeneratingDefaults: false, createHistoricalSnapshot: createHistoricalSnapshot).ConfigureAwait(false);
         }
         finally
         {
@@ -400,6 +494,15 @@ public class JsonConfigRepository : IConfigRepository
         {
             if (File.Exists(_appSettingsFilePath))
             {
+                var fileInfo = new FileInfo(_appSettingsFilePath);
+                if (_cachedSettings != null &&
+                    fileInfo.Length > 0 &&
+                    fileInfo.LastWriteTimeUtc == _cachedSettingsLastWriteUtc &&
+                    fileInfo.Length == _cachedSettingsLength)
+                {
+                    return _cachedSettings.Clone();
+                }
+
                 try
                 {
                     using var stream = File.OpenRead(_appSettingsFilePath);
@@ -407,6 +510,7 @@ public class JsonConfigRepository : IConfigRepository
                     if (settings != null)
                     {
                         settings.Normalize();
+                        UpdateSettingsCache(settings);
                         return settings;
                     }
                 }
@@ -423,6 +527,7 @@ public class JsonConfigRepository : IConfigRepository
                             {
                                 File.Copy(_appSettingsBackupFilePath, _appSettingsFilePath, true);
                                 backupSettings.Normalize();
+                                UpdateSettingsCache(backupSettings);
                                 return backupSettings;
                             }
                         }
@@ -478,9 +583,10 @@ public class JsonConfigRepository : IConfigRepository
         }
 
         File.Move(tempFilePath, _appSettingsFilePath, true);
+        UpdateSettingsCache(settings);
     }
 
-    private async Task SaveInternalAsync(IEnumerable<TriggerItem> items, bool isGeneratingDefaults)
+    private async Task SaveInternalAsync(IEnumerable<TriggerItem> items, bool isGeneratingDefaults, bool createHistoricalSnapshot)
     {
         var itemList = new List<TriggerItem>(items);
 
@@ -505,11 +611,15 @@ public class JsonConfigRepository : IConfigRepository
         if (IsValidTriggerItemsFile(_configFilePath, out _))
         {
             File.Copy(_configFilePath, _backupFilePath, true);
-            RotateHistoricalSnapshot(_configFilePath);
+            if (createHistoricalSnapshot)
+            {
+                RotateHistoricalSnapshot(_configFilePath);
+            }
         }
 
         // 3. Atomically replace target
         File.Move(tempFilePath, _configFilePath, true);
+        UpdateItemsCache(itemList);
     }
 
     private static List<TriggerItem> CreateDefaultItems()

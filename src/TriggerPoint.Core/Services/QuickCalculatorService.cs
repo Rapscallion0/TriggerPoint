@@ -1,5 +1,5 @@
 using System;
-using System.Data;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using TriggerPoint.Core.Models;
@@ -1982,12 +1982,15 @@ public static class QuickCalculatorService
             foreach (char c in mathExpr)
             {
                 if (char.IsDigit(c)) hasDigit = true;
-                else if (c is '+' or '-' or '*' or '/' or '^' or '%') hasOp = true;
+                else if (c is '+' or '-' or '*' or '/' or '^' or '%' or '!') hasOp = true;
                 else if (char.IsLetter(c)) hasLetters = true;
             }
 
-            // Allow known scientific function names (sin, cos, tan, sqrt, etc.)
-            bool hasKnownFunc = Regex.IsMatch(mathExpr, @"\b(sin|cos|tan|asin|acos|atan|sqrt|cbrt|abs|log|ln|pi|e)\b", RegexOptions.IgnoreCase);
+            // Allow known scientific function names and constants
+            bool hasKnownFunc = Regex.IsMatch(
+                mathExpr,
+                @"\b(sin|cos|tan|asin|acos|atan|sqrt|cbrt|abs|log|ln|exp|round|floor|ceil|min|max|pow|pi|e)\b",
+                RegexOptions.IgnoreCase);
 
             // Allow pure standalone numbers (e.g. 42, 3.14) so they can evaluate and provide programmer/historical alternatives
             bool isPureNumber = double.TryParse(mathExpr, NumberStyles.Float, CultureInfo.InvariantCulture, out _);
@@ -1998,96 +2001,361 @@ public static class QuickCalculatorService
             }
         }
 
-        try
+        if (TryEvaluateMathExpression(mathExpr.AsSpan(), out double num))
         {
-            string sanitized = mathExpr;
+            if (double.IsNaN(num) || double.IsInfinity(num)) return null;
 
-            // Replace constants
-            sanitized = Regex.Replace(sanitized, @"\bpi\b", Math.PI.ToString(CultureInfo.InvariantCulture), RegexOptions.IgnoreCase);
-            sanitized = Regex.Replace(sanitized, @"\be\b", Math.E.ToString(CultureInfo.InvariantCulture), RegexOptions.IgnoreCase);
-
-            // Handle scientific functions
-            sanitized = Regex.Replace(sanitized, @"\bsqrt\s*\(\s*([0-9]+(?:\.[0-9]+)?)\s*\)", match =>
-            {
-                double v = double.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
-                return Math.Sqrt(v).ToString(CultureInfo.InvariantCulture);
-            }, RegexOptions.IgnoreCase);
-
-            sanitized = Regex.Replace(sanitized, @"\bcbrt\s*\(\s*([0-9]+(?:\.[0-9]+)?)\s*\)", match =>
-            {
-                double v = double.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
-                return Math.Cbrt(v).ToString(CultureInfo.InvariantCulture);
-            }, RegexOptions.IgnoreCase);
-
-            sanitized = Regex.Replace(sanitized, @"\babs\s*\(\s*(-?[0-9]+(?:\.[0-9]+)?)\s*\)", match =>
-            {
-                double v = double.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
-                return Math.Abs(v).ToString(CultureInfo.InvariantCulture);
-            }, RegexOptions.IgnoreCase);
-
-            sanitized = Regex.Replace(sanitized, @"\blog\s*\(\s*([0-9]+(?:\.[0-9]+)?)\s*\)", match =>
-            {
-                double v = double.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
-                return Math.Log10(v).ToString(CultureInfo.InvariantCulture);
-            }, RegexOptions.IgnoreCase);
-
-            sanitized = Regex.Replace(sanitized, @"\bln\s*\(\s*([0-9]+(?:\.[0-9]+)?)\s*\)", match =>
-            {
-                double v = double.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
-                return Math.Log(v).ToString(CultureInfo.InvariantCulture);
-            }, RegexOptions.IgnoreCase);
-
-            // Trigonometry (defaults to degrees for desktop calculator intuitiveness)
-            sanitized = Regex.Replace(sanitized, @"\bsin\s*\(\s*([0-9]+(?:\.[0-9]+)?)\s*\)", match =>
-            {
-                double v = double.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
-                double rad = v * Math.PI / 180.0;
-                return Math.Round(Math.Sin(rad), 8).ToString(CultureInfo.InvariantCulture);
-            }, RegexOptions.IgnoreCase);
-
-            sanitized = Regex.Replace(sanitized, @"\bcos\s*\(\s*([0-9]+(?:\.[0-9]+)?)\s*\)", match =>
-            {
-                double v = double.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
-                double rad = v * Math.PI / 180.0;
-                return Math.Round(Math.Cos(rad), 8).ToString(CultureInfo.InvariantCulture);
-            }, RegexOptions.IgnoreCase);
-
-            sanitized = Regex.Replace(sanitized, @"\btan\s*\(\s*([0-9]+(?:\.[0-9]+)?)\s*\)", match =>
-            {
-                double v = double.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
-                double rad = v * Math.PI / 180.0;
-                return Math.Round(Math.Tan(rad), 8).ToString(CultureInfo.InvariantCulture);
-            }, RegexOptions.IgnoreCase);
-
-            // Normalize powers: 2^10
-            if (sanitized.Contains('^'))
-            {
-                sanitized = Regex.Replace(sanitized, @"([0-9]+(?:\.[0-9]+)?)\s*\^\s*([0-9]+(?:\.[0-9]+)?)", match =>
-                {
-                    double b = double.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
-                    double exp = double.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture);
-                    return Math.Pow(b, exp).ToString(CultureInfo.InvariantCulture);
-                });
-            }
-
-            using var dt = new DataTable();
-            var result = dt.Compute(sanitized, null);
-
-            if (result != null && double.TryParse(result.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out double num))
-            {
-                if (double.IsNaN(num) || double.IsInfinity(num)) return null;
-
-                string formatted = FormatDouble(num);
-                var alts = GenerateNumberAlternatives(num);
-                return new CalculatorResult(mathExpr, formatted, "Calculator result", alts);
-            }
-        }
-        catch
-        {
-            // Invalid math syntax
+            string formatted = FormatDouble(num);
+            var alts = GenerateNumberAlternatives(num);
+            return new CalculatorResult(mathExpr, formatted, "Calculator result", alts);
         }
 
         return null;
+    }
+
+    private ref struct MathExpressionParser
+    {
+        private readonly ReadOnlySpan<char> _text;
+        private int _pos;
+        public bool HasError;
+
+        public MathExpressionParser(ReadOnlySpan<char> text)
+        {
+            _text = text;
+            _pos = 0;
+            HasError = false;
+        }
+
+        public double Parse()
+        {
+            double val = ParseAddSub();
+            SkipWhitespace();
+            if (_pos < _text.Length)
+            {
+                HasError = true;
+                return double.NaN;
+            }
+            return val;
+        }
+
+        private void SkipWhitespace()
+        {
+            while (_pos < _text.Length && char.IsWhiteSpace(_text[_pos]))
+            {
+                _pos++;
+            }
+        }
+
+        private double ParseAddSub()
+        {
+            double left = ParseMulDiv();
+            while (!HasError)
+            {
+                SkipWhitespace();
+                if (_pos >= _text.Length) break;
+
+                char op = _text[_pos];
+                if (op is not ('+' or '-')) break;
+
+                _pos++;
+                double right = ParseMulDiv();
+                left = op == '+' ? left + right : left - right;
+            }
+            return left;
+        }
+
+        private double ParseMulDiv()
+        {
+            double left = ParseUnary();
+            while (!HasError)
+            {
+                SkipWhitespace();
+                if (_pos >= _text.Length) break;
+
+                char c = _text[_pos];
+                if (c is '*' or '/' or '%')
+                {
+                    _pos++;
+                    double right = ParseUnary();
+                    if (c == '*') left *= right;
+                    else if (c == '/')
+                    {
+                        if (right == 0.0)
+                        {
+                            HasError = true;
+                            return double.NaN;
+                        }
+                        left /= right;
+                    }
+                    else
+                    {
+                        if (right == 0.0)
+                        {
+                            HasError = true;
+                            return double.NaN;
+                        }
+                        left %= right;
+                    }
+                }
+                else if (c == '(' || char.IsLetter(c))
+                {
+                    // Implicit multiplication: e.g. 2(3+4), 2pi, 3sqrt(16)
+                    double right = ParsePower();
+                    left *= right;
+                }
+                else
+                {
+                    break;
+                }
+            }
+            return left;
+        }
+
+        private double ParseUnary()
+        {
+            SkipWhitespace();
+            if (_pos < _text.Length)
+            {
+                if (_text[_pos] == '+')
+                {
+                    _pos++;
+                    return ParseUnary();
+                }
+                if (_text[_pos] == '-')
+                {
+                    _pos++;
+                    return -ParseUnary();
+                }
+            }
+            return ParsePower();
+        }
+
+        private double ParsePower()
+        {
+            double baseVal = ParsePostfix();
+            if (HasError) return double.NaN;
+
+            SkipWhitespace();
+            if (_pos < _text.Length && _text[_pos] == '^')
+            {
+                _pos++;
+                // Right-associative power: 2^3^2 = 2^(3^2) = 512, and 2^-3 = 0.125
+                double expVal = ParseUnary();
+                baseVal = Math.Pow(baseVal, expVal);
+            }
+            return baseVal;
+        }
+
+        private double ParsePostfix()
+        {
+            double val = ParsePrimary();
+            while (!HasError)
+            {
+                SkipWhitespace();
+                if (_pos < _text.Length && _text[_pos] == '!')
+                {
+                    // Ensure it's not "!="
+                    if (_pos + 1 < _text.Length && _text[_pos + 1] == '=')
+                    {
+                        HasError = true;
+                        return double.NaN;
+                    }
+                    _pos++;
+                    if (val < 0 || val % 1 != 0 || val > 170)
+                    {
+                        HasError = true;
+                        return double.NaN;
+                    }
+                    int n = (int)val;
+                    double fact = 1.0;
+                    for (int i = 2; i <= n; i++) fact *= i;
+                    val = fact;
+                }
+                else
+                {
+                    break;
+                }
+            }
+            return val;
+        }
+
+        private double ParsePrimary()
+        {
+            SkipWhitespace();
+            if (_pos >= _text.Length)
+            {
+                HasError = true;
+                return double.NaN;
+            }
+
+            char c = _text[_pos];
+
+            // Parenthesized expression
+            if (c == '(')
+            {
+                _pos++;
+                double inner = ParseAddSub();
+                SkipWhitespace();
+                if (_pos >= _text.Length || _text[_pos] != ')')
+                {
+                    HasError = true;
+                    return double.NaN;
+                }
+                _pos++;
+                return inner;
+            }
+
+            // Number literal (supports decimal and scientific notation like 1.5e-3)
+            if (char.IsDigit(c) || c == '.')
+            {
+                int start = _pos;
+                bool hasDot = false;
+                while (_pos < _text.Length && (char.IsDigit(_text[_pos]) || (!hasDot && _text[_pos] == '.')))
+                {
+                    if (_text[_pos] == '.') hasDot = true;
+                    _pos++;
+                }
+
+                // Scientific exponent only if followed by +/- or digit (so "2e" is implicit 2 * Math.E)
+                if (_pos < _text.Length && (_text[_pos] == 'e' || _text[_pos] == 'E'))
+                {
+                    int nextIdx = _pos + 1;
+                    if (nextIdx < _text.Length &&
+                        (char.IsDigit(_text[nextIdx]) ||
+                         ((_text[nextIdx] == '+' || _text[nextIdx] == '-') && nextIdx + 1 < _text.Length && char.IsDigit(_text[nextIdx + 1]))))
+                    {
+                        _pos++; // consume e/E
+                        if (_text[_pos] is '+' or '-') _pos++;
+                        while (_pos < _text.Length && char.IsDigit(_text[_pos])) _pos++;
+                    }
+                }
+
+                var numSlice = _text.Slice(start, _pos - start);
+                if (!double.TryParse(numSlice, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed))
+                {
+                    HasError = true;
+                    return double.NaN;
+                }
+                return parsed;
+            }
+
+            // Identifier: constant or function call
+            if (char.IsLetter(c))
+            {
+                int start = _pos;
+                while (_pos < _text.Length && char.IsLetterOrDigit(_text[_pos]))
+                {
+                    _pos++;
+                }
+
+                var ident = _text.Slice(start, _pos - start);
+                SkipWhitespace();
+
+                // Function call: ident(...)
+                if (_pos < _text.Length && _text[_pos] == '(')
+                {
+                    _pos++; // consume '('
+                    var args = new List<double>(2);
+                    SkipWhitespace();
+                    if (_pos < _text.Length && _text[_pos] != ')')
+                    {
+                        while (true)
+                        {
+                            double arg = ParseAddSub();
+                            if (HasError) return double.NaN;
+                            args.Add(arg);
+                            SkipWhitespace();
+                            if (_pos < _text.Length && _text[_pos] == ',')
+                            {
+                                _pos++;
+                                continue;
+                            }
+                            break;
+                        }
+                    }
+
+                    if (_pos >= _text.Length || _text[_pos] != ')')
+                    {
+                        HasError = true;
+                        return double.NaN;
+                    }
+                    _pos++; // consume ')'
+                    return EvaluateFunction(ident, args);
+                }
+
+                // Constant: pi or e
+                if (ident.Equals("pi", StringComparison.OrdinalIgnoreCase)) return Math.PI;
+                if (ident.Equals("e", StringComparison.OrdinalIgnoreCase)) return Math.E;
+
+                HasError = true;
+                return double.NaN;
+            }
+
+            HasError = true;
+            return double.NaN;
+        }
+
+        private double EvaluateFunction(ReadOnlySpan<char> name, List<double> args)
+        {
+            if (args.Count == 0)
+            {
+                HasError = true;
+                return double.NaN;
+            }
+
+            double a0 = args[0];
+            if (args.Count == 1)
+            {
+                if (name.Equals("sqrt", StringComparison.OrdinalIgnoreCase)) return Math.Sqrt(a0);
+                if (name.Equals("cbrt", StringComparison.OrdinalIgnoreCase)) return Math.Cbrt(a0);
+                if (name.Equals("abs", StringComparison.OrdinalIgnoreCase)) return Math.Abs(a0);
+                if (name.Equals("log", StringComparison.OrdinalIgnoreCase) || name.Equals("log10", StringComparison.OrdinalIgnoreCase)) return Math.Log10(a0);
+                if (name.Equals("ln", StringComparison.OrdinalIgnoreCase)) return Math.Log(a0);
+                if (name.Equals("exp", StringComparison.OrdinalIgnoreCase)) return Math.Exp(a0);
+                if (name.Equals("floor", StringComparison.OrdinalIgnoreCase)) return Math.Floor(a0);
+                if (name.Equals("ceil", StringComparison.OrdinalIgnoreCase)) return Math.Ceiling(a0);
+                if (name.Equals("round", StringComparison.OrdinalIgnoreCase)) return Math.Round(a0, MidpointRounding.AwayFromZero);
+
+                // Trigonometry in degrees
+                if (name.Equals("sin", StringComparison.OrdinalIgnoreCase)) return Math.Round(Math.Sin(a0 * Math.PI / 180.0), 8);
+                if (name.Equals("cos", StringComparison.OrdinalIgnoreCase)) return Math.Round(Math.Cos(a0 * Math.PI / 180.0), 8);
+                if (name.Equals("tan", StringComparison.OrdinalIgnoreCase)) return Math.Round(Math.Tan(a0 * Math.PI / 180.0), 8);
+                if (name.Equals("asin", StringComparison.OrdinalIgnoreCase)) return Math.Round(Math.Asin(a0) * 180.0 / Math.PI, 8);
+                if (name.Equals("acos", StringComparison.OrdinalIgnoreCase)) return Math.Round(Math.Acos(a0) * 180.0 / Math.PI, 8);
+                if (name.Equals("atan", StringComparison.OrdinalIgnoreCase)) return Math.Round(Math.Atan(a0) * 180.0 / Math.PI, 8);
+            }
+            else if (args.Count == 2)
+            {
+                double a1 = args[1];
+                if (name.Equals("pow", StringComparison.OrdinalIgnoreCase)) return Math.Pow(a0, a1);
+                if (name.Equals("log", StringComparison.OrdinalIgnoreCase)) return Math.Log(a0, a1);
+                if (name.Equals("round", StringComparison.OrdinalIgnoreCase) && a1 is >= 0 and <= 15 && a1 % 1 == 0)
+                    return Math.Round(a0, (int)a1, MidpointRounding.AwayFromZero);
+            }
+
+            if (name.Equals("min", StringComparison.OrdinalIgnoreCase))
+            {
+                double min = a0;
+                for (int i = 1; i < args.Count; i++) if (args[i] < min) min = args[i];
+                return min;
+            }
+            if (name.Equals("max", StringComparison.OrdinalIgnoreCase))
+            {
+                double max = a0;
+                for (int i = 1; i < args.Count; i++) if (args[i] > max) max = args[i];
+                return max;
+            }
+
+            HasError = true;
+            return double.NaN;
+        }
+    }
+
+    internal static bool TryEvaluateMathExpression(ReadOnlySpan<char> expr, out double result)
+    {
+        var parser = new MathExpressionParser(expr);
+        result = parser.Parse();
+        return !parser.HasError && !double.IsNaN(result) && !double.IsInfinity(result);
     }
 
     private static IReadOnlyList<AlternativeMeasurement>? GenerateNumberAlternatives(double num)

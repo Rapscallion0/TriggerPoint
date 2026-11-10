@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using TriggerPoint.Core.Models;
@@ -665,6 +667,13 @@ public static partial class PlaceholderParser
         return true;
     }
 
+    private static readonly JsonSerializerOptions PrettyJsonOptions = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions MinifiedJsonOptions = new() { WriteIndented = false };
+    private static readonly JsonSerializerOptions RelaxedEscapeJsonOptions = new()
+    {
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
     private static async Task<(bool Handled, string Result)> TryEvaluateClipboardTokenAsync(
         string rawTag, 
         Func<Task<string>>? clipboardProvider)
@@ -685,18 +694,185 @@ public static partial class PlaceholderParser
             return (true, text);
         }
 
-        var mod = tag[(colonIdx + 1)..].Trim().ToLowerInvariant();
-        string res = mod switch
+        var modifiers = tag[(colonIdx + 1)..].Split(':', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        string current = text;
+        foreach (var rawMod in modifiers)
+        {
+            current = ApplyClipboardTransform(current, rawMod.ToLowerInvariant());
+        }
+
+        return (true, current);
+    }
+
+    private static string ApplyClipboardTransform(string text, string mod)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return mod == "count" ? "0" : string.Empty;
+        }
+
+        return mod switch
         {
             "trim" => text.Trim(),
             "lower" or "lowercase" => text.ToLowerInvariant(),
             "upper" or "uppercase" => text.ToUpperInvariant(),
+            "title" or "titlecase" => CultureInfo.InvariantCulture.TextInfo.ToTitleCase(text.ToLowerInvariant()),
+            "camel" or "camelcase" => ToCamelCase(text),
+            "pascal" or "pascalcase" => ToPascalCase(text),
+            "snake" or "snakecase" => string.Join("_", SplitIdentifierWords(text).Select(w => w.ToLowerInvariant())),
+            "kebab" or "kebabcase" => string.Join("-", SplitIdentifierWords(text).Select(w => w.ToLowerInvariant())),
+            "slug" => ToSlug(text),
             "urlencode" => Uri.EscapeDataString(text),
-            "urldecode" => Uri.UnescapeDataString(text),
+            "urldecode" => SafeUrlDecode(text),
+            "base64" or "base64encode" => Convert.ToBase64String(Encoding.UTF8.GetBytes(text)),
+            "base64decode" => TryDecodeBase64(text),
+            "json" or "jsonpretty" => TryFormatJson(text, indented: true),
+            "jsonmin" or "jsonminify" => TryFormatJson(text, indented: false),
+            "escape" => JsonSerializer.Serialize(text, RelaxedEscapeJsonOptions)[1..^1],
+            "sort" => SortLines(text),
+            "dedupe" or "distinct" => DedupeLines(text),
+            "count" or "length" => text.Length.ToString(CultureInfo.InvariantCulture),
             _ => text
         };
+    }
 
-        return (true, res);
+    private static List<string> SplitIdentifierWords(string input)
+    {
+        var words = new List<string>();
+        var current = new StringBuilder();
+
+        for (int i = 0; i < input.Length; i++)
+        {
+            char c = input[i];
+            if (!char.IsLetterOrDigit(c))
+            {
+                if (current.Length > 0)
+                {
+                    words.Add(current.ToString());
+                    current.Clear();
+                }
+                continue;
+            }
+
+            if (current.Length > 0 && char.IsUpper(c))
+            {
+                bool prevLower = char.IsLower(input[i - 1]) || char.IsDigit(input[i - 1]);
+                bool nextLower = (i + 1 < input.Length) && char.IsLower(input[i + 1]);
+                if (prevLower || (char.IsUpper(input[i - 1]) && nextLower))
+                {
+                    words.Add(current.ToString());
+                    current.Clear();
+                }
+            }
+
+            current.Append(c);
+        }
+
+        if (current.Length > 0)
+        {
+            words.Add(current.ToString());
+        }
+
+        return words;
+    }
+
+    private static string CapitalizeWord(string word)
+    {
+        if (string.IsNullOrEmpty(word)) return string.Empty;
+        if (word.Length == 1) return word.ToUpperInvariant();
+        return char.ToUpperInvariant(word[0]) + word[1..].ToLowerInvariant();
+    }
+
+    private static string ToCamelCase(string input)
+    {
+        var words = SplitIdentifierWords(input);
+        if (words.Count == 0) return string.Empty;
+        var sb = new StringBuilder(words[0].ToLowerInvariant());
+        for (int i = 1; i < words.Count; i++)
+        {
+            sb.Append(CapitalizeWord(words[i]));
+        }
+        return sb.ToString();
+    }
+
+    private static string ToPascalCase(string input)
+    {
+        var words = SplitIdentifierWords(input);
+        if (words.Count == 0) return string.Empty;
+        var sb = new StringBuilder();
+        foreach (var w in words)
+        {
+            sb.Append(CapitalizeWord(w));
+        }
+        return sb.ToString();
+    }
+
+    private static string ToSlug(string input)
+    {
+        var words = SplitIdentifierWords(input);
+        return string.Join("-", words.Select(w => w.ToLowerInvariant()));
+    }
+
+    private static string SafeUrlDecode(string input)
+    {
+        try
+        {
+            return Uri.UnescapeDataString(input);
+        }
+        catch
+        {
+            return input;
+        }
+    }
+
+    private static string TryDecodeBase64(string input)
+    {
+        try
+        {
+            var bytes = Convert.FromBase64String(input.Trim());
+            return Encoding.UTF8.GetString(bytes);
+        }
+        catch
+        {
+            return input;
+        }
+    }
+
+    private static string TryFormatJson(string input, bool indented)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(input);
+            return JsonSerializer.Serialize(doc.RootElement, indented ? PrettyJsonOptions : MinifiedJsonOptions);
+        }
+        catch
+        {
+            return input;
+        }
+    }
+
+    private static string SortLines(string input)
+    {
+        string newline = input.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+        var lines = input.Replace("\r\n", "\n").Split('\n');
+        Array.Sort(lines, StringComparer.OrdinalIgnoreCase);
+        return string.Join(newline, lines);
+    }
+
+    private static string DedupeLines(string input)
+    {
+        string newline = input.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+        var lines = input.Replace("\r\n", "\n").Split('\n');
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var unique = new List<string>(lines.Length);
+        foreach (var line in lines)
+        {
+            if (seen.Add(line))
+            {
+                unique.Add(line);
+            }
+        }
+        return string.Join(newline, unique);
     }
 
     private static bool TryEvaluateGuidToken(string rawTag, out string result)

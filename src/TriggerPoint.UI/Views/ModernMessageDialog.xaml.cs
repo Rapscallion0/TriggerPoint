@@ -1,12 +1,20 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using TriggerPoint.Infrastructure.Win32;
 
 namespace TriggerPoint.UI.Views;
+
+public record BrowserTargetRuleOption(
+    string Label,
+    string PatternValue,
+    string Description,
+    bool IsRecommended = false);
 
 public enum ModernDialogType
 {
@@ -51,6 +59,7 @@ public partial class ModernMessageDialog : Window
     public ImportChoice ImportUserChoice { get; private set; } = ImportChoice.Cancel;
     public ConvertJsChoice ConvertJsUserChoice { get; private set; } = ConvertJsChoice.Cancel;
     public SavePromptChoice SaveChoice { get; private set; } = SavePromptChoice.Cancel;
+    public string? SelectedChoiceValue { get; private set; }
 
     public ModernMessageDialog(
         string title, 
@@ -305,6 +314,232 @@ public partial class ModernMessageDialog : Window
         dlg.AlternateBtn.Visibility = Visibility.Visible;
         dlg.ShowDialog();
         return dlg.SaveChoice;
+    }
+
+    public static string? ShowBrowserTargetChoiceDialog(
+        Window? owner,
+        string title,
+        string message,
+        IReadOnlyList<BrowserTargetRuleOption> options,
+        string primaryButtonText = "Add Selected Rule")
+    {
+        if (options == null || options.Count == 0) return null;
+
+        var dlg = new ModernMessageDialog(
+            title,
+            message,
+            primaryButtonText: primaryButtonText,
+            secondaryButtonText: "Cancel",
+            dialogType: ModernDialogType.Question)
+        {
+            Owner = owner,
+            MaxWidth = 580
+        };
+
+        dlg.DialogIconText.Text = "🌐";
+        dlg.ChoiceOptionsPanel.Visibility = Visibility.Visible;
+        dlg.SelectedChoiceValue = options[0].PatternValue;
+
+        var bgInput = Application.Current.TryFindResource("BgInputBrush") as Brush ?? Brushes.Transparent;
+        var borderDefault = Application.Current.TryFindResource("BorderBrush") as Brush ?? Brushes.Gray;
+        var accentBrush = Application.Current.TryFindResource("AccentColorBrush") as Brush ?? Brushes.DodgerBlue;
+        var textPrimary = Application.Current.TryFindResource("TextPrimaryBrush") as Brush ?? Brushes.White;
+        var textSecondary = Application.Current.TryFindResource("TextSecondaryBrush") as Brush ?? Brushes.LightGray;
+        var bgTertiary = Application.Current.TryFindResource("BgTertiaryBrush") as Brush ?? Brushes.DarkSlateGray;
+
+        var optionBorders = new List<Border>();
+        var radioButtons = new List<RadioButton>();
+        bool suppressTextSync = false;
+
+        var editBox = new TextBox
+        {
+            Text = options[0].PatternValue,
+            FontFamily = new FontFamily("Consolas, Cascadia Mono, Courier New"),
+            FontSize = 12.5,
+            Height = 32,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Padding = new Thickness(8, 4, 8, 4)
+        };
+        if (Application.Current.TryFindResource("ModernTextBoxStyle") is Style modernTbStyle)
+        {
+            editBox.Style = modernTbStyle;
+        }
+
+        editBox.TextChanged += (_, _) =>
+        {
+            if (suppressTextSync) return;
+            dlg.SelectedChoiceValue = editBox.Text.Trim();
+            dlg.PrimaryBtn.IsEnabled = !string.IsNullOrWhiteSpace(dlg.SelectedChoiceValue);
+        };
+
+        for (int i = 0; i < options.Count; i++)
+        {
+            var opt = options[i];
+            int idx = i;
+
+            var radio = new RadioButton
+            {
+                GroupName = "BrowserRuleOptionGroup",
+                IsChecked = i == 0,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(0, 3, 10, 0)
+            };
+
+            var headerStack = new WrapPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            headerStack.Children.Add(new TextBlock
+            {
+                Text = opt.Label,
+                FontWeight = FontWeights.SemiBold,
+                FontSize = 12.5,
+                Foreground = textPrimary,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 8, 2)
+            });
+
+            if (opt.IsRecommended)
+            {
+                var recBadge = new Border
+                {
+                    Background = accentBrush,
+                    CornerRadius = new CornerRadius(4),
+                    Padding = new Thickness(6, 1, 6, 1),
+                    Margin = new Thickness(0, 0, 0, 2),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Child = new TextBlock
+                    {
+                        Text = "Recommended",
+                        FontSize = 10,
+                        FontWeight = FontWeights.SemiBold,
+                        Foreground = Brushes.White
+                    }
+                };
+                headerStack.Children.Add(recBadge);
+            }
+
+            var patternBadge = new Border
+            {
+                Background = bgTertiary,
+                BorderBrush = borderDefault,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(4),
+                Padding = new Thickness(7, 3, 7, 3),
+                Margin = new Thickness(0, 3, 0, 3),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Child = new TextBlock
+                {
+                    Text = opt.PatternValue,
+                    FontFamily = new FontFamily("Consolas, Cascadia Mono, Courier New"),
+                    FontSize = 12,
+                    Foreground = textPrimary,
+                    TextWrapping = TextWrapping.Wrap
+                }
+            };
+
+            var descText = new TextBlock
+            {
+                Text = opt.Description,
+                FontSize = 11,
+                Foreground = textSecondary,
+                TextWrapping = TextWrapping.Wrap
+            };
+
+            var contentStack = new StackPanel();
+            contentStack.Children.Add(headerStack);
+            contentStack.Children.Add(patternBadge);
+            contentStack.Children.Add(descText);
+
+            var rowGrid = new Grid();
+            rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            Grid.SetColumn(radio, 0);
+            Grid.SetColumn(contentStack, 1);
+            rowGrid.Children.Add(radio);
+            rowGrid.Children.Add(contentStack);
+
+            var rowBorder = new Border
+            {
+                Background = bgInput,
+                BorderBrush = i == 0 ? accentBrush : borderDefault,
+                BorderThickness = new Thickness(i == 0 ? 1.5 : 1),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(10, 8, 10, 8),
+                Margin = new Thickness(0, 0, 0, 8),
+                Cursor = Cursors.Hand,
+                Child = rowGrid
+            };
+
+            void SelectOption(bool focusEditor)
+            {
+                suppressTextSync = true;
+                editBox.Text = opt.PatternValue;
+                suppressTextSync = false;
+
+                dlg.SelectedChoiceValue = opt.PatternValue;
+                dlg.PrimaryBtn.IsEnabled = !string.IsNullOrWhiteSpace(dlg.SelectedChoiceValue);
+
+                for (int j = 0; j < optionBorders.Count; j++)
+                {
+                    bool isSel = j == idx;
+                    radioButtons[j].IsChecked = isSel;
+                    optionBorders[j].BorderBrush = isSel ? accentBrush : borderDefault;
+                    optionBorders[j].BorderThickness = new Thickness(isSel ? 1.5 : 1);
+                }
+
+                if (focusEditor)
+                {
+                    editBox.Focus();
+                    editBox.CaretIndex = editBox.Text.Length;
+                }
+            }
+
+            radio.Checked += (_, _) => SelectOption(focusEditor: true);
+            rowBorder.MouseLeftButtonDown += (_, e) =>
+            {
+                SelectOption(focusEditor: true);
+                if (e.ClickCount == 2 && !string.IsNullOrWhiteSpace(dlg.SelectedChoiceValue))
+                {
+                    dlg.UserConfirmed = true;
+                    dlg.SafeClose(true);
+                }
+            };
+
+            optionBorders.Add(rowBorder);
+            radioButtons.Add(radio);
+            dlg.ChoiceOptionsPanel.Children.Add(rowBorder);
+        }
+
+        var editSection = new StackPanel
+        {
+            Margin = new Thickness(0, 6, 0, 0)
+        };
+        editSection.Children.Add(new TextBlock
+        {
+            Text = "Rule Pattern (Editable):",
+            FontWeight = FontWeights.SemiBold,
+            FontSize = 12,
+            Foreground = textPrimary,
+            Margin = new Thickness(0, 0, 0, 4)
+        });
+        editSection.Children.Add(editBox);
+        editSection.Children.Add(new TextBlock
+        {
+            Text = "Tip: You can edit this pattern or add * wildcards before adding.",
+            FontSize = 11,
+            Foreground = textSecondary,
+            Margin = new Thickness(0, 4, 0, 0)
+        });
+
+        dlg.ChoiceOptionsPanel.Children.Add(editSection);
+        dlg.Loaded += (_, _) =>
+        {
+            editBox.Focus();
+            editBox.CaretIndex = editBox.Text.Length;
+        };
+
+        dlg.ShowDialog();
+        return dlg.UserConfirmed && !string.IsNullOrWhiteSpace(dlg.SelectedChoiceValue)
+            ? dlg.SelectedChoiceValue.Trim()
+            : null;
     }
 
     private void SafeClose(bool? result)

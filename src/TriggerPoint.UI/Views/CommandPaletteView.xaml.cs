@@ -72,6 +72,8 @@ public static class TextBlockInlines
 
 public class PaletteItemViewModel
 {
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, ImageSource> ThumbnailCache = new();
+
     public TriggerItem Item { get; }
     public FuzzyMatchResult? MatchResult { get; }
     public string? ParentPath { get; }
@@ -82,7 +84,7 @@ public class PaletteItemViewModel
     public bool IsSelectable => !IsSectionHeader;
     public Visibility HeaderVisibility => IsSectionHeader ? Visibility.Visible : Visibility.Collapsed;
     public Visibility ActionVisibility => IsSelectable ? Visibility.Visible : Visibility.Collapsed;
-    public bool IsSystemAction => Item != null && (Item.Id == App.OpenSettingsActionId || Item.Id == CommandPaletteView.AppSettingsVirtualId || Item.Id == CommandPaletteView.RestartAsAdminVirtualId || Item.Id == CommandPaletteView.RestartAsStandardUserVirtualId);
+    public bool IsSystemAction => Item != null && CommandPaletteView.IsVirtualSystemActionId(Item.Id);
     public bool IsCalculatorResult { get; init; }
     public CalculatorResult? CalcResult { get; set; }
     public bool IsServiceItem { get; init; }
@@ -452,6 +454,9 @@ public class PaletteItemViewModel
             {
                 if (Item?.Id == CommandPaletteView.RestartAsAdminVirtualId) return "🛡️";
                 if (Item?.Id == CommandPaletteView.RestartAsStandardUserVirtualId) return "🔄";
+                if (Item?.Id == CommandPaletteView.ToggleAlwaysOnTopVirtualId) return "📌";
+                if (Item?.Id == CommandPaletteView.CenterActiveWindowVirtualId) return "🎯";
+                if (Item?.Id == CommandPaletteView.MoveWindowNextMonitorVirtualId) return "🖥️";
                 return Item?.Id == App.OpenSettingsActionId ? "🎯" : "⚙️";
             }
             return Item?.ActionType switch
@@ -668,20 +673,32 @@ public class PaletteItemViewModel
             SecondaryDetailSegments = BuildHighlightedSegments(fullExcerpt, contextExcerptMatchedIndices);
         }
 
-        if (clipItem.Type == ClipboardItemType.Image && !string.IsNullOrEmpty(clipItem.ImagePath) && File.Exists(clipItem.ImagePath))
+        if (clipItem.Type == ClipboardItemType.Image && !string.IsNullOrEmpty(clipItem.ImagePath))
         {
-            try
+            if (ThumbnailCache.TryGetValue(clipItem.Id, out var cachedThumb))
             {
-                var bi = new System.Windows.Media.Imaging.BitmapImage();
-                bi.BeginInit();
-                bi.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
-                bi.DecodePixelWidth = 56;
-                bi.UriSource = new Uri(clipItem.ImagePath, UriKind.Absolute);
-                bi.EndInit();
-                bi.Freeze();
-                ClipboardThumbnailSource = bi;
+                ClipboardThumbnailSource = cachedThumb;
             }
-            catch { }
+            else if (File.Exists(clipItem.ImagePath))
+            {
+                try
+                {
+                    var bi = new System.Windows.Media.Imaging.BitmapImage();
+                    bi.BeginInit();
+                    bi.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                    bi.DecodePixelWidth = 56;
+                    bi.UriSource = new Uri(clipItem.ImagePath, UriKind.Absolute);
+                    bi.EndInit();
+                    bi.Freeze();
+                    if (ThumbnailCache.Count > 200)
+                    {
+                        ThumbnailCache.Clear();
+                    }
+                    ThumbnailCache[clipItem.Id] = bi;
+                    ClipboardThumbnailSource = bi;
+                }
+                catch { }
+            }
         }
     }
 
@@ -802,6 +819,18 @@ public partial class CommandPaletteView : Window
     public static readonly Guid AppSettingsVirtualId = Guid.Parse("00000000-0000-0000-0000-000000000003");
     public static readonly Guid RestartAsAdminVirtualId = Guid.Parse("00000000-0000-0000-0000-000000000004");
     public static readonly Guid RestartAsStandardUserVirtualId = Guid.Parse("00000000-0000-0000-0000-000000000005");
+    public static readonly Guid ToggleAlwaysOnTopVirtualId = Guid.Parse("00000000-0000-0000-0000-000000000006");
+    public static readonly Guid CenterActiveWindowVirtualId = Guid.Parse("00000000-0000-0000-0000-000000000007");
+    public static readonly Guid MoveWindowNextMonitorVirtualId = Guid.Parse("00000000-0000-0000-0000-000000000008");
+
+    public static bool IsVirtualSystemActionId(Guid id) =>
+        id == App.OpenSettingsActionId ||
+        id == AppSettingsVirtualId ||
+        id == RestartAsAdminVirtualId ||
+        id == RestartAsStandardUserVirtualId ||
+        id == ToggleAlwaysOnTopVirtualId ||
+        id == CenterActiveWindowVirtualId ||
+        id == MoveWindowNextMonitorVirtualId;
 
     private readonly List<TriggerItem> _allItems;
     private readonly IActionExecutor _executor;
@@ -844,6 +873,9 @@ public partial class CommandPaletteView : Window
     private readonly TriggerItem _virtualAppSettingsItem;
     private readonly TriggerItem _virtualRestartAdminItem;
     private readonly TriggerItem _virtualRestartStandardUserItem;
+    private readonly TriggerItem _virtualToggleTopMostItem;
+    private readonly TriggerItem _virtualCenterWindowItem;
+    private readonly TriggerItem _virtualMoveNextMonitorItem;
     private readonly Dictionary<string, string> _pendingServiceOperations = new(StringComparer.OrdinalIgnoreCase);
     private Storyboard? _serviceSpinnerStoryboard;
 
@@ -953,6 +985,36 @@ public partial class CommandPaletteView : Window
                 : "Relaunch TriggerPoint standard process",
             ActionType = ActionType.Shell,
             Payload = new ActionPayload { Command = isElevated ? "Restart as Standard User unelevated de-elevate remove admin reboot" : "Restart TriggerPoint reboot reload daemon" }
+        };
+
+        bool isTargetTopMost = _targetHwnd != IntPtr.Zero && NativeMethods.IsWindowTopMost(_targetHwnd);
+        _virtualToggleTopMostItem = new TriggerItem
+        {
+            Id = ToggleAlwaysOnTopVirtualId,
+            Name = isTargetTopMost ? "Unpin Window (Disable Always on Top)" : "Toggle Always on Top (Pin Window)",
+            Description = isTargetTopMost
+                ? "Remove Always-on-Top pin from the active target window"
+                : "Pin or unpin the active target window above all other windows",
+            ActionType = ActionType.Shell,
+            Payload = new ActionPayload { Command = "Pin Window Always on Top Topmost Unpin" }
+        };
+
+        _virtualCenterWindowItem = new TriggerItem
+        {
+            Id = CenterActiveWindowVirtualId,
+            Name = "Center Active Window",
+            Description = "Center the active target window on its current monitor",
+            ActionType = ActionType.Shell,
+            Payload = new ActionPayload { Command = "Center Active Window Monitor Screen Align" }
+        };
+
+        _virtualMoveNextMonitorItem = new TriggerItem
+        {
+            Id = MoveWindowNextMonitorVirtualId,
+            Name = "Move Active Window to Next Monitor",
+            Description = "Cycle the active target window to the next connected display",
+            ActionType = ActionType.Shell,
+            Payload = new ActionPayload { Command = "Move Window Next Monitor Display Screen" }
         };
 
         _feedbackTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
@@ -1427,6 +1489,9 @@ public partial class CommandPaletteView : Window
             list.Add(_virtualAppSettingsItem);
             list.Add(_virtualRestartAdminItem);
             list.Add(_virtualRestartStandardUserItem);
+            list.Add(_virtualToggleTopMostItem);
+            list.Add(_virtualCenterWindowItem);
+            list.Add(_virtualMoveNextMonitorItem);
             scopeCandidates = list;
         }
 
@@ -1452,7 +1517,7 @@ public partial class CommandPaletteView : Window
 
             return _activeFilter switch
             {
-                CommandPaletteFilterType.App => x.ActionType == ActionType.Shell && x.Id != App.OpenSettingsActionId && x.Id != AppSettingsVirtualId && x.Id != RestartAsAdminVirtualId && x.Id != RestartAsStandardUserVirtualId,
+                CommandPaletteFilterType.App => x.ActionType == ActionType.Shell && !IsVirtualSystemActionId(x.Id),
                 CommandPaletteFilterType.Snippet => x.ActionType == ActionType.Snippet,
                 CommandPaletteFilterType.Workflow => x.ActionType == ActionType.Workflow,
                 CommandPaletteFilterType.Folder => x.ActionType == ActionType.Folder,
@@ -1467,16 +1532,17 @@ public partial class CommandPaletteView : Window
         {
             var history = _clipboardService?.GetHistory() ?? [];
             var clipVms = new List<PaletteItemViewModel>();
+            var parsedClipQuery = !string.IsNullOrWhiteSpace(effectiveQuery) ? SearchQueryParser.Parse(effectiveQuery) : null;
 
             foreach (var clip in history)
             {
-                if (string.IsNullOrWhiteSpace(effectiveQuery))
+                if (parsedClipQuery == null)
                 {
                     clipVms.Add(new PaletteItemViewModel(clip));
                 }
                 else
                 {
-                    var clipMatch = FuzzyMatcher.MatchClipboard(clip, effectiveQuery);
+                    var clipMatch = FuzzyMatcher.MatchClipboard(clip, parsedClipQuery);
                     if (clipMatch != null)
                     {
                         clipVms.Add(new PaletteItemViewModel(
@@ -1580,37 +1646,41 @@ public partial class CommandPaletteView : Window
                     r.Item.ParentId.HasValue && _folderPaths.TryGetValue(r.Item.ParentId.Value, out var path) ? path : null)).ToList();
             }
 
-            // 2. Clipboard History items (if enabled and service available)
+            // 2. Clipboard History items (if enabled and service available) — rank and Take(N) BEFORE allocating ViewModels
             var clipVms = new List<PaletteItemViewModel>();
             if (_includeClipboardInAll && _clipboardService != null)
             {
                 var history = _clipboardService.GetHistory() ?? [];
+                var parsedClipQuery = SearchQueryParser.Parse(effectiveQuery);
+                var matchedClips = new List<ClipboardMatchResult>();
                 foreach (var clip in history)
                 {
-                    var clipMatch = FuzzyMatcher.MatchClipboard(clip, effectiveQuery);
+                    var clipMatch = FuzzyMatcher.MatchClipboard(clip, parsedClipQuery);
                     if (clipMatch != null)
                     {
-                        clipVms.Add(new PaletteItemViewModel(
-                            clip,
-                            clipMatch.IsMatchInTitle ? clipMatch.MatchedIndices : null,
-                            clipMatch.Score,
-                            clipMatch.ContextExcerpt,
-                            clipMatch.ContextExcerptMatchedIndices));
+                        matchedClips.Add(clipMatch);
                     }
                 }
 
-                clipVms = clipVms
-                    .OrderByDescending(x => x.ClipboardItem?.IsPinned == true)
-                    .ThenByDescending(x => x.MatchResult?.Score ?? 0)
+                clipVms = matchedClips
+                    .OrderByDescending(x => x.Item.IsPinned)
+                    .ThenByDescending(x => x.Score)
                     .Take(Math.Max(1, _maxClipboardResultsInAll))
+                    .Select(clipMatch => new PaletteItemViewModel(
+                        clipMatch.Item,
+                        clipMatch.IsMatchInTitle ? clipMatch.MatchedIndices : null,
+                        clipMatch.Score,
+                        clipMatch.ContextExcerpt,
+                        clipMatch.ContextExcerptMatchedIndices))
                     .ToList();
             }
 
-            // 3. Windows Services (if enabled and manager available)
+            // 3. Windows Services (if enabled and manager available) — rank and Take(N) BEFORE allocating ViewModels
             var serviceVms = new List<PaletteItemViewModel>();
             if (_includeServicesInAll && _serviceManager != null)
             {
                 _cachedServices ??= _serviceManager.GetServices();
+                var matchedServices = new List<(WindowsServiceItem Svc, IReadOnlyList<int> MatchedIndices, double Score)>();
                 foreach (var svc in _cachedServices)
                 {
                     var nameMatch = FuzzyMatcher.MatchText(svc.DisplayName, effectiveQuery);
@@ -1621,13 +1691,14 @@ public partial class CommandPaletteView : Window
 
                     if (best != null)
                     {
-                        serviceVms.Add(CreateServiceViewModel(svc, best.Value.MatchedIndices, best.Value.Score));
+                        matchedServices.Add((svc, best.Value.MatchedIndices, best.Value.Score));
                     }
                 }
 
-                serviceVms = serviceVms
-                    .OrderByDescending(x => x.MatchResult?.Score ?? 0)
+                serviceVms = matchedServices
+                    .OrderByDescending(x => x.Score)
                     .Take(Math.Max(1, _maxServicesResultsInAll))
+                    .Select(m => CreateServiceViewModel(m.Svc, m.MatchedIndices, m.Score))
                     .ToList();
             }
 
@@ -2301,8 +2372,8 @@ public partial class CommandPaletteView : Window
     private void UpdatePillCounts(IEnumerable<TriggerItem> scopeItems)
     {
         var list = scopeItems.ToList();
-        int allCount = list.Count(x => x.Id != App.OpenSettingsActionId && x.Id != AppSettingsVirtualId && x.Id != RestartAsAdminVirtualId && x.Id != RestartAsStandardUserVirtualId);
-        int appCount = list.Count(x => x.ActionType == ActionType.Shell && x.Id != App.OpenSettingsActionId && x.Id != AppSettingsVirtualId && x.Id != RestartAsAdminVirtualId && x.Id != RestartAsStandardUserVirtualId);
+        int allCount = list.Count(x => !IsVirtualSystemActionId(x.Id));
+        int appCount = list.Count(x => x.ActionType == ActionType.Shell && !IsVirtualSystemActionId(x.Id));
         int snipCount = list.Count(x => x.ActionType == ActionType.Snippet);
         int wfCount = list.Count(x => x.ActionType == ActionType.Workflow);
         int folderCount = list.Count(x => x.ActionType == ActionType.Folder);
@@ -4046,6 +4117,12 @@ public partial class CommandPaletteView : Window
         base.OnClosing(e);
     }
 
+    protected override void OnClosed(EventArgs e)
+    {
+        base.OnClosed(e);
+        _ = Task.Run(NativeMethods.TrimProcessWorkingSet);
+    }
+
     internal void LoadSavedDimensions(AppSettings? settings = null)
     {
         try
@@ -4255,6 +4332,53 @@ public partial class CommandPaletteView : Window
                 SafeClose();
                 bool isElevated = TriggerPoint.Infrastructure.Services.WindowsServiceManager.IsRunningElevated();
                 (Application.Current as App)?.RestartApplication(asAdmin: false, forceUnelevated: isElevated);
+                return;
+            }
+
+            // Virtual: Toggle Always on Top
+            if (vm.Item.Id == ToggleAlwaysOnTopVirtualId)
+            {
+                var hwnd = _targetHwnd != IntPtr.Zero ? _targetHwnd : NativeMethods.GetForegroundWindow();
+                SafeClose();
+                if (hwnd != IntPtr.Zero && NativeMethods.ToggleAlwaysOnTop(hwnd, out bool isNowTopMost))
+                {
+                    string winTitle = NativeMethods.GetWindowTitle(hwnd);
+                    string targetLabel = !string.IsNullOrWhiteSpace(winTitle) ? $"\"{winTitle}\"" : "Active window";
+                    var toast = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IToastNotificationService)) as IToastNotificationService;
+                    toast?.ShowInfo(
+                        isNowTopMost ? "📌 Window Pinned (Always on Top)" : "📌 Window Unpinned",
+                        isNowTopMost ? $"{targetLabel} is now pinned above other windows." : $"{targetLabel} restored to normal z-order.");
+                }
+                return;
+            }
+
+            // Virtual: Center Active Window
+            if (vm.Item.Id == CenterActiveWindowVirtualId)
+            {
+                var hwnd = _targetHwnd != IntPtr.Zero ? _targetHwnd : NativeMethods.GetForegroundWindow();
+                SafeClose();
+                if (hwnd != IntPtr.Zero && NativeMethods.CenterWindowOnCurrentMonitor(hwnd))
+                {
+                    var toast = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IToastNotificationService)) as IToastNotificationService;
+                    toast?.ShowInfo("🎯 Window Centered", "Active window centered on current monitor.");
+                }
+                return;
+            }
+
+            // Virtual: Move Active Window to Next Monitor
+            if (vm.Item.Id == MoveWindowNextMonitorVirtualId)
+            {
+                var hwnd = _targetHwnd != IntPtr.Zero ? _targetHwnd : NativeMethods.GetForegroundWindow();
+                SafeClose();
+                var toast = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IToastNotificationService)) as IToastNotificationService;
+                if (hwnd != IntPtr.Zero && NativeMethods.MoveWindowToNextMonitor(hwnd, out string? monitorName))
+                {
+                    toast?.ShowInfo("🖥️ Window Moved", $"Active window moved to {monitorName ?? "next monitor"}.");
+                }
+                else
+                {
+                    toast?.ShowWarning("🖥️ Single Monitor Detected", "At least two connected displays are required to cycle monitors.");
+                }
                 return;
             }
 

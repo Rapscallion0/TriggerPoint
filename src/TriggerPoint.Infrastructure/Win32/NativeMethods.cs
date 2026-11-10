@@ -835,4 +835,127 @@ public static class NativeMethods
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern uint RegisterClipboardFormat(string lpszFormat);
+
+    public const int WS_EX_TOPMOST = 0x00000008;
+    public const int SW_RESTORE = 9;
+    public const int SW_SHOWMAXIMIZED = 3;
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsZoomed(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("psapi.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool EmptyWorkingSet(IntPtr hProcess);
+
+    public static void TrimProcessWorkingSet()
+    {
+        try
+        {
+            using var currentProcess = System.Diagnostics.Process.GetCurrentProcess();
+            EmptyWorkingSet(currentProcess.Handle);
+        }
+        catch
+        {
+            // Ignore permission or OS failures
+        }
+    }
+
+    public static bool IsWindowTopMost(IntPtr hWnd)
+    {
+        if (hWnd == IntPtr.Zero || !IsWindow(hWnd)) return false;
+        return (GetWindowLong(hWnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+    }
+
+    public static bool ToggleAlwaysOnTop(IntPtr hWnd, out bool isNowTopMost)
+    {
+        isNowTopMost = false;
+        if (hWnd == IntPtr.Zero || !IsWindow(hWnd)) return false;
+
+        bool currentlyTopMost = IsWindowTopMost(hWnd);
+        var insertAfter = currentlyTopMost ? HWND_NOTOPMOST : HWND_TOPMOST;
+        if (SetWindowPos(hWnd, insertAfter, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW))
+        {
+            isNowTopMost = !currentlyTopMost;
+            return true;
+        }
+
+        return false;
+    }
+
+    public static bool CenterWindowOnCurrentMonitor(IntPtr hWnd)
+    {
+        if (hWnd == IntPtr.Zero || !IsWindow(hWnd)) return false;
+
+        try
+        {
+            if (IsIconic(hWnd) || IsZoomed(hWnd))
+            {
+                ShowWindow(hWnd, SW_RESTORE);
+            }
+
+            if (!GetWindowRect(hWnd, out var rect)) return false;
+
+            var screen = System.Windows.Forms.Screen.FromHandle(hWnd);
+            var workArea = screen.WorkingArea;
+
+            int width = Math.Min(rect.Width, workArea.Width);
+            int height = Math.Min(rect.Height, workArea.Height);
+            int newX = workArea.Left + Math.Max(0, (workArea.Width - width) / 2);
+            int newY = workArea.Top + Math.Max(0, (workArea.Height - height) / 2);
+
+            return SetWindowPos(hWnd, IntPtr.Zero, newX, newY, width, height, SWP_NOZORDER | SWP_SHOWWINDOW);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public static bool MoveWindowToNextMonitor(IntPtr hWnd, out string? targetMonitorName)
+    {
+        targetMonitorName = null;
+        if (hWnd == IntPtr.Zero || !IsWindow(hWnd)) return false;
+
+        try
+        {
+            var screens = System.Windows.Forms.Screen.AllScreens;
+            if (screens.Length <= 1) return false;
+
+            var currentScreen = System.Windows.Forms.Screen.FromHandle(hWnd);
+            int currentIndex = Array.FindIndex(screens, s => string.Equals(s.DeviceName, currentScreen.DeviceName, StringComparison.OrdinalIgnoreCase));
+            int nextIndex = currentIndex >= 0 ? (currentIndex + 1) % screens.Length : 0;
+            var nextScreen = screens[nextIndex];
+            targetMonitorName = $"Display {nextIndex + 1}";
+
+            bool wasMaximized = IsZoomed(hWnd);
+            if (IsIconic(hWnd) || wasMaximized)
+            {
+                ShowWindow(hWnd, SW_RESTORE);
+            }
+
+            if (!GetWindowRect(hWnd, out var rect)) return false;
+
+            var workArea = nextScreen.WorkingArea;
+            int width = Math.Min(rect.Width, workArea.Width);
+            int height = Math.Min(rect.Height, workArea.Height);
+            int newX = workArea.Left + Math.Max(0, (workArea.Width - width) / 2);
+            int newY = workArea.Top + Math.Max(0, (workArea.Height - height) / 2);
+
+            bool moved = SetWindowPos(hWnd, IntPtr.Zero, newX, newY, width, height, SWP_NOZORDER | SWP_SHOWWINDOW);
+            if (moved && wasMaximized)
+            {
+                ShowWindow(hWnd, SW_SHOWMAXIMIZED);
+            }
+            return moved;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 }

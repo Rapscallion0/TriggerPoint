@@ -43,8 +43,9 @@ public class AbbreviationTrie
     private static void InsertInto(Node root, string text, TriggerItem item)
     {
         var current = root;
-        foreach (char c in text)
+        for (int i = text.Length - 1; i >= 0; i--)
         {
+            char c = text[i];
             if (!current.Children.TryGetValue(c, out var next))
             {
                 next = new Node();
@@ -55,42 +56,42 @@ public class AbbreviationTrie
         current.Item = item;
     }
 
-    public TriggerItem? MatchSuffix(string text, AbbreviationTriggerMode mode)
+    public TriggerItem? MatchSuffix(string text, AbbreviationTriggerMode mode) =>
+        string.IsNullOrEmpty(text) ? null : MatchSuffix(text.AsSpan(), mode);
+
+    public TriggerItem? MatchSuffix(ReadOnlySpan<char> text, AbbreviationTriggerMode mode)
     {
-        if (string.IsNullOrEmpty(text)) return null;
+        if (text.IsEmpty) return null;
 
         // 1. Check exact case-sensitive matches first
-        var exactMatch = MatchInternal(_caseSensitiveRoot, text, mode);
+        var exactMatch = MatchInternal(_caseSensitiveRoot, text, mode, lowercase: false);
         if (exactMatch != null) return exactMatch;
 
-        // 2. Fall back to case-insensitive matches
-        return MatchInternal(_caseInsensitiveRoot, text.ToLowerInvariant(), mode);
+        // 2. Fall back to case-insensitive matches without allocating a lowercased string
+        return MatchInternal(_caseInsensitiveRoot, text, mode, lowercase: true);
     }
 
-    private static TriggerItem? MatchInternal(Node root, string text, AbbreviationTriggerMode mode)
+    private static TriggerItem? MatchInternal(Node root, ReadOnlySpan<char> text, AbbreviationTriggerMode mode, bool lowercase)
     {
-        for (int i = 0; i < text.Length; i++)
+        TriggerItem? bestMatch = null;
+        var current = root;
+
+        for (int i = text.Length - 1; i >= 0; i--)
         {
-            var suffix = text[i..];
-            var current = root;
-            bool match = true;
-            foreach (char c in suffix)
+            char c = lowercase ? char.ToLowerInvariant(text[i]) : text[i];
+            if (!current.Children.TryGetValue(c, out var next))
             {
-                if (!current.Children.TryGetValue(c, out var next))
-                {
-                    match = false;
-                    break;
-                }
-                current = next;
+                break;
             }
 
-            if (match && current.Item != null && current.Item.AbbreviationMode == mode)
+            current = next;
+            if (current.Item != null && current.Item.AbbreviationMode == mode)
             {
-                return current.Item;
+                bestMatch = current.Item;
             }
         }
 
-        return null;
+        return bestMatch;
     }
 
     public void Clear()
@@ -117,7 +118,10 @@ public class AbbreviationExpanderService : IAbbreviationExpanderService
 
     private IntPtr _hookId = IntPtr.Zero;
     private NativeMethods.HookProc? _hookProc;
-    private string _buffer = string.Empty;
+    private readonly char[] _buffer = new char[32];
+    private int _bufferLen;
+    private readonly byte[] _keyState = new byte[256];
+    private readonly StringBuilder _unicodeBuffer = new(4);
     private volatile bool _isSynthesizing;
 
     private static readonly HashSet<char> Delimiters = [' ', '\t', '\n', '\r', ',', '.', ';', ':', '!', '?', '-', '_', '/'];
@@ -151,7 +155,7 @@ public class AbbreviationExpanderService : IAbbreviationExpanderService
 
         lock (_lock)
         {
-            _buffer = string.Empty;
+            _bufferLen = 0;
             _trie.Clear();
             if (items != null)
             {
@@ -252,16 +256,16 @@ public class AbbreviationExpanderService : IAbbreviationExpanderService
         var settings = _settingsProvider();
         if (!settings.EnableAbbreviationExpander)
         {
-            _buffer = string.Empty;
+            _bufferLen = 0;
             return;
         }
 
         // 1. Backspace: remove last character from buffer
         if (vkCode == 0x08) // VK_BACK
         {
-            if (_buffer.Length > 0)
+            if (_bufferLen > 0)
             {
-                _buffer = _buffer[..^1];
+                _bufferLen--;
             }
             return;
         }
@@ -271,7 +275,7 @@ public class AbbreviationExpanderService : IAbbreviationExpanderService
             (vkCode >= 0x21 && vkCode <= 0x28) || // PageUp, PageDown, End, Home, Left, Up, Right, Down
             vkCode == 0x2E) // VK_DELETE
         {
-            _buffer = string.Empty;
+            _bufferLen = 0;
             return;
         }
 
@@ -282,7 +286,7 @@ public class AbbreviationExpanderService : IAbbreviationExpanderService
 
         if (ctrlDown || altDown || winDown)
         {
-            _buffer = string.Empty;
+            _bufferLen = 0;
             return;
         }
 
@@ -298,25 +302,24 @@ public class AbbreviationExpanderService : IAbbreviationExpanderService
         }
         else
         {
-            var keyState = new byte[256];
-            NativeMethods.GetKeyboardState(keyState);
+            NativeMethods.GetKeyboardState(_keyState);
 
             // In low-level keyboard hooks (WH_KEYBOARD_LL), GetKeyboardState reflects the calling
             // thread message queue rather than the active foreground window. Explicitly sync physical modifier states.
-            if ((NativeMethods.GetKeyState(0x10) & 0x8000) != 0) keyState[0x10] = 0x80; // VK_SHIFT
-            if ((NativeMethods.GetKeyState(0x14) & 1) != 0) keyState[0x14] = 0x01; // VK_CAPITAL (CapsLock toggle)
-            if ((NativeMethods.GetKeyState(0xA0) & 0x8000) != 0) keyState[0xA0] = 0x80; // VK_LSHIFT
-            if ((NativeMethods.GetKeyState(0xA1) & 0x8000) != 0) keyState[0xA1] = 0x80; // VK_RSHIFT
+            if ((NativeMethods.GetKeyState(0x10) & 0x8000) != 0) _keyState[0x10] = 0x80; // VK_SHIFT
+            if ((NativeMethods.GetKeyState(0x14) & 1) != 0) _keyState[0x14] = 0x01; // VK_CAPITAL (CapsLock toggle)
+            if ((NativeMethods.GetKeyState(0xA0) & 0x8000) != 0) _keyState[0xA0] = 0x80; // VK_LSHIFT
+            if ((NativeMethods.GetKeyState(0xA1) & 0x8000) != 0) _keyState[0xA1] = 0x80; // VK_RSHIFT
 
-            var sb = new StringBuilder(4);
+            _unicodeBuffer.Clear();
             var fgHwnd = NativeMethods.GetForegroundWindow();
             uint fgThread = fgHwnd != IntPtr.Zero ? NativeMethods.GetWindowThreadProcessId(fgHwnd, out _) : 0;
             var hkl = fgThread != 0 ? NativeMethods.GetKeyboardLayout(fgThread) : NativeMethods.GetKeyboardLayout(0);
 
-            int convResult = NativeMethods.ToUnicodeEx(vkCode, scanCode, keyState, sb, sb.Capacity, 0, hkl);
-            if (convResult > 0 && sb.Length > 0)
+            int convResult = NativeMethods.ToUnicodeEx(vkCode, scanCode, _keyState, _unicodeBuffer, _unicodeBuffer.Capacity, 0, hkl);
+            if (convResult > 0 && _unicodeBuffer.Length > 0)
             {
-                typedChar = sb[0];
+                typedChar = _unicodeBuffer[0];
             }
         }
 
@@ -333,7 +336,7 @@ public class AbbreviationExpanderService : IAbbreviationExpanderService
             if (Delimiters.Contains(ch))
             {
                 // Delimiter typed: check if preceding buffer matches any delimiter-triggered snippet
-                matchedItem = _trie.MatchSuffix(_buffer, AbbreviationTriggerMode.Delimiter);
+                matchedItem = _trie.MatchSuffix(_buffer.AsSpan(0, _bufferLen), AbbreviationTriggerMode.Delimiter);
                 if (matchedItem != null && !string.IsNullOrEmpty(matchedItem.Abbreviation))
                 {
                     backspaceCount = matchedItem.Abbreviation.Length + 1; // erase delimiter + abbreviation
@@ -342,15 +345,19 @@ public class AbbreviationExpanderService : IAbbreviationExpanderService
 
             if (matchedItem == null)
             {
-                // Append character to buffer
-                _buffer += ch;
-                if (_buffer.Length > 32)
+                // Append character to fixed-capacity rolling buffer without allocating
+                if (_bufferLen == _buffer.Length)
                 {
-                    _buffer = _buffer[^32..];
+                    Array.Copy(_buffer, 1, _buffer, 0, _buffer.Length - 1);
+                    _buffer[_buffer.Length - 1] = ch;
+                }
+                else
+                {
+                    _buffer[_bufferLen++] = ch;
                 }
 
                 // Check for Immediate matching
-                matchedItem = _trie.MatchSuffix(_buffer, AbbreviationTriggerMode.Immediate);
+                matchedItem = _trie.MatchSuffix(_buffer.AsSpan(0, _bufferLen), AbbreviationTriggerMode.Immediate);
                 if (matchedItem != null && !string.IsNullOrEmpty(matchedItem.Abbreviation))
                 {
                     backspaceCount = matchedItem.Abbreviation.Length;
@@ -362,7 +369,7 @@ public class AbbreviationExpanderService : IAbbreviationExpanderService
         {
             _logger.Information("Abbreviation matched: '{Abbr}' for snippet '{Name}' (Mode={Mode}, Backspaces={Backspaces})",
                 matchedItem.Abbreviation, matchedItem.Name, matchedItem.AbbreviationMode, backspaceCount);
-            _buffer = string.Empty;
+            _bufferLen = 0;
             TriggerExpansion(matchedItem, backspaceCount, settings);
         }
     }

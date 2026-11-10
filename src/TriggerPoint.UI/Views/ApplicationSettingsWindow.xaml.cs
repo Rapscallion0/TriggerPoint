@@ -55,6 +55,7 @@ public partial class ApplicationSettingsWindow : Window
     private SettingsCategory _selectedCategory = SettingsCategory.Appearance;
     private readonly IProductivityService? _productivityService;
     private readonly IClipboardHistoryService? _clipboardService;
+    private readonly EventHandler<AppTheme> _themeChangedHandler;
 
     public bool TreeDataChanged { get; private set; }
 
@@ -86,13 +87,15 @@ public partial class ApplicationSettingsWindow : Window
             }
         };
 
-        ThemeManager.ThemeChanged += (s, theme) =>
+        _themeChangedHandler = (s, theme) =>
         {
             ThemeManager.ApplyWindowIcons(this);
         };
+        ThemeManager.ThemeChanged += _themeChangedHandler;
 
         Closed += (s, e) =>
         {
+            ThemeManager.ThemeChanged -= _themeChangedHandler;
             if (!_settingsSaved)
             {
                 ThemeManager.ApplyPreference(_initialTheme);

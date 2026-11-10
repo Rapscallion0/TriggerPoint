@@ -201,4 +201,12 @@ public class AppSettings
             CheatSheetHotkey = new ShortcutBinding(ModifierKeys.Control | ModifierKeys.Shift, 191, "/");
         }
     }
+
+    public AppSettings Clone()
+    {
+        var clone = (AppSettings)MemberwiseClone();
+        clone.CustomPaletteColors = CustomPaletteColors != null ? [.. CustomPaletteColors] : [];
+        clone.AbbreviationGlobalExcludedProcesses = AbbreviationGlobalExcludedProcesses != null ? [.. AbbreviationGlobalExcludedProcesses] : [];
+        return clone;
+    }
 }

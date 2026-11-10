@@ -2024,7 +2024,7 @@
                                             <TextBlock Grid.Column="0" Text="🌐" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                 <TextBlock Text="Browser Tab &amp; URL Rules (Optional)" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource TextPrimaryBrush}"/>
-                                                <TextBlock Text="Filters active browser tabs (Chrome, Edge, Firefox, Brave). Supports wildcards: *github.com*, localhost:*" 
+                                                <TextBlock Text="Matches active browser tab URLs or tab/window titles (Chrome, Edge, Firefox, Brave). Automatically falls back to tab title when an address bar isn't present (e.g. installed PWAs). Supports wildcards: mail.google.com*, *Gmail*, localhost:*" 
                                                            FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
                                             </StackPanel>
 
@@ -2056,30 +2056,35 @@
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" 
-                                                       Text="Allowed URLs (Comma-separated or pill tags, leave blank for all)" 
-                                                       FontWeight="Medium" 
-                                                       FontSize="12" 
-                                                       VerticalAlignment="Center"/>
+                                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                <TextBlock Text="Allowed URLs or Tab Titles" 
+                                                           FontWeight="Medium" 
+                                                           FontSize="12"/>
+                                                <TextBlock Text="Matches active address bar URL or tab/window title (leave blank for all)" 
+                                                           FontSize="11" 
+                                                           Foreground="{DynamicResource TextSecondaryBrush}" 
+                                                           Margin="0,1,0,0"/>
+                                            </StackPanel>
                                             <Border Grid.Column="1" 
                                                     Background="{DynamicResource BgTertiaryBrush}"
                                                     BorderBrush="{DynamicResource BorderBrush}"
                                                     BorderThickness="1"
                                                     CornerRadius="4"
                                                     Padding="7,2"
+                                                    VerticalAlignment="Center"
                                                     Cursor="Cross"
-                                                    ToolTip="Click &amp; drag crosshair onto an open browser tab to capture into Allowed URLs"
+                                                    ToolTip="Click &amp; drag crosshair onto an open browser window to capture its URL or Tab Title into Allowed rules"
                                                     Tag="AllowedUrl"
                                                     PreviewMouseLeftButtonDown="ProcessCrosshair_PreviewMouseLeftButtonDown">
                                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                     <TextBlock Text="🎯" FontSize="11" Margin="0,0,4,0"/>
-                                                    <TextBlock Text="Target Tab URL" FontSize="11" FontWeight="Medium"/>
+                                                    <TextBlock Text="Target Tab / URL" FontSize="11" FontWeight="Medium"/>
                                                 </StackPanel>
                                             </Border>
                                         </Grid>
                                         <controls:TagInputControl x:Name="AllowedUrlsTagInput" 
                                                                   Variant="Allowed"
-                                                                  Placeholder="e.g. *github.com*, localhost:* (press Enter)..." 
+                                                                  Placeholder="e.g. mail.google.com*, *Gmail*, *github.com* (press Enter)..." 
                                                                   Margin="0,0,0,12"/>
 
                                         <!-- Excluded URLs Header -->
@@ -2088,30 +2093,35 @@
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" 
-                                                       Text="Excluded URLs (Action suppressed on these pages)" 
-                                                       FontWeight="Medium" 
-                                                       FontSize="12" 
-                                                       VerticalAlignment="Center"/>
+                                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                <TextBlock Text="Excluded URLs or Tab Titles" 
+                                                           FontWeight="Medium" 
+                                                           FontSize="12"/>
+                                                <TextBlock Text="Action is suppressed when the active URL or tab/window title matches" 
+                                                           FontSize="11" 
+                                                           Foreground="{DynamicResource TextSecondaryBrush}" 
+                                                           Margin="0,1,0,0"/>
+                                            </StackPanel>
                                             <Border Grid.Column="1" 
                                                     Background="{DynamicResource BgTertiaryBrush}"
                                                     BorderBrush="{DynamicResource BorderBrush}"
                                                     BorderThickness="1"
                                                     CornerRadius="4"
                                                     Padding="7,2"
+                                                    VerticalAlignment="Center"
                                                     Cursor="Cross"
-                                                    ToolTip="Click &amp; drag crosshair onto an open browser tab to capture into Excluded URLs"
+                                                    ToolTip="Click &amp; drag crosshair onto an open browser window to capture its URL or Tab Title into Excluded rules"
                                                     Tag="ExcludedUrl"
                                                     PreviewMouseLeftButtonDown="ProcessCrosshair_PreviewMouseLeftButtonDown">
                                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                     <TextBlock Text="🎯" FontSize="11" Margin="0,0,4,0"/>
-                                                    <TextBlock Text="Target Tab URL" FontSize="11" FontWeight="Medium"/>
+                                                    <TextBlock Text="Target Tab / URL" FontSize="11" FontWeight="Medium"/>
                                                 </StackPanel>
                                             </Border>
                                         </Grid>
                                         <controls:TagInputControl x:Name="ExcludedUrlsTagInput" 
                                                                   Variant="Excluded"
-                                                                  Placeholder="e.g. *youtube.com*, *netflix.com* (press Enter)..."/>
+                                                                  Placeholder="e.g. *youtube.com*, *YouTube*, *netflix.com* (press Enter)..."/>
                                     </StackPanel>
                                 </StackPanel>
                             </Border>

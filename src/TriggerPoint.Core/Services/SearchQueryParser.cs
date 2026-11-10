@@ -417,65 +417,50 @@ public static class SearchQueryParser
             return (string.Empty, Array.Empty<int>());
         }
 
-        // Replace newlines and tabs 1:1 with single spaces to maintain 100% exact index parity
-        char[] chars = fullText.ToCharArray();
-        for (int i = 0; i < chars.Length; i++)
-        {
-            if (chars[i] == '\r' || chars[i] == '\n' || chars[i] == '\t')
-            {
-                chars[i] = ' ';
-            }
-        }
-        string singleLine = new string(chars);
+        int maxFallbackLen = maxCharsBefore + maxCharsAfter;
 
         if (matchedIndices == null || matchedIndices.Count == 0)
         {
-            string shortSnippet = singleLine.Length > (maxCharsBefore + maxCharsAfter)
-                ? singleLine.Substring(0, maxCharsBefore + maxCharsAfter).Trim() + "..."
-                : singleLine.Trim();
-            return (shortSnippet, Array.Empty<int>());
+            return (BuildNormalizedPrefixExcerpt(fullText, maxFallbackLen), Array.Empty<int>());
         }
 
         int firstMatch = matchedIndices[0];
         int lastMatch = matchedIndices[^1];
 
         // Bounds check
-        if (firstMatch < 0 || firstMatch >= singleLine.Length)
+        if (firstMatch < 0 || firstMatch >= fullText.Length)
         {
-            string shortSnippet = singleLine.Length > (maxCharsBefore + maxCharsAfter)
-                ? singleLine.Substring(0, maxCharsBefore + maxCharsAfter).Trim() + "..."
-                : singleLine.Trim();
-            return (shortSnippet, Array.Empty<int>());
+            return (BuildNormalizedPrefixExcerpt(fullText, maxFallbackLen), Array.Empty<int>());
         }
 
         int start = Math.Max(0, firstMatch - maxCharsBefore);
-        int end = Math.Min(singleLine.Length, Math.Max(lastMatch + 1, firstMatch + 1) + maxCharsAfter);
+        int end = Math.Min(fullText.Length, Math.Max(lastMatch + 1, firstMatch + 1) + maxCharsAfter);
 
-        // Adjust to word boundaries if possible
+        // Adjust to word boundaries if possible (treating ' ', '\r', '\n', '\t' identically to single-space replacement)
         if (start > 0)
         {
-            int spaceIdx = singleLine.IndexOf(' ', start);
+            int spaceIdx = IndexOfSpaceLike(fullText, start, firstMatch - start);
             if (spaceIdx >= 0 && spaceIdx < firstMatch)
             {
                 start = spaceIdx + 1;
             }
         }
 
-        if (end < singleLine.Length)
+        if (end < fullText.Length)
         {
-            int spaceIdx = singleLine.LastIndexOf(' ', end - 1, end - (lastMatch + 1));
-            if (spaceIdx > lastMatch && spaceIdx < singleLine.Length)
+            int spaceIdx = LastIndexOfSpaceLike(fullText, end - 1, end - (lastMatch + 1));
+            if (spaceIdx > lastMatch && spaceIdx < fullText.Length)
             {
                 end = spaceIdx;
             }
         }
 
         // Trim whitespace while tracking bounds to maintain exact 1:1 offsets
-        while (start < firstMatch && char.IsWhiteSpace(singleLine[start]))
+        while (start < firstMatch && char.IsWhiteSpace(fullText[start]))
         {
             start++;
         }
-        while (end > (lastMatch + 1) && char.IsWhiteSpace(singleLine[end - 1]))
+        while (end > (lastMatch + 1) && char.IsWhiteSpace(fullText[end - 1]))
         {
             end--;
         }
@@ -483,18 +468,29 @@ public static class SearchQueryParser
         if (start >= end)
         {
             start = Math.Max(0, firstMatch - 10);
-            end = Math.Min(singleLine.Length, lastMatch + 11);
+            end = Math.Min(fullText.Length, lastMatch + 11);
         }
 
-        string rawSubstring = singleLine.Substring(start, end - start);
+        // Normalize only the small [start..end] slice (replacing \r, \n, \t 1:1 with ' ')
+        int sliceLen = end - start;
+        string rawSubstring = string.Create(sliceLen, (fullText, start), static (span, state) =>
+        {
+            var src = state.fullText.AsSpan(state.start, span.Length);
+            for (int i = 0; i < src.Length; i++)
+            {
+                char c = src[i];
+                span[i] = (c == '\r' || c == '\n' || c == '\t') ? ' ' : c;
+            }
+        });
+
         bool hasLeadingEllipsis = start > 0;
-        bool hasTrailingEllipsis = end < singleLine.Length;
+        bool hasTrailingEllipsis = end < fullText.Length;
 
         string excerpt = (hasLeadingEllipsis ? "..." : "") + rawSubstring + (hasTrailingEllipsis ? "..." : "");
         int prefixOffset = hasLeadingEllipsis ? 3 : 0;
 
         // Calculate relative indices in the excerpt
-        var relativeIndices = new List<int>();
+        var relativeIndices = new List<int>(matchedIndices.Count);
         var matchSet = new HashSet<int>(matchedIndices);
 
         for (int i = 0; i < rawSubstring.Length; i++)
@@ -507,5 +503,41 @@ public static class SearchQueryParser
         }
 
         return (excerpt, relativeIndices);
+    }
+
+    private static string BuildNormalizedPrefixExcerpt(string fullText, int maxLen)
+    {
+        int takeLen = Math.Min(fullText.Length, maxLen);
+        string slice = string.Create(takeLen, fullText, static (span, text) =>
+        {
+            for (int i = 0; i < span.Length; i++)
+            {
+                char c = text[i];
+                span[i] = (c == '\r' || c == '\n' || c == '\t') ? ' ' : c;
+            }
+        });
+        return fullText.Length > maxLen ? slice.Trim() + "..." : slice.Trim();
+    }
+
+    private static int IndexOfSpaceLike(string text, int startIndex, int count)
+    {
+        int limit = Math.Min(text.Length, startIndex + count);
+        for (int i = startIndex; i < limit; i++)
+        {
+            char c = text[i];
+            if (c == ' ' || c == '\r' || c == '\n' || c == '\t') return i;
+        }
+        return -1;
+    }
+
+    private static int LastIndexOfSpaceLike(string text, int startIndex, int count)
+    {
+        int min = Math.Max(0, startIndex - count + 1);
+        for (int i = startIndex; i >= min; i--)
+        {
+            char c = text[i];
+            if (c == ' ' || c == '\r' || c == '\n' || c == '\t') return i;
+        }
+        return -1;
     }
 }

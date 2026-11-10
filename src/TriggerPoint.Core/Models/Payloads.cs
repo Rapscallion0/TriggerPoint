@@ -323,11 +323,6 @@ public sealed class ContextFilter
 
     public bool IsActiveForProcess(string? processName)
     {
-        return IsActive(processName, null);
-    }
-
-    public bool IsActive(string? processName, string? activeUrl = null)
-    {
         if (!string.IsNullOrWhiteSpace(processName))
         {
             var cleanName = processName.Trim();
@@ -369,35 +364,210 @@ public sealed class ContextFilter
             return false;
         }
 
-        // Evaluate URL rules if specified
-        if (!string.IsNullOrWhiteSpace(activeUrl))
+        return true;
+    }
+
+    public bool IsActive(string? processName, string? activeUrl = null, string? activeWindowTitle = null)
+    {
+        if (!IsActiveForProcess(processName))
+            return false;
+
+        bool hasUrlOrTitleCandidates = !string.IsNullOrWhiteSpace(activeUrl) || !string.IsNullOrWhiteSpace(activeWindowTitle);
+
+        // Evaluate URL & Tab Title rules if specified
+        if (hasUrlOrTitleCandidates)
         {
             foreach (var excl in ExcludedUrls)
             {
-                if (MatchesWildcard(activeUrl, excl.Trim())) return false;
+                var rule = excl.Trim();
+                if (string.IsNullOrEmpty(rule)) continue;
+
+                if (!string.IsNullOrWhiteSpace(activeUrl) && MatchesUrlRule(activeUrl, rule, allowSpaFragmentFallback: false))
+                    return false;
+
+                if (!string.IsNullOrWhiteSpace(activeWindowTitle) && MatchesWildcard(activeWindowTitle, rule))
+                    return false;
             }
 
             if (AllowedUrls.Count > 0)
             {
-                bool matchedUrl = false;
+                bool matchedUrlOrTitle = false;
                 foreach (var allow in AllowedUrls)
                 {
-                    if (MatchesWildcard(activeUrl, allow.Trim()))
+                    var rule = allow.Trim();
+                    if (string.IsNullOrEmpty(rule)) continue;
+
+                    if ((!string.IsNullOrWhiteSpace(activeUrl) && MatchesUrlRule(activeUrl, rule, allowSpaFragmentFallback: true)) ||
+                        (!string.IsNullOrWhiteSpace(activeWindowTitle) && MatchesWildcard(activeWindowTitle, rule)))
                     {
-                        matchedUrl = true;
+                        matchedUrlOrTitle = true;
                         break;
                     }
                 }
-                if (!matchedUrl) return false;
+                if (!matchedUrlOrTitle) return false;
             }
         }
-        else if (AllowedUrls.Count > 0 && IsKnownBrowser(processName))
+        else if (AllowedUrls.Count > 0)
         {
-            // Browser focused but active URL not matched
+            // Browser URL / Tab Title rules are configured, but no active URL or title was matched
             return false;
         }
 
         return true;
+    }
+
+    public static bool MatchesUrlRule(string? text, string? pattern, bool allowSpaFragmentFallback = true)
+    {
+        if (string.IsNullOrWhiteSpace(pattern) || string.IsNullOrWhiteSpace(text))
+            return false;
+
+        pattern = pattern.Trim();
+        text = text.Trim();
+
+        // 1. Direct wildcard / substring match
+        if (MatchesWildcard(text, pattern))
+            return true;
+
+        // 2. Normalized URL match (strips http://, https://, www., and trailing /)
+        string normText = NormalizeUrl(text);
+        string normPattern = NormalizeUrl(pattern);
+        if (!string.IsNullOrEmpty(normText) && !string.IsNullOrEmpty(normPattern))
+        {
+            if (MatchesWildcard(normText, normPattern))
+                return true;
+        }
+
+        // 3. SPA #fragment resilience (e.g., rule "mail.google.com/mail/u/0/#inbox" matches
+        //    "#inbox/FMfcgz...", "#search/query/FMfcgz...", "#all/...", "#sent/...", or "?ui=2...")
+        if (allowSpaFragmentFallback)
+        {
+            int hashIdx = normPattern.IndexOf('#');
+            if (hashIdx > 0)
+            {
+                string fragmentPart = normPattern[(hashIdx + 1)..];
+                if (!fragmentPart.Contains('*') && !fragmentPart.Contains('?'))
+                {
+                    string basePattern = normPattern[..hashIdx].TrimEnd('/');
+                    if (basePattern.Length >= 4 && (basePattern.Contains('.') || basePattern.StartsWith("localhost", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        if (normText.StartsWith(basePattern, StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (normText.Length == basePattern.Length)
+                                return true;
+
+                            char nextChar = normText[basePattern.Length];
+                            if (nextChar is '/' or '#' or '?')
+                                return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    public static string NormalizeUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return string.Empty;
+        string s = url.Trim();
+
+        if (s.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            s = s[8..];
+        else if (s.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+            s = s[7..];
+
+        if (s.StartsWith("www.", StringComparison.OrdinalIgnoreCase))
+            s = s[4..];
+
+        return s.TrimEnd('/');
+    }
+
+    public static string? ExtractBaseWebAppUrlPattern(string? rawUrl)
+    {
+        if (string.IsNullOrWhiteSpace(rawUrl)) return null;
+        string norm = NormalizeUrl(rawUrl);
+        if (string.IsNullOrEmpty(norm)) return null;
+
+        int cutIdx = norm.IndexOfAny(['#', '?']);
+        if (cutIdx > 0)
+        {
+            string basePart = norm[..cutIdx].TrimEnd('/');
+            if (!string.IsNullOrEmpty(basePart))
+            {
+                return basePart + "/*";
+            }
+        }
+
+        return norm + "*";
+    }
+
+    private static readonly string[] BrowserTitleSuffixes =
+    [
+        " - Google Chrome",
+        " - Chromium",
+        " - Microsoft Edge",
+        " - Microsoft\u200B Edge",
+        " — Mozilla Firefox",
+        " - Mozilla Firefox",
+        " - Brave",
+        " - Opera",
+        " - Vivaldi",
+        " - Arc"
+    ];
+
+    public static string? CleanBrowserWindowTitle(string? rawWindowTitle)
+    {
+        if (string.IsNullOrWhiteSpace(rawWindowTitle)) return null;
+        string title = rawWindowTitle.Trim();
+
+        foreach (var suffix in BrowserTitleSuffixes)
+        {
+            if (title.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                title = title[..^suffix.Length].Trim();
+                break;
+            }
+        }
+
+        // Also handle Edge profile suffixes like " - Personal - Microsoft Edge" or " and 3 more pages - Work - Microsoft Edge"
+        int edgeIdx = title.LastIndexOf(" - ", StringComparison.Ordinal);
+        if (edgeIdx > 0 && (rawWindowTitle.Contains("Microsoft", StringComparison.OrdinalIgnoreCase) && rawWindowTitle.Contains("Edge", StringComparison.OrdinalIgnoreCase)))
+        {
+            string possibleProfile = title[(edgeIdx + 3)..].Trim();
+            if (possibleProfile.Equals("Personal", StringComparison.OrdinalIgnoreCase) ||
+                possibleProfile.Equals("Work", StringComparison.OrdinalIgnoreCase) ||
+                possibleProfile.StartsWith("Profile ", StringComparison.OrdinalIgnoreCase))
+            {
+                title = title[..edgeIdx].Trim();
+                int morePagesIdx = title.LastIndexOf(" and ", StringComparison.OrdinalIgnoreCase);
+                if (morePagesIdx > 0 && title.EndsWith("more pages", StringComparison.OrdinalIgnoreCase) || title.EndsWith("more page", StringComparison.OrdinalIgnoreCase))
+                {
+                    title = title[..morePagesIdx].Trim();
+                }
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(title) ? null : title;
+    }
+
+    public static string? ExtractTabTitleKeywordPattern(string? rawWindowTitle)
+    {
+        var clean = CleanBrowserWindowTitle(rawWindowTitle);
+        if (string.IsNullOrWhiteSpace(clean)) return null;
+
+        // Many web apps format titles as "Page/Thread - Account - AppName" (e.g. "Inbox (4) - user@gmail.com - Gmail")
+        var segments = clean.Split(" - ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (segments.Length >= 2)
+        {
+            var lastSegment = segments[^1];
+            if (lastSegment.Length >= 2 && !lastSegment.Contains('@'))
+            {
+                return $"*{lastSegment}*";
+            }
+        }
+
+        return $"*{clean}*";
     }
 
     public static bool MatchesWildcard(string text, string pattern)
@@ -411,18 +581,35 @@ public sealed class ContextFilter
         // If no wildcard symbols, simple substring search
         if (!pattern.Contains('*') && !pattern.Contains('?'))
         {
-            return text.Contains(pattern, StringComparison.OrdinalIgnoreCase);
+            if (text.Contains(pattern, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            // Also support matching when pattern has scheme (https://...) and text does not, or vice versa
+            string normText = NormalizeUrl(text);
+            string normPattern = NormalizeUrl(pattern);
+            if (!string.IsNullOrEmpty(normText) && !string.IsNullOrEmpty(normPattern))
+            {
+                return normText.Contains(normPattern, StringComparison.OrdinalIgnoreCase);
+            }
+            return false;
         }
 
         // 1. Direct match
         if (CheckRegexMatch(text, pattern)) return true;
 
-        // 2. Scheme-stripped match (e.g. text "http://localhost:3000" matches "localhost:*")
+        // 2. Scheme-stripped / normalized match (e.g. text "http://localhost:3000" matches "localhost:*")
         int schemeIdx = text.IndexOf("://", StringComparison.Ordinal);
         if (schemeIdx >= 0)
         {
             string stripped = text[(schemeIdx + 3)..];
             if (CheckRegexMatch(stripped, pattern)) return true;
+        }
+
+        string normalizedText = NormalizeUrl(text);
+        string normalizedPattern = NormalizeUrl(pattern);
+        if (!string.IsNullOrEmpty(normalizedText) && !string.IsNullOrEmpty(normalizedPattern))
+        {
+            if (CheckRegexMatch(normalizedText, normalizedPattern)) return true;
         }
 
         // 3. Implied leading wildcard for domain patterns (e.g. "github.com/*" matches "https://github.com/repo")

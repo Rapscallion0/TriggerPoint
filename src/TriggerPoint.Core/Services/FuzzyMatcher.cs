@@ -196,14 +196,17 @@ public static class FuzzyMatcher
         return (matchScore, matchedIndices);
     }
 
-    public static ClipboardMatchResult? MatchClipboard(ClipboardHistoryItem clip, string pattern)
+    public static ClipboardMatchResult? MatchClipboard(ClipboardHistoryItem clip, string pattern) =>
+        string.IsNullOrWhiteSpace(pattern)
+            ? new ClipboardMatchResult(clip, 1.0, Array.Empty<int>(), true)
+            : MatchClipboard(clip, SearchQueryParser.Parse(pattern));
+
+    public static ClipboardMatchResult? MatchClipboard(ClipboardHistoryItem clip, SearchQuery query)
     {
-        if (string.IsNullOrWhiteSpace(pattern))
+        if (query == null || query.IsEmpty)
         {
             return new ClipboardMatchResult(clip, 1.0, Array.Empty<int>(), true);
         }
-
-        var query = SearchQueryParser.Parse(pattern);
 
         // Check exclusions across all text properties of the item first
         if (query.ExcludedTokens.Count > 0)
@@ -251,22 +254,24 @@ public static class FuzzyMatcher
         return null;
     }
 
-    public static FuzzyMatchResult Match(TriggerItem item, string pattern)
+    private static bool IsCompoundQueryPattern(string? pattern) =>
+        !string.IsNullOrWhiteSpace(pattern) &&
+        (pattern.Contains(' ') || pattern.Contains('|') || pattern.Contains('"') || pattern.Contains('-') || pattern.Contains("NOT", StringComparison.OrdinalIgnoreCase));
+
+    public static FuzzyMatchResult Match(TriggerItem item, string pattern) =>
+        Match(item, pattern, IsCompoundQueryPattern(pattern) ? SearchQueryParser.Parse(pattern) : null);
+
+    public static FuzzyMatchResult Match(TriggerItem item, string pattern, SearchQuery? parsedQuery)
     {
-        if (!string.IsNullOrWhiteSpace(pattern) &&
-            (pattern.Contains(' ') || pattern.Contains('|') || pattern.Contains('"') || pattern.Contains('-') || pattern.Contains("NOT", StringComparison.OrdinalIgnoreCase)))
+        if (parsedQuery != null && parsedQuery.ExcludedTokens.Count > 0)
         {
-            var query = SearchQueryParser.Parse(pattern);
-            if (query.ExcludedTokens.Count > 0)
+            foreach (var excluded in parsedQuery.ExcludedTokens)
             {
-                foreach (var excluded in query.ExcludedTokens)
+                if (string.IsNullOrWhiteSpace(excluded.Text)) continue;
+                if ((!string.IsNullOrEmpty(item.Name) && item.Name.IndexOf(excluded.Text, StringComparison.OrdinalIgnoreCase) >= 0) ||
+                    (!string.IsNullOrEmpty(item.Description) && item.Description.IndexOf(excluded.Text, StringComparison.OrdinalIgnoreCase) >= 0))
                 {
-                    if (string.IsNullOrWhiteSpace(excluded.Text)) continue;
-                    if ((!string.IsNullOrEmpty(item.Name) && item.Name.IndexOf(excluded.Text, StringComparison.OrdinalIgnoreCase) >= 0) ||
-                        (!string.IsNullOrEmpty(item.Description) && item.Description.IndexOf(excluded.Text, StringComparison.OrdinalIgnoreCase) >= 0))
-                    {
-                        return new FuzzyMatchResult(item, 0, []);
-                    }
+                    return new FuzzyMatchResult(item, 0, []);
                 }
             }
         }
@@ -276,11 +281,9 @@ public static class FuzzyMatcher
             ? MatchText(item.Abbreviation, pattern)
             : null;
 
-        if (nameMatch == null && !string.IsNullOrWhiteSpace(pattern) &&
-            (pattern.Contains(' ') || pattern.Contains('|') || pattern.Contains('"') || pattern.Contains('-') || pattern.Contains("NOT", StringComparison.OrdinalIgnoreCase)))
+        if (nameMatch == null && parsedQuery != null)
         {
-            var query = SearchQueryParser.Parse(pattern);
-            var qMatch = query.Match(item.Name);
+            var qMatch = parsedQuery.Match(item.Name);
             if (qMatch != null)
             {
                 nameMatch = (qMatch.Score, qMatch.MatchedIndices);
@@ -325,10 +328,11 @@ public static class FuzzyMatcher
         string pattern,
         CommandPaletteSortMode sortMode = CommandPaletteSortMode.Smart)
     {
+        var parsedQuery = IsCompoundQueryPattern(pattern) ? SearchQueryParser.Parse(pattern) : null;
         var results = new List<FuzzyMatchResult>();
         foreach (var item in items)
         {
-            var res = Match(item, pattern);
+            var res = Match(item, pattern, parsedQuery);
             if (res.IsMatch)
             {
                 results.Add(res);

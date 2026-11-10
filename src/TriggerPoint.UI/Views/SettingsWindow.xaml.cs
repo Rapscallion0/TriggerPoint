@@ -428,6 +428,11 @@ public partial class SettingsWindow : Window
     private readonly IAbbreviationExpanderService? _abbreviationExpander;
     private readonly IWindowsServiceManager _serviceManager;
     private UpdateCheckResult? _latestAvailableUpdate;
+    private readonly EventHandler<AppTheme> _themeChangedHandler;
+    private readonly EventHandler _conflictsUpdatedHandler;
+    private readonly EventHandler<bool> _snoozeChangedHandler;
+    private readonly Action<TriggerItem, string>? _executionSucceededHandler;
+    private readonly Action<TriggerItem, string>? _executionFailedHandler;
 
     public bool IsExiting { get; set; }
 
@@ -462,7 +467,7 @@ public partial class SettingsWindow : Window
 
         if (_executor is TriggerPoint.Infrastructure.Services.ShellActionExecutor shellExec)
         {
-            shellExec.ExecutionSucceeded += (item, msg) =>
+            _executionSucceededHandler = (item, msg) =>
             {
                 Dispatcher.Invoke(() =>
                 {
@@ -472,7 +477,7 @@ public partial class SettingsWindow : Window
                     }
                 });
             };
-            shellExec.ExecutionFailed += (item, msg) =>
+            _executionFailedHandler = (item, msg) =>
             {
                 Dispatcher.Invoke(() =>
                 {
@@ -482,6 +487,8 @@ public partial class SettingsWindow : Window
                     }
                 });
             };
+            shellExec.ExecutionSucceeded += _executionSucceededHandler;
+            shellExec.ExecutionFailed += _executionFailedHandler;
         }
 
         MacroEditor?.Initialize(_macroService);
@@ -491,8 +498,10 @@ public partial class SettingsWindow : Window
         }
 
         HotkeyRecorder.BindingRecorded += HotkeyRecorder_BindingRecorded;
-        _shortcutListener.ConflictsUpdated += (s, e) => Dispatcher.Invoke(RefreshTreeConflictStates);
-        _shortcutListener.SnoozeChanged += (s, isSnoozed) => Dispatcher.Invoke(UpdateSnoozeButtonUi);
+        _conflictsUpdatedHandler = (s, e) => Dispatcher.Invoke(RefreshTreeConflictStates);
+        _snoozeChangedHandler = (s, isSnoozed) => Dispatcher.Invoke(UpdateSnoozeButtonUi);
+        _shortcutListener.ConflictsUpdated += _conflictsUpdatedHandler;
+        _shortcutListener.SnoozeChanged += _snoozeChangedHandler;
 
         ItemsTreeView.AddHandler(TreeViewItem.ExpandedEvent, new RoutedEventHandler(OnTreeViewItemExpandedCollapsed));
         ItemsTreeView.AddHandler(TreeViewItem.CollapsedEvent, new RoutedEventHandler(OnTreeViewItemExpandedCollapsed));
@@ -593,7 +602,7 @@ public partial class SettingsWindow : Window
             _folderExpansionSaveTimer.Stop();
             if (_isDataLoaded && _items.Count > 0)
             {
-                _ = _repository.SaveAsync(_items);
+                _ = _repository.SaveAsync(_items, createHistoricalSnapshot: false);
             }
         };
 
@@ -716,7 +725,7 @@ public partial class SettingsWindow : Window
             }
         };
 
-        ThemeManager.ThemeChanged += (s, theme) =>
+        _themeChangedHandler = (s, theme) =>
         {
             ThemeManager.ApplyWindowIcons(this);
 
@@ -729,6 +738,7 @@ public partial class SettingsWindow : Window
                 UpdateToggleAllExpandButtonUi();
             }
         };
+        ThemeManager.ThemeChanged += _themeChangedHandler;
 
         var assembly = System.Reflection.Assembly.GetExecutingAssembly();
         var version = assembly.GetName().Version;
@@ -4501,7 +4511,7 @@ public partial class SettingsWindow : Window
             _folderExpansionSaveTimer.Stop();
             if (_isDataLoaded && _items.Count > 0)
             {
-                _ = _repository.SaveAsync(_items);
+                _ = _repository.SaveAsync(_items, createHistoricalSnapshot: false);
             }
         }
     }
@@ -5599,24 +5609,34 @@ public partial class SettingsWindow : Window
 
                 if (ContextFilter.IsKnownBrowser(exeName) && _contextFilterService != null)
                 {
-                    var activeUrl = _contextFilterService.GetActiveBrowserUrl(rootHwnd, exeName, 1500);
-                    if (!string.IsNullOrWhiteSpace(activeUrl))
+                    var options = BuildBrowserTargetRuleOptions(rootHwnd, exeName);
+                    if (options.Count > 0)
                     {
                         bool captureTab = ModernMessageDialog.ShowConfirm(
                             this,
                             "Browser Tab Detected",
-                            $"Targeted browser '{exeName}'.\n\nActive Tab URL / Page:\n{activeUrl}\n\nWould you like to scope this action to this specific browser tab/URL in Browser Tab & URL Rules as well?",
-                            "Include Tab URL",
+                            $"Targeted browser '{exeName}'.\n\nActive Tab / URL:\n{options[0].PatternValue}\n\nWould you like to scope this action to this browser tab/URL in Browser Tab & URL Rules as well?",
+                            "Choose Tab / URL Rule...",
                             "Executable Only");
 
                         if (captureTab)
                         {
-                            AllowedProcessesTagInput.AddTag(exeName);
-                            AllowedUrlsTagInput.AddTag(activeUrl);
-                            SetBrowserUrlSectionExpanded(true);
-                            OnFormEdited();
-                            StatusText.Text = $"🎯 Target captured: {exeName} with tab URL '{activeUrl}'.";
-                            return;
+                            string? chosen = ModernMessageDialog.ShowBrowserTargetChoiceDialog(
+                                this,
+                                "Target Browser Tab / URL (Allowed)",
+                                $"Captured from '{exeName}'. Select a rule option and edit if needed before adding:",
+                                options,
+                                "Add to Allowed Rules");
+
+                            if (!string.IsNullOrWhiteSpace(chosen))
+                            {
+                                AllowedProcessesTagInput.AddTag(exeName);
+                                AllowedUrlsTagInput.AddTag(chosen);
+                                SetBrowserUrlSectionExpanded(true);
+                                OnFormEdited();
+                                StatusText.Text = $"🎯 Target captured: {exeName} with rule '{chosen}'.";
+                                return;
+                            }
                         }
                     }
                 }
@@ -5629,23 +5649,33 @@ public partial class SettingsWindow : Window
                 AllowedProcessesTagInput.AddTag(exeName);
                 if (ContextFilter.IsKnownBrowser(exeName) && _contextFilterService != null)
                 {
-                    var activeUrl = _contextFilterService.GetActiveBrowserUrl(rootHwnd, exeName, 1500);
-                    if (!string.IsNullOrWhiteSpace(activeUrl))
+                    var options = BuildBrowserTargetRuleOptions(rootHwnd, exeName);
+                    if (options.Count > 0)
                     {
                         bool captureTab = ModernMessageDialog.ShowConfirm(
                             this,
                             "Browser Tab Detected",
-                            $"Targeted browser '{exeName}'.\n\nActive Tab URL / Page:\n{activeUrl}\n\nWould you like to scope this action to this specific tab/URL as well?",
-                            "Include Tab URL",
+                            $"Targeted browser '{exeName}'.\n\nActive Tab / URL:\n{options[0].PatternValue}\n\nWould you like to scope this action to this specific tab/URL as well?",
+                            "Choose Tab / URL Rule...",
                             "Process Only");
 
                         if (captureTab)
                         {
-                            AllowedUrlsTagInput.AddTag(activeUrl);
-                            SetBrowserUrlSectionExpanded(true);
-                            OnFormEdited();
-                            StatusText.Text = $"🎯 Added '{exeName}' and tab URL '{activeUrl}'.";
-                            return;
+                            string? chosen = ModernMessageDialog.ShowBrowserTargetChoiceDialog(
+                                this,
+                                "Target Browser Tab / URL (Allowed)",
+                                $"Captured from '{exeName}'. Select a rule option and edit if needed before adding:",
+                                options,
+                                "Add to Allowed Rules");
+
+                            if (!string.IsNullOrWhiteSpace(chosen))
+                            {
+                                AllowedUrlsTagInput.AddTag(chosen);
+                                SetBrowserUrlSectionExpanded(true);
+                                OnFormEdited();
+                                StatusText.Text = $"🎯 Added '{exeName}' and rule '{chosen}'.";
+                                return;
+                            }
                         }
                     }
                 }
@@ -5665,38 +5695,31 @@ public partial class SettingsWindow : Window
                     : AllowedUrlsTagInput;
                 var listName = _windowTargetMode == "ExcludedUrl" ? "Excluded" : "Allowed";
 
-                string? url = null;
-                if (_contextFilterService != null)
+                var options = BuildBrowserTargetRuleOptions(rootHwnd, exeName);
+                if (options.Count > 0)
                 {
-                    url = _contextFilterService.GetActiveBrowserUrl(rootHwnd, exeName, 1500);
-                }
+                    string? chosen = ModernMessageDialog.ShowBrowserTargetChoiceDialog(
+                        this,
+                        $"Target Browser Tab / URL ({listName})",
+                        $"Captured from '{exeName}'. Select a rule option and edit if needed before adding:",
+                        options,
+                        $"Add to {listName} Rules");
 
-                if (!string.IsNullOrWhiteSpace(url))
-                {
-                    targetTagInput.AddTag(url);
-                    SetBrowserUrlSectionExpanded(true);
-                    OnFormEdited();
-                    StatusText.Text = $"🎯 Captured browser tab URL into {listName} URLs: {url}";
-                }
-                else
-                {
-                    int len = NativeMethods.GetWindowTextLength(rootHwnd);
-                    if (len > 0)
+                    if (!string.IsNullOrWhiteSpace(chosen))
                     {
-                        var sbTitle = new StringBuilder(len + 1);
-                        if (NativeMethods.GetWindowText(rootHwnd, sbTitle, sbTitle.Capacity) > 0)
-                        {
-                            string t = sbTitle.ToString().Trim();
-                            targetTagInput.AddTag("*" + t + "*");
-                            SetBrowserUrlSectionExpanded(true);
-                            OnFormEdited();
-                            StatusText.Text = $"🎯 Captured window title pattern into {listName} URLs: *{t}*";
-                        }
+                        targetTagInput.AddTag(chosen);
+                        SetBrowserUrlSectionExpanded(true);
+                        OnFormEdited();
+                        StatusText.Text = $"🎯 Captured browser rule into {listName} URLs / Tab Titles: {chosen}";
                     }
                     else
                     {
-                        StatusText.Text = "Could not detect active URL or window title from target.";
+                        StatusText.Text = "Target capture cancelled.";
                     }
+                }
+                else
+                {
+                    StatusText.Text = "Could not detect active URL or window title from target.";
                 }
             }
         }
@@ -5705,6 +5728,96 @@ public partial class SettingsWindow : Window
             _logger.Error(ex, "Error completing window capture");
             StatusText.Text = $"Error capturing window: {ex.Message}";
         }
+    }
+
+    private List<BrowserTargetRuleOption> BuildBrowserTargetRuleOptions(IntPtr rootHwnd, string exeName)
+    {
+        var options = new List<BrowserTargetRuleOption>();
+        var addedPatterns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        string? rawUrl = _contextFilterService?.GetActiveBrowserUrl(rootHwnd, exeName, 1500);
+        string? rawTitle = _contextFilterService?.GetWindowTitle(rootHwnd);
+        if (string.IsNullOrWhiteSpace(rawTitle))
+        {
+            int len = NativeMethods.GetWindowTextLength(rootHwnd);
+            if (len > 0)
+            {
+                var sbTitle = new StringBuilder(len + 1);
+                if (NativeMethods.GetWindowText(rootHwnd, sbTitle, sbTitle.Capacity) > 0)
+                {
+                    rawTitle = sbTitle.ToString().Trim();
+                }
+            }
+        }
+
+        bool hasRealUrl = !string.IsNullOrWhiteSpace(rawUrl) &&
+                          !string.Equals(rawUrl, rawTitle, StringComparison.Ordinal) &&
+                          ContextFilterService.IsLikelyBrowserUrl(rawUrl);
+
+        if (hasRealUrl && rawUrl != null)
+        {
+            string exactUrl = ContextFilter.NormalizeUrl(rawUrl);
+            string? baseUrlPattern = ContextFilter.ExtractBaseWebAppUrlPattern(rawUrl);
+
+            bool hasDistinctBasePattern = !string.IsNullOrWhiteSpace(baseUrlPattern) &&
+                                          !string.Equals(baseUrlPattern.TrimEnd('*').TrimEnd('/'), exactUrl.TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
+
+            if (hasDistinctBasePattern && baseUrlPattern != null)
+            {
+                if (addedPatterns.Add(baseUrlPattern))
+                {
+                    options.Add(new BrowserTargetRuleOption(
+                        "Base Web App / Domain URL",
+                        baseUrlPattern,
+                        "Matches across all folders, views, and threads in this web app (ignores #hash and ?query changes).",
+                        IsRecommended: true));
+                }
+
+                if (!string.IsNullOrWhiteSpace(exactUrl) && addedPatterns.Add(exactUrl))
+                {
+                    options.Add(new BrowserTargetRuleOption(
+                        "Exact Tab URL",
+                        exactUrl,
+                        "Captured address bar URL (also includes automatic fallback when SPA #fragment routes change).",
+                        IsRecommended: false));
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(exactUrl) && addedPatterns.Add(exactUrl))
+            {
+                options.Add(new BrowserTargetRuleOption(
+                    "Tab URL",
+                    exactUrl,
+                    "Matches the active browser address bar URL.",
+                    IsRecommended: true));
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(rawTitle))
+        {
+            string? keywordPattern = ContextFilter.ExtractTabTitleKeywordPattern(rawTitle);
+            string? cleanTitle = ContextFilter.CleanBrowserWindowTitle(rawTitle);
+            string? fullTitlePattern = !string.IsNullOrWhiteSpace(cleanTitle) ? $"*{cleanTitle}*" : null;
+
+            if (!string.IsNullOrWhiteSpace(keywordPattern) && addedPatterns.Add(keywordPattern))
+            {
+                options.Add(new BrowserTargetRuleOption(
+                    "Tab / App Title Keyword",
+                    keywordPattern,
+                    "Matches the window/tab title keyword. Works across all views and in installed PWAs without an address bar.",
+                    IsRecommended: !hasRealUrl));
+            }
+
+            if (!string.IsNullOrWhiteSpace(fullTitlePattern) && addedPatterns.Add(fullTitlePattern))
+            {
+                options.Add(new BrowserTargetRuleOption(
+                    "Specific Tab Title",
+                    fullTitlePattern,
+                    "Matches this specific tab/window title text.",
+                    IsRecommended: false));
+            }
+        }
+
+        return options;
     }
 
     private string? GetProcessPath(uint pid)
@@ -5950,6 +6063,15 @@ public partial class SettingsWindow : Window
 
         if (IsExiting)
         {
+            ThemeManager.ThemeChanged -= _themeChangedHandler;
+            _shortcutListener.ConflictsUpdated -= _conflictsUpdatedHandler;
+            _shortcutListener.SnoozeChanged -= _snoozeChangedHandler;
+            if (_executor is TriggerPoint.Infrastructure.Services.ShellActionExecutor shellExec)
+            {
+                if (_executionSucceededHandler != null) shellExec.ExecutionSucceeded -= _executionSucceededHandler;
+                if (_executionFailedHandler != null) shellExec.ExecutionFailed -= _executionFailedHandler;
+            }
+
             try
             {
                 if (_folderExpansionSaveTimer?.IsEnabled == true)
@@ -5957,7 +6079,7 @@ public partial class SettingsWindow : Window
                     _folderExpansionSaveTimer.Stop();
                     if (_isDataLoaded && _items.Count > 0)
                     {
-                        _repository.SaveAsync(_items).GetAwaiter().GetResult();
+                        _repository.SaveAsync(_items, createHistoricalSnapshot: false).GetAwaiter().GetResult();
                     }
                 }
                 if (_appSettingsSaveTimer?.IsEnabled == true)
@@ -5982,12 +6104,13 @@ public partial class SettingsWindow : Window
         // Only persist folder expansion states when hiding to tray if data was actually loaded and has items
         if (_isDataLoaded && _items.Count > 0)
         {
-            _ = _repository.SaveAsync(_items);
+            _ = _repository.SaveAsync(_items, createHistoricalSnapshot: false);
         }
 
 
         // Minimize/Hide to tray instead of closing
         e.Cancel = true;
         Hide();
+        _ = Task.Run(NativeMethods.TrimProcessWorkingSet);
     }
 }

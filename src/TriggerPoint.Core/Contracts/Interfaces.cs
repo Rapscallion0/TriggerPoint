@@ -17,6 +17,8 @@ public interface IConfigRepository
 {
     Task<IReadOnlyList<TriggerItem>> LoadAsync();
     Task SaveAsync(IEnumerable<TriggerItem> items);
+    Task SaveAsync(IEnumerable<TriggerItem> items, bool createHistoricalSnapshot) => SaveAsync(items);
+    Task<bool> UpdateUsageStatsInMemoryAsync(Guid itemId, DateTime executedUtc) => Task.FromResult(false);
     Task<AppSettings> LoadSettingsAsync();
     Task SaveSettingsAsync(AppSettings settings);
     Task InitializeSetupAsync(ThemePreference theme, bool installStarterPack);
@@ -99,6 +101,7 @@ public interface IContextFilterService
     string? GetActiveBrowserUrl(IntPtr hWnd, string? processName = null);
     string? GetActiveBrowserUrl(IntPtr hWnd, string? processName, int timeoutMs)
         => GetActiveBrowserUrl(hWnd, processName);
+    string? GetWindowTitle(IntPtr hWnd) => null;
     bool ShouldExecute(TriggerItem item);
     bool ShouldExecute(TriggerItem item, IReadOnlyList<TriggerItem>? allItems);
     void SetAllItemsProvider(Func<IReadOnlyList<TriggerItem>>? provider);
