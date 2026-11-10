@@ -454,9 +454,6 @@ public class PaletteItemViewModel
             {
                 if (Item?.Id == CommandPaletteView.RestartAsAdminVirtualId) return "🛡️";
                 if (Item?.Id == CommandPaletteView.RestartAsStandardUserVirtualId) return "🔄";
-                if (Item?.Id == CommandPaletteView.ToggleAlwaysOnTopVirtualId) return "📌";
-                if (Item?.Id == CommandPaletteView.CenterActiveWindowVirtualId) return "🎯";
-                if (Item?.Id == CommandPaletteView.MoveWindowNextMonitorVirtualId) return "🖥️";
                 return Item?.Id == App.OpenSettingsActionId ? "🎯" : "⚙️";
             }
             return Item?.ActionType switch
@@ -819,18 +816,12 @@ public partial class CommandPaletteView : Window
     public static readonly Guid AppSettingsVirtualId = Guid.Parse("00000000-0000-0000-0000-000000000003");
     public static readonly Guid RestartAsAdminVirtualId = Guid.Parse("00000000-0000-0000-0000-000000000004");
     public static readonly Guid RestartAsStandardUserVirtualId = Guid.Parse("00000000-0000-0000-0000-000000000005");
-    public static readonly Guid ToggleAlwaysOnTopVirtualId = Guid.Parse("00000000-0000-0000-0000-000000000006");
-    public static readonly Guid CenterActiveWindowVirtualId = Guid.Parse("00000000-0000-0000-0000-000000000007");
-    public static readonly Guid MoveWindowNextMonitorVirtualId = Guid.Parse("00000000-0000-0000-0000-000000000008");
 
     public static bool IsVirtualSystemActionId(Guid id) =>
         id == App.OpenSettingsActionId ||
         id == AppSettingsVirtualId ||
         id == RestartAsAdminVirtualId ||
-        id == RestartAsStandardUserVirtualId ||
-        id == ToggleAlwaysOnTopVirtualId ||
-        id == CenterActiveWindowVirtualId ||
-        id == MoveWindowNextMonitorVirtualId;
+        id == RestartAsStandardUserVirtualId;
 
     private readonly List<TriggerItem> _allItems;
     private readonly IActionExecutor _executor;
@@ -873,9 +864,6 @@ public partial class CommandPaletteView : Window
     private readonly TriggerItem _virtualAppSettingsItem;
     private readonly TriggerItem _virtualRestartAdminItem;
     private readonly TriggerItem _virtualRestartStandardUserItem;
-    private readonly TriggerItem _virtualToggleTopMostItem;
-    private readonly TriggerItem _virtualCenterWindowItem;
-    private readonly TriggerItem _virtualMoveNextMonitorItem;
     private readonly Dictionary<string, string> _pendingServiceOperations = new(StringComparer.OrdinalIgnoreCase);
     private Storyboard? _serviceSpinnerStoryboard;
 
@@ -985,36 +973,6 @@ public partial class CommandPaletteView : Window
                 : "Relaunch TriggerPoint standard process",
             ActionType = ActionType.Shell,
             Payload = new ActionPayload { Command = isElevated ? "Restart as Standard User unelevated de-elevate remove admin reboot" : "Restart TriggerPoint reboot reload daemon" }
-        };
-
-        bool isTargetTopMost = _targetHwnd != IntPtr.Zero && NativeMethods.IsWindowTopMost(_targetHwnd);
-        _virtualToggleTopMostItem = new TriggerItem
-        {
-            Id = ToggleAlwaysOnTopVirtualId,
-            Name = isTargetTopMost ? "Unpin Window (Disable Always on Top)" : "Toggle Always on Top (Pin Window)",
-            Description = isTargetTopMost
-                ? "Remove Always-on-Top pin from the active target window"
-                : "Pin or unpin the active target window above all other windows",
-            ActionType = ActionType.Shell,
-            Payload = new ActionPayload { Command = "Pin Window Always on Top Topmost Unpin" }
-        };
-
-        _virtualCenterWindowItem = new TriggerItem
-        {
-            Id = CenterActiveWindowVirtualId,
-            Name = "Center Active Window",
-            Description = "Center the active target window on its current monitor",
-            ActionType = ActionType.Shell,
-            Payload = new ActionPayload { Command = "Center Active Window Monitor Screen Align" }
-        };
-
-        _virtualMoveNextMonitorItem = new TriggerItem
-        {
-            Id = MoveWindowNextMonitorVirtualId,
-            Name = "Move Active Window to Next Monitor",
-            Description = "Cycle the active target window to the next connected display",
-            ActionType = ActionType.Shell,
-            Payload = new ActionPayload { Command = "Move Window Next Monitor Display Screen" }
         };
 
         _feedbackTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
@@ -1489,9 +1447,6 @@ public partial class CommandPaletteView : Window
             list.Add(_virtualAppSettingsItem);
             list.Add(_virtualRestartAdminItem);
             list.Add(_virtualRestartStandardUserItem);
-            list.Add(_virtualToggleTopMostItem);
-            list.Add(_virtualCenterWindowItem);
-            list.Add(_virtualMoveNextMonitorItem);
             scopeCandidates = list;
         }
 
@@ -4332,53 +4287,6 @@ public partial class CommandPaletteView : Window
                 SafeClose();
                 bool isElevated = TriggerPoint.Infrastructure.Services.WindowsServiceManager.IsRunningElevated();
                 (Application.Current as App)?.RestartApplication(asAdmin: false, forceUnelevated: isElevated);
-                return;
-            }
-
-            // Virtual: Toggle Always on Top
-            if (vm.Item.Id == ToggleAlwaysOnTopVirtualId)
-            {
-                var hwnd = _targetHwnd != IntPtr.Zero ? _targetHwnd : NativeMethods.GetForegroundWindow();
-                SafeClose();
-                if (hwnd != IntPtr.Zero && NativeMethods.ToggleAlwaysOnTop(hwnd, out bool isNowTopMost))
-                {
-                    string winTitle = NativeMethods.GetWindowTitle(hwnd);
-                    string targetLabel = !string.IsNullOrWhiteSpace(winTitle) ? $"\"{winTitle}\"" : "Active window";
-                    var toast = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IToastNotificationService)) as IToastNotificationService;
-                    toast?.ShowInfo(
-                        isNowTopMost ? "📌 Window Pinned (Always on Top)" : "📌 Window Unpinned",
-                        isNowTopMost ? $"{targetLabel} is now pinned above other windows." : $"{targetLabel} restored to normal z-order.");
-                }
-                return;
-            }
-
-            // Virtual: Center Active Window
-            if (vm.Item.Id == CenterActiveWindowVirtualId)
-            {
-                var hwnd = _targetHwnd != IntPtr.Zero ? _targetHwnd : NativeMethods.GetForegroundWindow();
-                SafeClose();
-                if (hwnd != IntPtr.Zero && NativeMethods.CenterWindowOnCurrentMonitor(hwnd))
-                {
-                    var toast = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IToastNotificationService)) as IToastNotificationService;
-                    toast?.ShowInfo("🎯 Window Centered", "Active window centered on current monitor.");
-                }
-                return;
-            }
-
-            // Virtual: Move Active Window to Next Monitor
-            if (vm.Item.Id == MoveWindowNextMonitorVirtualId)
-            {
-                var hwnd = _targetHwnd != IntPtr.Zero ? _targetHwnd : NativeMethods.GetForegroundWindow();
-                SafeClose();
-                var toast = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IToastNotificationService)) as IToastNotificationService;
-                if (hwnd != IntPtr.Zero && NativeMethods.MoveWindowToNextMonitor(hwnd, out string? monitorName))
-                {
-                    toast?.ShowInfo("🖥️ Window Moved", $"Active window moved to {monitorName ?? "next monitor"}.");
-                }
-                else
-                {
-                    toast?.ShowWarning("🖥️ Single Monitor Detected", "At least two connected displays are required to cycle monitors.");
-                }
                 return;
             }
 

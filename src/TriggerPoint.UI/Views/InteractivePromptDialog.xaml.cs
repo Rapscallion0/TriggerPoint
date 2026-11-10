@@ -336,6 +336,31 @@ public partial class InteractivePromptDialog : Window, IPromptDialogService
                     _firstInputControl ??= datePicker;
                     break;
 
+                case TokenType.PromptCheckbox:
+                    labelText.Visibility = Visibility.Collapsed;
+                    var cbLabel = new TextBlock
+                    {
+                        Text = token.Label,
+                        FontWeight = FontWeights.SemiBold,
+                        FontSize = 13,
+                        TextWrapping = TextWrapping.Wrap,
+                        VerticalAlignment = VerticalAlignment.Center
+                    };
+                    cbLabel.SetResourceReference(TextBlock.ForegroundProperty, "TextPrimaryBrush");
+
+                    var checkBox = new CheckBox
+                    {
+                        Content = cbLabel,
+                        IsChecked = PromptToken.IsTruthyBoolean(token.DefaultValue),
+                        VerticalContentAlignment = VerticalAlignment.Center,
+                        Margin = new Thickness(0, 4, 0, 2),
+                        Cursor = Cursors.Hand
+                    };
+                    _valueExtractors[token.RawTag] = () => checkBox.IsChecked == true ? "true" : "false";
+                    fieldWrapper.Children.Add(checkBox);
+                    _firstInputControl ??= checkBox;
+                    break;
+
                 case TokenType.PromptText:
                 default:
                     var textBox = new TextBox

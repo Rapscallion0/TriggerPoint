@@ -260,6 +260,11 @@ public static class WorkflowStepCompiler
                 var defPart = !string.IsNullOrEmpty(defaultVal) ? $", default: \"{defaultVal}\"" : "";
                 promptCall = $"await tp.prompt(\"{label}\", {{ type: \"multiline\"{defPart} }})";
             }
+            else if (field.Type == TokenType.PromptCheckbox)
+            {
+                var defBool = PromptToken.IsTruthyBoolean(field.DefaultValue) ? "true" : "false";
+                promptCall = $"await tp.prompt(\"{label}\", {{ type: \"checkbox\", default: \"{defBool}\" }})";
+            }
             else if (!string.IsNullOrWhiteSpace(field.Choices) || field.Type == TokenType.PromptChoice)
             {
                 var escapedChoices = EscapeJsString(field.Choices ?? string.Empty);
@@ -289,7 +294,14 @@ public static class WorkflowStepCompiler
 
             if (step.OnError == StepErrorPolicy.StopWorkflow)
             {
-                sb.AppendLine($"if (!{safeVar}) return; // Stop workflow if cancelled or empty");
+                if (field.Type == TokenType.PromptCheckbox)
+                {
+                    sb.AppendLine($"if ({safeVar} === null) return; // Stop workflow if cancelled");
+                }
+                else
+                {
+                    sb.AppendLine($"if (!{safeVar}) return; // Stop workflow if cancelled or empty");
+                }
             }
         }
     }

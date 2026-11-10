@@ -83,7 +83,7 @@ public static partial class PlaceholderParser
 
         string prefix = inner[..colonIdx].Trim();
         string prefixLower = prefix.ToLowerInvariant();
-        if (prefixLower is not ("text" or "number" or "choice" or "multiline" or "date_picker"))
+        if (prefixLower is not ("text" or "number" or "choice" or "multiline" or "date_picker" or "checkbox" or "boolean"))
         {
             return tokenTag;
         }
@@ -256,6 +256,8 @@ public static partial class PlaceholderParser
                     return ParseMultilineToken(rawTag, rest);
                 case "date_picker":
                     return ParseDatePickerToken(rawTag, rest, referenceTime);
+                case "checkbox" or "boolean":
+                    return ParseCheckboxToken(rawTag, rest);
             }
 
             // Shorthand field with default: {Field:Default} or {{Field:Default}}
@@ -320,6 +322,19 @@ public static partial class PlaceholderParser
             RawTag = rawTag,
             Label = parts[0].Trim(),
             DefaultValue = parts.Length > 1 ? parts[1].Trim() : string.Empty
+        };
+    }
+
+    private static PromptToken ParseCheckboxToken(string rawTag, string rest)
+    {
+        var parts = rest.Split('|', 2);
+        string rawDef = parts.Length > 1 ? parts[1].Trim() : "false";
+        return new PromptToken
+        {
+            Type = TokenType.PromptCheckbox,
+            RawTag = rawTag,
+            Label = parts[0].Trim(),
+            DefaultValue = PromptToken.IsTruthyBoolean(rawDef) ? "true" : "false"
         };
     }
 

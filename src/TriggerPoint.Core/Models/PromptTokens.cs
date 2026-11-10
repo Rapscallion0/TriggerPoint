@@ -17,7 +17,8 @@ public enum TokenType
     PromptNumber,
     PromptChoice,
     PromptMultiline,
-    PromptDatePicker
+    PromptDatePicker,
+    PromptCheckbox
 }
 
 public sealed class PromptToken
@@ -30,4 +31,15 @@ public sealed class PromptToken
     public double? MaxNumber { get; set; }
     public List<ChoiceOption> Choices { get; set; } = [];
     public string DefaultValue { get; set; } = string.Empty;
+
+    public static bool IsTruthyBoolean(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return false;
+        var v = value.Trim();
+        return v.Equals("true", System.StringComparison.OrdinalIgnoreCase) ||
+               v.Equals("1", System.StringComparison.OrdinalIgnoreCase) ||
+               v.Equals("yes", System.StringComparison.OrdinalIgnoreCase) ||
+               v.Equals("checked", System.StringComparison.OrdinalIgnoreCase) ||
+               v.Equals("on", System.StringComparison.OrdinalIgnoreCase);
+    }
 }

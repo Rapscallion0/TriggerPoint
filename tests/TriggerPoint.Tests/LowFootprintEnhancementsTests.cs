@@ -218,12 +218,36 @@ public class LowFootprintEnhancementsTests : IDisposable
     }
 
     [Fact]
-    public void CommandPaletteView_RecognizesWindowManagementVirtualSystemActions()
+    public void WorkflowStepCompiler_And_PlaceholderParser_SupportPromptCheckbox()
     {
-        Assert.True(CommandPaletteView.IsVirtualSystemActionId(CommandPaletteView.ToggleAlwaysOnTopVirtualId));
-        Assert.True(CommandPaletteView.IsVirtualSystemActionId(CommandPaletteView.CenterActiveWindowVirtualId));
-        Assert.True(CommandPaletteView.IsVirtualSystemActionId(CommandPaletteView.MoveWindowNextMonitorVirtualId));
-        Assert.False(CommandPaletteView.IsVirtualSystemActionId(Guid.NewGuid()));
+        var step = new WorkflowStep
+        {
+            StepType = WorkflowStepType.Prompt,
+            OnError = StepErrorPolicy.StopWorkflow,
+            PromptFields =
+            [
+                new WorkflowPromptField
+                {
+                    VariableName = "includeAttachments",
+                    Label = "Include Attachments",
+                    Type = TokenType.PromptCheckbox,
+                    DefaultValue = "true"
+                }
+            ]
+        };
+
+        var js = WorkflowStepCompiler.CompileSingleStep(step);
+        Assert.Contains("await tp.prompt(\"Include Attachments\", { type: \"checkbox\", default: \"true\" })", js);
+        Assert.Contains("if (includeAttachments === null) return;", js);
+
+        var tokens = PlaceholderParser.ExtractPromptTokens("Send: {checkbox:Include Attachments|true} / {checkbox:Clean Build}");
+        Assert.Equal(2, tokens.Count);
+        Assert.Equal(TokenType.PromptCheckbox, tokens[0].Type);
+        Assert.Equal("Include Attachments", tokens[0].Label);
+        Assert.Equal("true", tokens[0].DefaultValue);
+        Assert.Equal(TokenType.PromptCheckbox, tokens[1].Type);
+        Assert.Equal("Clean Build", tokens[1].Label);
+        Assert.Equal("false", tokens[1].DefaultValue);
     }
 }
 

@@ -1668,7 +1668,7 @@
                                                         <MenuItem Header="If / Condition Branch" Click="AddStepMenuItem_Click" Tag="IfCondition"/>
                                                         <MenuItem Header="Prompt User" Click="AddStepMenuItem_Click" Tag="Prompt"/>
                                                         <MenuItem Header="Open URL / Web" Click="AddStepMenuItem_Click" Tag="OpenUrl"/>
-                                                        <MenuItem Header="Ensure Folder Exists" Click="AddStepMenuItem_Click" Tag="EnsureDirectory"/>
+                                                        <MenuItem Header="Create / Open Folder" Click="AddStepMenuItem_Click" Tag="EnsureDirectory"/>
                                                         <MenuItem Header="Launch Application" Click="AddStepMenuItem_Click" Tag="LaunchApp"/>
                                                         <MenuItem Header="Inject Snippet" Click="AddStepMenuItem_Click" Tag="InjectSnippet"/>
                                                         <MenuItem Header="Delay / Wait" Click="AddStepMenuItem_Click" Tag="Delay"/>

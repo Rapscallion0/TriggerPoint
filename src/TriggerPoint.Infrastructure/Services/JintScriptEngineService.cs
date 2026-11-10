@@ -201,7 +201,11 @@ public class TriggerPointJsBridge
         if (optionsVal != null && optionsVal.IsObject())
         {
             var opt = optionsVal.AsObject();
-            if (opt.HasProperty("default")) defaultVal = opt.Get("default").AsString();
+            if (opt.HasProperty("default") && !opt.Get("default").IsNull() && !opt.Get("default").IsUndefined())
+            {
+                var defProp = opt.Get("default");
+                defaultVal = defProp.IsBoolean() ? (defProp.AsBoolean() ? "true" : "false") : defProp.ToString();
+            }
             if (opt.HasProperty("choices")) choicesStr = opt.Get("choices").AsString();
             if (opt.HasProperty("type")) typeStr = opt.Get("type").AsString();
             if (opt.HasProperty("min") && !opt.Get("min").IsNull() && !opt.Get("min").IsUndefined()) minVal = opt.Get("min").AsNumber();
@@ -230,6 +234,13 @@ public class TriggerPointJsBridge
         else if (string.Equals(typeStr, "multiline", StringComparison.OrdinalIgnoreCase))
         {
             token.Type = TokenType.PromptMultiline;
+        }
+        else if (string.Equals(typeStr, "checkbox", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(typeStr, "boolean", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(typeStr, "bool", StringComparison.OrdinalIgnoreCase))
+        {
+            token.Type = TokenType.PromptCheckbox;
+            token.DefaultValue = PromptToken.IsTruthyBoolean(defaultVal) ? "true" : "false";
         }
         else if (!string.IsNullOrWhiteSpace(choicesStr) || string.Equals(typeStr, "choice", StringComparison.OrdinalIgnoreCase))
         {

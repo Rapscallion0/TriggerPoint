@@ -678,7 +678,7 @@ public partial class SettingsWindow
             ("Show Dialog / Confirmation", WorkflowStepType.Dialog, "💬"),
             ("Open URL / Web Page", WorkflowStepType.OpenUrl, "🌐"),
             ("Launch Application / Command", WorkflowStepType.LaunchApp, "⚡"),
-            ("Ensure Folder Exists", WorkflowStepType.EnsureDirectory, "📁"),
+            ("Create / Open Folder", WorkflowStepType.EnsureDirectory, "📁"),
             ("Paste / Insert Text Snippet", WorkflowStepType.InjectSnippet, "📝"),
             ("Recorded Macro Sequence", WorkflowStepType.Macro, "🔴"),
             ("Delay / Pause Execution", WorkflowStepType.Delay, "⏱"),
@@ -1457,12 +1457,14 @@ public partial class SettingsWindow
                     fTypeCombo.Items.Add(new ComboBoxItem { Content = "Dropdown Choice List", Tag = TokenType.PromptChoice });
                     fTypeCombo.Items.Add(new ComboBoxItem { Content = "Numeric Input", Tag = TokenType.PromptNumber });
                     fTypeCombo.Items.Add(new ComboBoxItem { Content = "Date Picker", Tag = TokenType.PromptDatePicker });
+                    fTypeCombo.Items.Add(new ComboBoxItem { Content = "Checkbox", Tag = TokenType.PromptCheckbox });
                     fTypeCombo.SelectedIndex = field.Type switch
                     {
                         TokenType.PromptMultiline => 1,
                         TokenType.PromptChoice => 2,
                         TokenType.PromptNumber => 3,
                         TokenType.PromptDatePicker => 4,
+                        TokenType.PromptCheckbox => 5,
                         _ => 0
                     };
                     fTypeCombo.SelectionChanged += (s, e) =>
@@ -1473,8 +1475,13 @@ public partial class SettingsWindow
                             2 => TokenType.PromptChoice,
                             3 => TokenType.PromptNumber,
                             4 => TokenType.PromptDatePicker,
+                            5 => TokenType.PromptCheckbox,
                             _ => TokenType.PromptText
                         };
+                        if (field.Type == TokenType.PromptCheckbox)
+                        {
+                            field.DefaultValue = PromptToken.IsTruthyBoolean(field.DefaultValue) ? "true" : "false";
+                        }
                         SyncPrimaryPromptField(step);
                         RebuildWorkflowStepCards(step.Id);
                         OnFormEdited();
@@ -1504,26 +1511,52 @@ public partial class SettingsWindow
                     fLabelStack.Children.Add(fLabelBox);
                     fieldStack.Children.Add(fLabelStack);
 
-                    // Row 3: Default Value
+                    // Row 3: Default Value / Default Checkbox State
                     var fDefStack = new StackPanel { Margin = new Thickness(0, 0, 0, (field.Type == TokenType.PromptChoice || field.Type == TokenType.PromptNumber || field.Type == TokenType.PromptDatePicker) ? 6 : 0) };
-                    fDefStack.Children.Add(new TextBlock { Text = "Default Value (Pre-populated, optional — {tokens} and %ENV% supported)", FontSize = 10.5, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 3) });
-                    var fDefBox = new TextBox
+                    if (field.Type == TokenType.PromptCheckbox)
                     {
-                        Text = field.DefaultValue,
-                        Height = 30,
-                        Padding = new Thickness(6, 2, 6, 2),
-                        VerticalContentAlignment = VerticalAlignment.Center,
-                        Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style,
-                        ToolTip = "Optional default value. Supports workflow variables (e.g. {selectedText}), {clipboard}, {date}, and %ENV% tokens."
-                    };
-                    fDefBox.TextChanged += (s, e) =>
+                        fDefStack.Children.Add(new TextBlock { Text = "Default State", FontSize = 10.5, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 4) });
+                        var fDefCheck = new CheckBox
+                        {
+                            Content = "Checked by default (true)",
+                            IsChecked = PromptToken.IsTruthyBoolean(field.DefaultValue),
+                            FontSize = 12,
+                            VerticalContentAlignment = VerticalAlignment.Center,
+                            Margin = new Thickness(0, 2, 0, 2),
+                            ToolTip = "When checked, the checkbox starts checked (true) when the prompt dialog opens; otherwise unchecked (false)."
+                        };
+                        fDefCheck.SetResourceReference(Control.ForegroundProperty, "TextPrimaryBrush");
+                        void UpdateCheckDefault()
+                        {
+                            field.DefaultValue = fDefCheck.IsChecked == true ? "true" : "false";
+                            SyncPrimaryPromptField(step);
+                            OnFormEdited();
+                        }
+                        fDefCheck.Checked += (s, e) => UpdateCheckDefault();
+                        fDefCheck.Unchecked += (s, e) => UpdateCheckDefault();
+                        fDefStack.Children.Add(fDefCheck);
+                    }
+                    else
                     {
-                        field.DefaultValue = fDefBox.Text;
-                        SyncPrimaryPromptField(step);
-                        OnFormEdited();
-                    };
-                    fDefStack.Children.Add(fDefBox);
-                    RenderVariableChips(fDefStack, fDefBox, availableVariables, step);
+                        fDefStack.Children.Add(new TextBlock { Text = "Default Value (Pre-populated, optional — {tokens} and %ENV% supported)", FontSize = 10.5, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 3) });
+                        var fDefBox = new TextBox
+                        {
+                            Text = field.DefaultValue,
+                            Height = 30,
+                            Padding = new Thickness(6, 2, 6, 2),
+                            VerticalContentAlignment = VerticalAlignment.Center,
+                            Style = Application.Current.TryFindResource("ModernTextBoxStyle") as Style,
+                            ToolTip = "Optional default value. Supports workflow variables (e.g. {selectedText}), {clipboard}, {date}, and %ENV% tokens."
+                        };
+                        fDefBox.TextChanged += (s, e) =>
+                        {
+                            field.DefaultValue = fDefBox.Text;
+                            SyncPrimaryPromptField(step);
+                            OnFormEdited();
+                        };
+                        fDefStack.Children.Add(fDefBox);
+                        RenderVariableChips(fDefStack, fDefBox, availableVariables, step);
+                    }
                     fieldStack.Children.Add(fDefStack);
 
                     // Row 4 (if Choice): Comma separated choices
@@ -3167,7 +3200,7 @@ public partial class SettingsWindow
         WorkflowStepType.Prompt => "💬 Prompt for Input",
         WorkflowStepType.Dialog => "💬 Show Confirmation Dialog",
         WorkflowStepType.OpenUrl => "🌐 Open Web URL",
-        WorkflowStepType.EnsureDirectory => "📁 Ensure Folder Exists",
+        WorkflowStepType.EnsureDirectory => "📁 Create / Open Folder",
         WorkflowStepType.LaunchApp => "⚡ Launch Application",
         WorkflowStepType.InjectSnippet => "📝 Insert Snippet",
         WorkflowStepType.Macro => "🔴 Recorded Macro",
@@ -5174,7 +5207,7 @@ public partial class SettingsWindow
             ("Show Dialog / Confirmation", WorkflowStepType.Dialog, "💬"),
             ("Open URL / Web Page", WorkflowStepType.OpenUrl, "🌐"),
             ("Launch Application / Command", WorkflowStepType.LaunchApp, "⚡"),
-            ("Ensure Folder Exists", WorkflowStepType.EnsureDirectory, "📁"),
+            ("Create / Open Folder", WorkflowStepType.EnsureDirectory, "📁"),
             ("Paste / Insert Text Snippet", WorkflowStepType.InjectSnippet, "📝"),
             ("Recorded Macro Sequence", WorkflowStepType.Macro, "🔴"),
             ("Delay / Pause Execution", WorkflowStepType.Delay, "⏱"),
